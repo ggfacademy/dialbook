@@ -44,8 +44,8 @@ const pkey = (p: string) => String(p || "").replace(/\D/g, "").slice(-10);
 export function fill(tpl: string, vars: Obj, forJson: boolean): string {
   return String(tpl || "").replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k) => {
     const v = vars[k] ?? "";
-    const s = typeof v === "string" ? v : JSON.stringify(v);
-    return forJson ? JSON.stringify(s).slice(1, -1) : s;
+    if (typeof v !== "string") return JSON.stringify(v); // lists (params_json) go in as real JSON
+    return forJson ? JSON.stringify(v).slice(1, -1) : v;
   });
 }
 export function pick(o: unknown, path: string): unknown {
