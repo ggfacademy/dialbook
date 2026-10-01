@@ -29,16 +29,16 @@ open class BaseActivity : Activity() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     companion object {
-        val BG = Color.parseColor("#F6F4EF")
+        val BG = Color.parseColor("#F7F3EE")
         val SURFACE = Color.WHITE
-        val FG = Color.parseColor("#1B1E2B")
-        val MUTED = Color.parseColor("#5E6273")
-        val LINE = Color.parseColor("#E3DDD0")
-        val ACCENT = Color.parseColor("#946600")
-        val ACCENT_SOFT = Color.parseColor("#FBF1D9")
+        val FG = Color.parseColor("#231A1B")
+        val MUTED = Color.parseColor("#6A5E5F")
+        val LINE = Color.parseColor("#E6DCD2")
+        val ACCENT = Color.parseColor("#7B2E31")
+        val ACCENT_SOFT = Color.parseColor("#F8ECE0")
         val CALL = Color.parseColor("#12834A")
         val DANGER = Color.parseColor("#BD3434")
-        val NAVY = Color.parseColor("#0B1F4B")
+        val NAVY = Color.parseColor("#5E2A2C")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
