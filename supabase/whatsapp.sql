@@ -50,6 +50,9 @@ create table if not exists public.wa_templates (
   updated_at timestamptz not null default now(),
   unique (account_id, name, language)
 );
+-- Optional media header (image / video / document) sent with the template
+alter table public.wa_templates add column if not exists header_type text not null default '';
+alter table public.wa_templates add column if not exists header_url text not null default '';
 
 -- Every WhatsApp message sent or received, linked to the lead
 create table if not exists public.wa_messages (

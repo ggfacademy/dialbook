@@ -885,14 +885,14 @@ function waTemplateModal(){
   if(!list.length)return modal(`<h2>No templates yet</h2><p class="muted">${acc&&(acc.provider==='meta'||acc.provider==='twilio')?'Create and get templates approved in your provider, then press “Sync templates” in Settings → WhatsApp.':'Add message templates for this number in Settings → WhatsApp.'}</p>`);
   modal(`<h2>Send a template</h2><label class="field" style="margin-top:12px"><span>Template</span><select class="input" id="tplSel">${list.map(t=>opt(t.id,`${t.name} (${t.language})${t.status&&t.status!=='APPROVED'?' · '+t.status:''}`)).join('')}</select></label><div id="tplBody" style="margin-top:12px"></div><div class="row" style="margin-top:12px"><button class="btn primary" data-act="waTplSend">Send template</button><button class="btn" data-act="closeMd">Cancel</button></div>`);
   const draw=()=>{const t=list.find(x=>x.id===$('#tplSel').value);const n=t.params||0;const first=(l?.name||'').split(' ')[0];
-    $('#tplBody').innerHTML=(n?`<div class="grid2">${Array.from({length:n},(_,i)=>`<label class="field"><span>Value {{${i+1}}}</span><input class="input tplP" data-i="${i}" value="${esc(i===0?first:i===1?(S.cfg.company||''):'')}"></label>`).join('')}</div>`:'')+`<p class="small muted" style="margin-top:10px">Preview</p><div class="ai-out" id="tplPrev"></div>`;
+    $('#tplBody').innerHTML=(t.header_type?`<label class="field"><span>${esc(t.header_type[0].toUpperCase()+t.header_type.slice(1))} link</span><input class="input mono" id="tplHUrl" value="${esc(t.header_url||'')}"></label>`:'')+(n?`<div class="grid2">${Array.from({length:n},(_,i)=>`<label class="field"><span>Value {{${i+1}}}</span><input class="input tplP" data-i="${i}" value="${esc(i===0?first:i===1?(S.cfg.company||''):'')}"></label>`).join('')}</div>`:'')+`<p class="small muted" style="margin-top:10px">Preview</p><div class="ai-out" id="tplPrev"></div>`;
     const prev=()=>{const ps=$$('.tplP').map(x=>x.value);$('#tplPrev').textContent=String(t.body||t.name).replace(/\{\{(\d+)\}\}/g,(m,k)=>ps[k-1]||m)};
     $$('.tplP').forEach(x=>x.oninput=prev);prev()};
   $('#tplSel').onchange=draw;draw();
 }
 async function waTemplateSend(btn){
   btn.disabled=true;
-  try{await waFn({action:'send',lead_id:S.wa.lead,account_id:$('#waAcc')?.value||S.wa.sendAcc,template_id:$('#tplSel').value,params:$$('.tplP').map(x=>x.value)});closeModal();toast('Template sent');await waThread(S.rv,true);V.wa.load()}
+  try{await waFn({action:'send',lead_id:S.wa.lead,account_id:$('#waAcc')?.value||S.wa.sendAcc,template_id:$('#tplSel').value,params:$$('.tplP').map(x=>x.value),header_url:$('#tplHUrl')?.value.trim()||undefined});closeModal();toast('Template sent');await waThread(S.rv,true);V.wa.load()}
   catch(e){fail(e);btn.disabled=false}
 }
 
@@ -972,9 +972,11 @@ function waTemplatesModal(id){
   const manual=a.provider==='custom'||a.provider==='qr';
   modal(`<h2>Templates · ${esc(a.name)}</h2>${manual?'<p class="small muted">Add the templates approved with your provider (or, for your own WhatsApp, ready-made messages). Use {{1}}, {{2}} for values filled in when sending.</p>':'<p class="small muted">Templates are created and approved in your provider. Press Sync to fetch the latest.</p>'}
     <div class="row" style="margin:10px 0">${!manual?`<button class="btn primary sm" data-act="waSync" data-id="${id}">Sync templates</button>`:''}</div>
-    <div class="list">${list.map(t=>`<div class="li" style="align-items:flex-start"><div class="grow"><b>${esc(t.name)}</b> <span class="small muted">${esc(t.language)} · ${esc(t.status)}${t.category?' · '+esc(t.category):''}</span><div class="small" style="white-space:pre-wrap">${esc(t.body)}</div></div><button class="btn sm ghost" data-act="waTplDel" data-id="${t.id}" data-v="${id}" aria-label="Delete">${ic('x')}</button></div>`).join('')||'<p class="muted small">No templates yet.</p>'}</div>
+    <div class="list">${list.map(t=>`<div class="li" style="align-items:flex-start"><div class="grow"><b>${esc(t.name)}</b> <span class="small muted">${esc(t.language)} · ${esc(t.status)}${t.category?' · '+esc(t.category):''}${t.header_type?' · '+esc(t.header_type)+' header':''}</span><div class="small" style="white-space:pre-wrap">${esc(t.body)}</div></div><button class="btn sm ghost" data-act="waTplDel" data-id="${t.id}" data-v="${id}" aria-label="Delete">${ic('x')}</button></div>`).join('')||'<p class="muted small">No templates yet.</p>'}</div>
     ${manual?`<h3 style="margin-top:16px">Add a template</h3><div class="grid2" style="margin-top:8px"><label class="field"><span>Template name</span><input class="input mono" id="ntName" placeholder="e.g. followup_1"></label><label class="field"><span>Language code</span><input class="input mono" id="ntLang" value="en"></label></div>
-      <label class="field" style="margin-top:8px"><span>Message</span><textarea class="input" id="ntBody" rows="3" placeholder="Hi {{1}}, thanks for your interest in {{2}}."></textarea></label><button class="btn sm primary" data-act="waTplAdd" data-id="${id}" style="margin-top:8px">Add template</button>`:''}`);
+      <label class="field" style="margin-top:8px"><span>Message</span><textarea class="input" id="ntBody" rows="3" placeholder="Hi {{1}}, thanks for your interest in {{2}}."></textarea></label>
+      <div class="grid2" style="margin-top:8px"><label class="field"><span>Header</span><select class="input" id="ntHType">${opt('','None (or text)','')}${opt('image','Image','')}${opt('video','Video','')}${opt('document','Document (PDF)','')}</select></label><label class="field"><span>Header file link</span><input class="input mono" id="ntHUrl" placeholder="https://… (public link to the image, video or PDF)"></label></div>
+      <p class="small muted" style="margin-top:4px">Buttons (links, quick replies) approved with the template are sent automatically.</p><button class="btn sm primary" data-act="waTplAdd" data-id="${id}" style="margin-top:8px">Add template</button>`:''}`);
 }
 function loadScript(src,globalName){return new Promise((res,rej)=>{if(window[globalName])return res(window[globalName]);const s=document.createElement('script');s.src=src;s.onload=()=>res(window[globalName]);s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s)})}
 async function waQrModal(){
@@ -1018,7 +1020,8 @@ document.addEventListener('click',async e=>{
     case'waTpls':waTemplatesModal(id);break;
     case'waSync':{t.disabled=true;t.textContent='Syncing…';const r=await waFn({action:'sync_templates',account_id:id});await loadWa();toast(`${r.count} templates synced`);waTemplatesModal(id);waSettings();break}
     case'waTplAdd':{const name=$('#ntName').value.trim(),body=$('#ntBody').value.trim();if(!name||!body)return toast('Add a name and the message');let n=0;for(const m of body.matchAll(/\{\{(\d+)\}\}/g))n=Math.max(n,+m[1]);
-      await R(sb.from('wa_templates').insert({account_id:id,name,language:$('#ntLang').value.trim()||'en',body,params:n,status:'APPROVED'}));await loadWa();waTemplatesModal(id);break}
+      const htype=$('#ntHType').value,hurl=$('#ntHUrl').value.trim();if(htype&&!/^https:\/\//i.test(hurl))return toast('Add a public https link to the header file');
+      await R(sb.from('wa_templates').insert({account_id:id,name,language:$('#ntLang').value.trim()||'en',body,params:n,status:'APPROVED',...(htype?{header_type:htype,header_url:hurl}:{})}));await loadWa();waTemplatesModal(id);break}
     case'waTplDel':arm(t,async()=>{await R(sb.from('wa_templates').delete().eq('id',id));await loadWa();waTemplatesModal(v)},'Delete?');break;
     case'waAccDel':arm(t,async()=>{await waFn({action:'delete_account',id});await loadWa();toast('Removed');waSettings()},'Click again to remove');break;
     case'waQr':await waQrModal();break;

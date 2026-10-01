@@ -181,7 +181,7 @@ Settings → WhatsApp → Connect a number → **Other WhatsApp API**. Open your
 - **Where the message ID is in the answer** – for example `data.id`
 - **Incoming messages** – where the provider puts the sender number, text and message ID in its webhook. Then set the webhook URL Dialbook shows in your provider's dashboard.
 
-Add your approved templates under **Templates** (name, language, text with {{1}}, {{2}}…).
+Add your approved templates under **Templates** (name, language, text with {{1}}, {{2}}…). If a template has an image, video or PDF header, pick it under **Header** and give a public https link to the file (for example, upload it to the `web/media` folder of this repository and use `https://YOUR-NAME.github.io/dialbook/media/FILE`). Put `"headerValues":{{header_values_json}}` in the template message body for providers such as Interakt. Approved buttons are sent automatically.
 
 If you're not sure what to type, send me (or your provider's support) their API page and I'll fill the form in for you.
 
