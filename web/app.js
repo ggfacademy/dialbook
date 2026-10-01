@@ -1062,7 +1062,7 @@ async function nuSettings(){
   S.nu.counts=counts;if(!$('#nuSet'))return;const d=S.sd;
   box.innerHTML=`<div class="card"><h2>Nurture sequences</h2><p class="small muted" style="margin-top:-6px">Automatic WhatsApp follow-ups: each step sends an approved template a set number of days after the lead joins. A lead's sequence stops when they reply, are converted or lost, or are marked do not call. Use ${esc(NU_VARS)} in template values.</p>
     <div class="list">${S.nu.seqs.map(q=>{const c=counts[q.id]||{};const steps=(q.steps||[]);return `<div class="li" style="align-items:flex-start"><div class="grow"><b>${esc(q.name)}</b> ${q.active?'<span class="pill" style="color:var(--call)"><span class="dot"></span><span style="color:var(--fg)">On</span></span>':'<span class="pill" style="color:var(--muted)"><span class="dot"></span><span style="color:var(--fg)">Off</span></span>'}
-      <div class="small muted">${esc(q.campaign_id?(camp(q.campaign_id)?.name||'Program'):'Any program')} · ${q.auto_enroll?'new leads join automatically':'manual only'} · ${c.active||0} in progress, ${c.ended||0} finished or stopped</div>
+      <div class="small muted">${esc(q.campaign_id?(camp(q.campaign_id)?.name||'Program'):'Any program')} · ${esc(q.language||'Any language')} · ${q.auto_enroll?'new leads join automatically':'manual only'} · ${c.active||0} in progress, ${c.ended||0} finished or stopped</div>
       <div class="small" style="margin-top:4px">${steps.map((x,i)=>`Day ${esc(x.day)}: ${esc(nuTplName(x.template_id)||'— pick a template —')}`).join(' → ')||'<span class="muted">No steps</span>'}</div></div>
       <button class="btn sm" data-act="nuEdit" data-id="${q.id}">${ic('edit')}Edit</button><button class="btn sm" data-act="nuExisting" data-id="${q.id}">Add existing leads</button></div>`}).join('')||'<p class="muted small">No sequences yet.</p>'}</div>
     <div class="row" style="margin-top:12px"><button class="btn sm" data-act="nuEdit">${ic('plus')}New sequence</button><button class="btn sm" data-act="nuRun">Send due messages now</button><span id="nuMsg" class="small muted"></span></div>
@@ -1076,13 +1076,15 @@ function nuStepRow(st,i,accId){const tpls=S.wa.templates.filter(t=>t.account_id=
     <label class="field" style="grid-column:1/-1"><span>Values for {{1}}, {{2}}… separated by | ${t?`<span class="muted">(this template has ${t.params||0})</span>`:''}</span><input class="input nuPar" value="${esc(st.params??'{first_name}')}" placeholder="{first_name}|{program}"></label>
     ${t?.header_type?`<label class="field" style="grid-column:1/-1"><span>${esc(t.header_type)} link (empty = the template's default)</span><input class="input mono nuHdr" value="${esc(st.header_url||'')}" placeholder="${esc(t.header_url||'https://…')}"></label>`:''}
     <div style="grid-column:1/-1"><button class="btn sm ghost" data-act="nuStepDel" data-v="${i}">Remove step</button></div></div>`}
-function nuReadForm(){const q=S.nu.edit;q.name=$('#nuName').value.trim();q.account_id=$('#nuAcc').value||null;q.campaign_id=$('#nuCamp').value||null;q.active=$('#nuActive').checked;q.auto_enroll=$('#nuAuto').checked;q.stop_on_reply=$('#nuStop').checked;q.end_followup=$('#nuEnd').checked;
+function nuReadForm(){const q=S.nu.edit;q.name=$('#nuName').value.trim();q.account_id=$('#nuAcc').value||null;q.campaign_id=$('#nuCamp').value||null;q.language=$('#nuLang').value||'';q.active=$('#nuActive').checked;q.auto_enroll=$('#nuAuto').checked;q.stop_on_reply=$('#nuStop').checked;q.end_followup=$('#nuEnd').checked;
   q.steps=$$('.nu-step').map(r=>({day:Math.max(0,+r.querySelector('.nuDay').value||0),template_id:r.querySelector('.nuTpl').value||null,params:r.querySelector('.nuPar').value,...(r.querySelector('.nuHdr')?.value.trim()?{header_url:r.querySelector('.nuHdr').value.trim()}:{})}));return q}
 function nuModal(){const q=S.nu.edit;const accs=nuAccounts();if(!q.account_id&&accs.length)q.account_id=accs[0].id;
   modal(`<h2>${q.id?'Edit':'New'} nurture sequence</h2><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
     <div class="grid2"><label class="field"><span>Name</span><input class="input" id="nuName" value="${esc(q.name||'')}" placeholder="e.g. Gold Appraisal – Chennai follow-up"></label>
     <label class="field"><span>Send from</span><select class="input" id="nuAcc">${accs.map(a=>opt(a.id,a.name,q.account_id||'')).join('')||opt('','No company WhatsApp number yet','')}</select></label>
-    <label class="field"><span>Program</span><select class="input" id="nuCamp">${campOpts(q.campaign_id||'','Any program')}</select></label></div>
+    <label class="field"><span>Program</span><select class="input" id="nuCamp">${campOpts(q.campaign_id||'','Any program')}</select></label>
+    <label class="field"><span>Lead language</span><select class="input" id="nuLang">${langOpts(q.language||'','Any language')}</select></label></div>
+    <p class="small muted" style="margin:-4px 0 0">Each lead gets one sequence: the one for its program and language first, then its program, then its language, then “any program, any language”. Make one sequence per language with that language's templates.</p>
     <label class="row"><input type="checkbox" id="nuActive" ${q.active?'checked':''}> Sequence is on</label>
     <label class="row"><input type="checkbox" id="nuAuto" ${q.auto_enroll!==false?'checked':''}> New leads in this program join automatically</label>
     <label class="row"><input type="checkbox" id="nuStop" ${q.stop_on_reply!==false?'checked':''}> Stop when the lead replies on WhatsApp</label>
@@ -1109,18 +1111,18 @@ document.addEventListener('click',async e=>{
   const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   if(!a.startsWith('nu'))return;
   try{switch(a){
-    case'nuEdit':{if(!S.wa.loaded)await loadWa();const q=id?clone(S.nu.seqs.find(x=>x.id===id)):{name:'',active:false,auto_enroll:true,stop_on_reply:true,end_followup:true,campaign_id:null,account_id:null,steps:[{day:0,params:'{first_name}'},{day:2,params:'{first_name}'},{day:5,params:'{first_name}'},{day:10,params:'{first_name}'}]};S.nu.edit=q;nuModal();break}
+    case'nuEdit':{if(!S.wa.loaded)await loadWa();const q=id?clone(S.nu.seqs.find(x=>x.id===id)):{name:'',language:'',active:false,auto_enroll:true,stop_on_reply:true,end_followup:true,campaign_id:null,account_id:null,steps:[{day:0,params:'{first_name}'},{day:2,params:'{first_name}'},{day:5,params:'{first_name}'},{day:10,params:'{first_name}'}]};S.nu.edit=q;nuModal();break}
     case'nuStepAdd':{const q=nuReadForm();const last=(q.steps||[]).slice(-1)[0];q.steps.push({day:last?(+last.day||0)+3:0,params:'{first_name}'});nuModal();break}
     case'nuStepDel':{const q=nuReadForm();q.steps.splice(+v,1);nuModal();break}
     case'nuSave':{const q=nuReadForm();const err=m=>{$('#nuErr').textContent=m};
       if(!q.name)return err('Give the sequence a name.');if(!q.account_id)return err('Connect a company WhatsApp number first (Settings → WhatsApp).');if(!q.steps.length)return err('Add at least one step.');
       if(q.active&&q.steps.some(x=>!x.template_id))return err('Pick a template for every step before switching the sequence on.');
-      q.steps.sort((x,y)=>x.day-y.day);const row={name:q.name,account_id:q.account_id,campaign_id:q.campaign_id,active:q.active,auto_enroll:q.auto_enroll,stop_on_reply:q.stop_on_reply,end_followup:q.end_followup,steps:q.steps};
+      q.steps.sort((x,y)=>x.day-y.day);const row={name:q.name,account_id:q.account_id,campaign_id:q.campaign_id,language:q.language||'',active:q.active,auto_enroll:q.auto_enroll,stop_on_reply:q.stop_on_reply,end_followup:q.end_followup,steps:q.steps};
       if(q.id)await R(sb.from('nurture_sequences').update(row).eq('id',q.id));else await R(sb.from('nurture_sequences').insert(row));
       closeModal();toast('Saved');nuSettings();break}
     case'nuDel':arm(t,async()=>{await R(sb.from('nurture_sequences').delete().eq('id',id));closeModal();toast('Deleted');nuSettings()},'Delete sequence?');break;
     case'nuExisting':{const q=S.nu.seqs.find(x=>x.id===id);if(!q?.active)return toast('Switch the sequence on first (Edit → Sequence is on).');
-      const days=prompt(`Add open leads${q.campaign_id?' of '+(camp(q.campaign_id)?.name||'this program'):''} that joined in the last how many days?`,'30');if(days===null)break;
+      const days=prompt(`Add open ${q.language?q.language+' ':''}leads${q.campaign_id?' of '+(camp(q.campaign_id)?.name||'this program'):''} that joined in the last how many days?`,'30');if(days===null)break;
       const n=await rpc('nurture_enroll_existing',{p_seq:id,p_days:Math.max(1,+days||30)});toast(`${n||0} leads added to “${q.name}”`);nuSettings();break}
     case'nuRun':{t.disabled=true;$('#nuMsg').textContent='Sending…';try{const r=await waFn({action:'nurture_run'});$('#nuMsg').textContent=r.skipped||`${r.sent||0} sent, ${r.failed||0} failed, ${r.stopped||0} stopped, ${r.done||0} finished`}finally{t.disabled=false}nuSettings();break}
     case'nuStopLead':await R(sb.from('nurture_enrollments').update({status:'stopped',stop_reason:`Stopped by ${S.me.name}`}).eq('id',id));toast('Stopped');if(S.lead)nuLeadBox(S.lead);break;

@@ -1,6 +1,6 @@
 -- Dialbook Pro – nurture sequences (automatic WhatsApp follow-ups)
 -- Run once in Supabase → SQL Editor, after schema.sql, whatsapp.sql and leadsources.sql.
--- Safe to run again.
+-- Safe to run again (the schedule at the end is replaced, so keep YOUR-PROJECT filled in).
 --
 -- A sequence is a list of steps ("day 0: template A, day 2: template B …") sent from one WhatsApp number.
 -- New leads in the sequence's program (or any program) are enrolled automatically. The "whatsapp" edge
@@ -13,6 +13,7 @@ create table if not exists public.nurture_sequences (
   active boolean not null default false,
   auto_enroll boolean not null default true,
   campaign_id uuid references public.campaigns(id) on delete set null,
+  language text not null default '',          -- '' = any language
   account_id uuid references public.wa_accounts(id) on delete set null,
   stop_on_reply boolean not null default true,
   end_followup boolean not null default true,
@@ -34,6 +35,7 @@ create table if not exists public.nurture_enrollments (
   last_sent_at timestamptz,
   unique (sequence_id, lead_id)
 );
+alter table public.nurture_sequences add column if not exists language text not null default '';
 create index if not exists nurture_due on public.nurture_enrollments(next_at) where status = 'active';
 create index if not exists nurture_lead on public.nurture_enrollments(lead_id);
 
@@ -64,29 +66,43 @@ grant all on public.nurture_sequences, public.nurture_enrollments to service_rol
 create or replace function public.nurture_first_at(s public.nurture_sequences) returns timestamptz
 language sql stable as $$ select now() + coalesce((s.steps->0->>'day')::numeric, 0) * interval '1 day' $$;
 
--- Enrol new leads (and leads moved into a program) in matching active sequences.
--- A program's own sequences win over "any program" sequences, so a lead gets one sequence.
+-- Enrol new leads in the best matching active sequence: the lead's program AND language first,
+-- then its program, then its language, then "any program, any language". When a lead's program or
+-- language changes before its first message went out, it is moved to the better match.
+create or replace function public.nurture_best(p_campaign uuid, p_language text) returns uuid
+language sql stable security definer set search_path = public as $$
+  select s.id from public.nurture_sequences s
+   where s.active and s.auto_enroll and jsonb_array_length(s.steps) > 0
+     and (s.campaign_id is null or s.campaign_id = p_campaign)
+     and (s.language = '' or lower(s.language) = lower(coalesce(p_language, '')))
+   order by (s.campaign_id is not null)::int * 2 + (s.language <> '')::int desc, s.created_at
+   limit 1
+$$;
+
 create or replace function public.nurture_auto_enroll() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare has_own boolean;
+declare best uuid; cur public.nurture_enrollments;
 begin
   if new.dnd or new.stage in ('won','lost') then return new; end if;
-  if tg_op = 'UPDATE' and new.campaign_id is not distinct from old.campaign_id then return new; end if;
-  select exists (select 1 from public.nurture_sequences s where s.active and s.auto_enroll and s.campaign_id = new.campaign_id
-                 and jsonb_array_length(s.steps) > 0) into has_own;
+  if tg_op = 'UPDATE' and new.campaign_id is not distinct from old.campaign_id
+     and new.language is not distinct from old.language then return new; end if;
+  best := public.nurture_best(new.campaign_id, new.language);
+  if best is null then return new; end if;
+  select * into cur from public.nurture_enrollments e where e.lead_id = new.id and e.status = 'active' limit 1;
+  if found then
+    if cur.sequence_id = best or cur.last_sent_at is not null then return new; end if;
+    delete from public.nurture_enrollments where id = cur.id;   -- nothing sent yet: switch to the better match
+  end if;
   insert into public.nurture_enrollments(sequence_id, lead_id, next_at)
-  select s.id, new.id, public.nurture_first_at(s) from public.nurture_sequences s
-   where s.active and s.auto_enroll and jsonb_array_length(s.steps) > 0
-     and ((has_own and s.campaign_id = new.campaign_id) or (not has_own and s.campaign_id is null))
-     and not exists (select 1 from public.nurture_enrollments e where e.lead_id = new.id and e.status = 'active')
+  select s.id, new.id, public.nurture_first_at(s) from public.nurture_sequences s where s.id = best
   on conflict (sequence_id, lead_id) do nothing;
   return new;
 end $$;
 drop trigger if exists nurture_auto_enroll on public.leads;
-create trigger nurture_auto_enroll after insert or update of campaign_id on public.leads
+create trigger nurture_auto_enroll after insert or update of campaign_id, language on public.leads
   for each row execute function public.nurture_auto_enroll();
 
--- Managers: enrol existing open leads of the sequence's program (added in the last p_days days)
+-- Managers: enrol existing open leads of the sequence's program and language (added in the last p_days days)
 create or replace function public.nurture_enroll_existing(p_seq uuid, p_days int default 30) returns int
 language plpgsql security definer set search_path = public as $$
 declare s public.nurture_sequences; n int;
@@ -98,6 +114,7 @@ begin
   select s.id, l.id, public.nurture_first_at(s) from public.leads l
    where not l.dnd and l.stage not in ('won','lost')
      and (s.campaign_id is null or l.campaign_id = s.campaign_id)
+     and (s.language = '' or lower(l.language) = lower(s.language))
      and l.created_at > now() - make_interval(days => greatest(1, coalesce(p_days, 30)))
      and not exists (select 1 from public.nurture_enrollments e where e.lead_id = l.id and e.status = 'active')
   on conflict (sequence_id, lead_id) do nothing;

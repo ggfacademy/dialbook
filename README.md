@@ -189,7 +189,8 @@ If you're not sure what to type, send me (or your provider's support) their API 
 Send approved templates automatically over the days after a lead arrives, for example Day 0 brochure, Day 2 video, Day 5 reminder, Day 10 last call.
 1. Supabase → **SQL Editor** → paste everything from `supabase/nurture.sql`. In the last block, replace `YOUR-PROJECT` with your project reference → **Run**. This creates the tables and a schedule that runs every 15 minutes.
 2. Redeploy the `whatsapp` function, with "Verify JWT" **off**.
-3. In the CRM: **Settings → Nurture sequences** → **Edit** the "Default follow-up" sequence (or **New sequence**). Pick the WhatsApp number, the program (or any program), a template for each step and the values for {{1}}, {{2}}… (`{first_name}`, `{program}`, `{city}`, `{company}`, `{agent}`). Tick **Sequence is on** → **Save**.
+3. In the CRM: **Settings → Nurture sequences** → **Edit** the "Default follow-up" sequence (or **New sequence**). Pick the WhatsApp number, the program (or any program), the lead language (or any language), a template for each step and the values for {{1}}, {{2}}… (`{first_name}`, `{program}`, `{city}`, `{company}`, `{agent}`). Tick **Sequence is on** → **Save**.
+   For several languages, make one sequence per language (for example "Tamil follow-up" with the Tamil templates, "Telugu follow-up", and an "Any language" one in English). Each lead gets the best match: program and language, then program, then language, then the any/any sequence.
 4. New leads join automatically. Use **Add existing leads** for leads you already have, or **Start sequence** on a lead.
 
 A lead's sequence stops when they reply on WhatsApp, are converted or lost, or are marked do not call. After the last step, the lead moves to today's follow-ups for a call. Messages go out between 9:00 and 20:00 IST; you can change the hours in Settings. Each lead page shows which step it is on, with a **Stop** button.
