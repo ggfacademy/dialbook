@@ -428,7 +428,7 @@ function setPath(o,p,v){const k=p.split('.');let x=o;for(let i=0;i<k.length-1;i+
 const connCode=()=>btoa(JSON.stringify({u:CFG.url,k:CFG.anonKey}));
 V.settings={live:false,mount(){
   const phone=`<div class="card"><h2>Phone app</h2><p class="small muted" style="margin-top:-6px">The Android app logs every call to and from your leads with its real duration, uploads the phone's call recording, and asks the caller for the outcome.</p>
-    <div class="row" style="margin-bottom:10px"><a class="btn primary" href="download/dialbook.apk">${ic('down')}Download Android app</a><button class="btn" data-act="copy" data-v="${esc(connCode())}">${ic('copy')}Copy connection code</button></div>
+    <div class="row" style="margin-bottom:10px"><a class="btn primary" href="download/dialbook.apk">${ic('down')}Download Android app</a><a class="btn" href="training/" target="_blank" rel="noopener">Telecaller training (video)</a><button class="btn" data-act="copy" data-v="${esc(connCode())}">${ic('copy')}Copy connection code</button></div>
     <p class="small">Connection code (paste it into the app the first time it opens):</p><div class="code-box">${esc(connCode())}</div></div>`;
   if(!isAdmin())return head('Settings','')+`<div style="display:flex;flex-direction:column;gap:16px"><div id="waSet">${loadingHTML}</div>${phone}<div class="empty"><h3>Only admins can change settings</h3></div></div>`;
   if(!S.sd)S.sd=clone(S.cfg);const d=S.sd;d.ai=d.ai||clone(DEF.ai);d.ai.agents=d.ai.agents||{};d.languages=d.languages||clone(DEF.languages);d.assignment=d.assignment||clone(DEF.assignment);d.assignment.rules=d.assignment.rules||[];d.nurture=d.nurture||{startHour:9,endHour:20};

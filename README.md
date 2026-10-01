@@ -253,6 +253,8 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 ## Everyday use
 
+**Training for telecallers:** a short video and step-by-step guide with screenshots is at `https://YOUR-NAME.github.io/dialbook/training/` (also linked from **Settings → Phone app**). Share the link with new telecallers.
+
 - **Telecallers:** open the phone app → **My leads** → **Call**. After each call, tap the notification and pick the outcome. Overdue follow-ups are shown in red.
 - **Managers:** **Dashboard** for today's numbers, **Reports** for any date range (download CSV), **Team** for per-person performance, **Leads → Share out leads** to distribute new leads.
 - **WhatsApp:** press **WhatsApp** on a lead to chat. Unread replies show a green badge. Admins open **WhatsApp** and pick an employee to review their chats.
