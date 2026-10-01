@@ -118,6 +118,7 @@ WhatsApp message: a short friendly message the caller (${me.name}) can send. Use
         q = q.in("id", body.lead_ids.slice(0, max));
       } else {
         if (!isMgr) return json({ error: "Only managers can start AI calling lists." }, 403);
+        q = q.eq("contact_only", false); // the contact list (old data) is for messages only
         const f = body.filter || {};
         if (f.campaign) q = q.eq("campaign_id", f.campaign);
         const endToday = new Date(); endToday.setUTCHours(18, 30, 0, 0); // 00:00 IST next day

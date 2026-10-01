@@ -251,6 +251,11 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 **Repeat enquiries:** when someone who is already a lead fills another form, no duplicate is created. The existing lead gets a note ("Enquired again via …"), is reopened if it was Lost, and is marked for a call today.
 
 
+### Old data as a contact list, and "Do not contact"
+**Contact list (old data for messages).** Run `supabase/contacts.sql` once in the SQL Editor. Then **Leads → Import → Assign to: “Don’t assign: contact list for messages only”**. These contacts are not given to telecallers and are left out of calling lists, share-outs, AI calling lists and automatic nurture. Find them with **Leads → status filter → Contact list**. Message them with a nurture sequence (**Add existing leads**) or export the filtered list for an Interakt campaign. When a contact enquires again through Facebook/Instagram/a form, or replies on WhatsApp, they become a normal new lead and are assigned by your rules. Giving one to a telecaller by hand does the same.
+
+**Do not contact.** On a lead, tick **Do not contact**, or pick the call outcome **Asked not to be contacted**. The lead is then left out of calling lists, the phone app, AI calls, nurture and WhatsApp sending, also if they enquire again. Untick it only if the customer agrees to be contacted again.
+
 ## Everyday use
 
 **Training for telecallers:** a short video and step-by-step guide with screenshots is at `https://YOUR-NAME.github.io/dialbook/training/` (also linked from **Settings → Phone app**). Share the link with new telecallers.
@@ -270,6 +275,7 @@ Edit any file on GitHub (or upload a new version). The **Actions** tab rebuilds 
 supabase/schema.sql                  database tables, security rules and automation
 supabase/functions/ai/index.ts       starts AI calls; "Suggest next step"
 supabase/functions/ai-webhook/index.ts  receives AI call results from Bolna
+supabase/contacts.sql                contact lists (old data) and do-not-contact blocking
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking

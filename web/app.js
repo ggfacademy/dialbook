@@ -55,7 +55,7 @@ const ic=n=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 
 const DEF={company:'Dialbook',
   stages:[{id:'new',name:'New'},{id:'contacted',name:'Contacted'},{id:'interested',name:'Interested'},{id:'followup',name:'Follow-up'},{id:'negotiation',name:'Negotiation'},{id:'won',name:'Converted'},{id:'lost',name:'Lost'}],
-  dispositions:[{id:'interested',name:'Interested',connected:true,stage:'interested',fu:true},{id:'callback',name:'Call back later',connected:true,stage:'followup',fu:true},{id:'info_shared',name:'Details shared',connected:true,stage:'contacted',fu:true},{id:'converted',name:'Converted / Sale',connected:true,stage:'won',fu:false},{id:'not_interested',name:'Not interested',connected:true,stage:'lost',fu:false},{id:'no_answer',name:'Did not pick',connected:false,stage:'',fu:true},{id:'busy',name:'Busy / Cut the call',connected:false,stage:'',fu:true},{id:'unreachable',name:'Switched off / Not reachable',connected:false,stage:'',fu:true},{id:'wrong_number',name:'Wrong number',connected:false,stage:'lost',fu:false}],
+  dispositions:[{id:'interested',name:'Interested',connected:true,stage:'interested',fu:true},{id:'callback',name:'Call back later',connected:true,stage:'followup',fu:true},{id:'info_shared',name:'Details shared',connected:true,stage:'contacted',fu:true},{id:'converted',name:'Converted / Sale',connected:true,stage:'won',fu:false},{id:'not_interested',name:'Not interested',connected:true,stage:'lost',fu:false},{id:'no_answer',name:'Did not pick',connected:false,stage:'',fu:true},{id:'busy',name:'Busy / Cut the call',connected:false,stage:'',fu:true},{id:'unreachable',name:'Switched off / Not reachable',connected:false,stage:'',fu:true},{id:'wrong_number',name:'Wrong number',connected:false,stage:'lost',fu:false},{id:'dnd',name:'Asked not to be contacted',connected:true,stage:'lost',fu:false}],
   sources:['Facebook Ads','Google Ads','Website','IndiaMART','JustDial','Referral','Walk-in','Incoming call','Excel import'],
   templates:[{id:'t1',name:'Intro after call',channel:'whatsapp',body:'Hi {name}, this is {agent} from {company}. Thanks for your time on the call. Sharing the details we discussed.'}],
   autoCreateIncoming:true,ai:{agentId:'',fromNumber:'',startHour:10,endHour:19,maxBatch:50,agents:{}},
@@ -211,6 +211,9 @@ function leadQuery(select='*',opts){
   if(f.fu==='due')q=q.lt('next_follow_up_at',iso(endToday())).not('stage','in','(won,lost)');
   if(f.fu==='over')q=q.lt('next_follow_up_at',iso(now())).not('stage','in','(won,lost)');
   if(f.fu==='fresh')q=q.eq('call_count',0);
+  if(f.fu==='contacts')q=q.eq('contact_only',true).eq('dnd',false);
+  if(S.hasContacts&&!['contacts','dnd','all'].includes(f.fu)&&!f.q.trim())q=q.eq('contact_only',false); // the contact list is hidden unless asked for or searched
+  if(f.fu==='dnd')q=q.eq('dnd',true);
   const s=f.q.replace(/[%,()*\\"]/g,' ').trim();
   if(s){const d=s.replace(/\D/g,'');q=q.or([`name.ilike.%${s}%`,`city.ilike.%${s}%`,`company.ilike.%${s}%`,`email.ilike.%${s}%`,...(d.length>=3?[`phone_key.like.%${d}%`]:[])].join(','))}
   return q;
@@ -224,7 +227,7 @@ V.leads={mount(){const f=S.lf;
    <select class="input" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}</select>
    <select class="input" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
    <select class="input" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
-   <select class="input" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}</select></div><div id="vb">${loadingHTML}</div>`;
+   <select class="input" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select></div><div id="vb">${loadingHTML}</div>`;
 },async load(){
   const rv=S.rv;const from=S.page*S.PS;
   const {data,count}=await R(leadQuery('*',{count:'exact'}).order('updated_at',{ascending:false}).range(from,from+S.PS-1));
@@ -240,7 +243,7 @@ V.leads={mount(){const f=S.lf;
   const all=data.every(l=>S.sel.has(l.id));const pages=Math.ceil(count/S.PS);
   html+=`<div class="tbl-wrap"><table><thead><tr>${isMgr()?`<th style="width:34px"><input type="checkbox" id="selAll" aria-label="Select all on this page" ${all?'checked':''}></th>`:''}<th>Lead</th><th>Stage</th>${isMgr()?'<th class="hide-sm">Assigned</th>':''}<th class="hide-sm">Campaign</th><th>Last call</th><th>Follow-up</th><th class="r hide-sm">Calls</th></tr></thead><tbody>
   ${data.map(l=>{const fu=ts(l.next_follow_up_at);return `<tr class="click" data-act="lead" data-id="${l.id}">${isMgr()?`<td><input type="checkbox" class="selOne" data-id="${l.id}" aria-label="Select ${esc(l.name)}" ${S.sel.has(l.id)?'checked':''}></td>`:''}
-   <td><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}${l.language?` <span class="tag">${esc(l.language)}</span>`:''}${l.dnd?' <span class="tag">DND</span>':''}</div><div class="lead-phone">${esc(l.phone)}${l.city?' · '+esc(l.city):''}</div>${(l.tags||[]).length?`<div class="row" style="gap:4px;margin-top:3px">${l.tags.slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}</td>
+   <td><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}${l.language?` <span class="tag">${esc(l.language)}</span>`:''}${l.dnd?' <span class="tag">Do not contact</span>':''}${l.contact_only?' <span class="tag">Contact list</span>':''}</div><div class="lead-phone">${esc(l.phone)}${l.city?' · '+esc(l.city):''}</div>${(l.tags||[]).length?`<div class="row" style="gap:4px;margin-top:3px">${l.tags.slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}</td>
    <td>${stagePill(l.stage)}</td>${isMgr()?`<td class="hide-sm">${esc(nameOf(l.assigned_to))}</td>`:''}<td class="hide-sm small">${esc(camp(l.campaign_id)?.name||'—')}</td>
    <td class="small">${l.last_call_at?`${esc(dispo(l.last_outcome)?.name||l.last_outcome||'Outcome not logged')}<div class="muted">${rel(l.last_call_at)}</div>`:'<span class="muted">Not called</span>'}</td>
    <td class="small ${fu&&fu<now()&&isOpen(l)?'prio-hot':''}">${fu&&isOpen(l)?esc(fmtDT(fu)):'<span class="muted">—</span>'}</td><td class="r num hide-sm">${l.call_count||0}</td></tr>`}).join('')}
@@ -492,7 +495,7 @@ async function loadDrawer(){
   if(lr.error)throw lr.error;const l=lr.data;if(!l){closeDrawer();toast('This lead is not available to you.');return}
   S.lead=l;nuLeadBox(l).catch(()=>{});
   const aiBtn=aiReady()&&(isMgr()||l.assigned_to===S.me.id)&&!l.dnd?`<button class="btn" data-act="aiOne">${ic('spark')}AI call</button>`:'';
-  $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not call</span>':''}</div></div>
+  $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div></div>
     <div class="dial-phone" style="margin-top:12px;font-size:1.3rem">${esc(l.phone)}</div>
     <div class="row" style="margin-top:10px"><a class="btn call" href="tel:${esc(normPhone(l.phone))}" data-act="dial" data-p="dw">${ic('phone')}Call</a><button class="btn" data-act="wa">${ic('msg')}WhatsApp / SMS</button><button class="btn" data-act="copy" data-v="${esc(l.phone)}">${ic('copy')}Copy</button><button class="btn" data-act="editLead">${ic('edit')}Edit</button>${aiBtn}</div>`;
   const f=(k,v)=>`<div><div class="small muted">${k}</div><div>${v||'<span class="muted">—</span>'}</div></div>`;
@@ -505,7 +508,7 @@ async function loadDrawer(){
     ${f('Calls made',`<span class="num">${l.call_count}</span>${l.last_call_at?' · last '+rel(l.last_call_at):''}`)}
     ${f('Alternate phone',esc(l.alt_phone))}${f('Email',esc(l.email))}${f('City',esc(l.city))}${f('Company',esc(l.company))}
     ${f('Source',esc(l.source))}${f('Deal value',+l.value?inr(l.value):'')}${f('Added',esc(fmtDT(l.created_at)))}${f('Tags',(l.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(' '))}</div>
-    <label class="row" style="margin-top:12px"><input type="checkbox" data-lset="dnd" ${l.dnd?'checked':''}> Do not call (also stops AI calls)</label>
+    <label class="row" style="margin-top:12px"><input type="checkbox" data-lset="dnd" ${l.dnd?'checked':''}> Do not contact: the customer asked us to stop (blocks calls, AI calls, WhatsApp and nurture)</label>
     ${l.note?`<div style="margin-top:12px"><div class="small muted">Notes</div><div style="white-space:pre-wrap">${esc(l.note)}</div></div>`:''}`;
   const items=[...cr.data.map(c=>({at:ts(c.started_at),c})),...ar.data.map(a=>({at:ts(a.created_at),a})),...air.data.map(x=>({at:ts(x.created_at),x}))].sort((a,b)=>b.at-a.at);
   $('#dwTl').innerHTML=items.length?`<div class="timeline">${items.map(it=>{
@@ -565,7 +568,7 @@ function msgModal(){
 
 /* ---------- calling mode ---------- */
 function queueQuery(select='id',opts){
-  const d=S.dialSetup;let q=sb.from('leads').select(select,opts).not('stage','in','(won,lost)').eq('dnd',false);
+  const d=S.dialSetup;let q=sb.from('leads').select(select,opts).not('stage','in','(won,lost)').eq('dnd',false);if(S.hasContacts)q=q.eq('contact_only',false);
   if(d.camp)q=q.eq('campaign_id',d.camp);
   if(!isMgr()||d.who==='me')q=q.eq('assigned_to',S.me.id);
   if(d.queue==='fresh')q=q.eq('call_count',0);
@@ -651,7 +654,7 @@ function mapStep(rows){
   <h3 style="margin-top:16px">Import options</h3><div class="grid2" style="margin-top:8px">
   <label class="field"><span>Add to campaign</span><select class="input" id="iCamp">${campOpts(S.lf.camp&&S.lf.camp!=='_none'?S.lf.camp:'','No campaign')}</select></label>
   <label class="field"><span>Source (if the file has none)</span><select class="input" id="iSrc">${srcOpts('Excel import','Not set')}</select></label>
-  <label class="field"><span>Assign to</span><select class="input" id="iAssign">${isMgr()?(S.cfg.assignment?.enabled?opt('','Use assignment rules (language, source…)'):'')+opt('rr','Share equally among telecallers')+opt('',S.cfg.assignment?.enabled?'Leave unassigned (rules still apply)':'Leave unassigned')+agents().map(m=>opt(m.id,m.name)).join(''):opt(S.me.id,'Me')}</select></label>
+  <label class="field"><span>Assign to</span><select class="input" id="iAssign">${isMgr()?(S.hasContacts?opt('_contacts','Don’t assign: contact list for messages only (old data)'):'')+(S.cfg.assignment?.enabled?opt('','Use assignment rules (language, source…)'):'')+opt('rr','Share equally among telecallers')+opt('',S.cfg.assignment?.enabled?'Leave unassigned (rules still apply)':'Leave unassigned')+agents().map(m=>opt(m.id,m.name)).join(''):opt(S.me.id,'Me')}</select></label>
   <label class="field"><span>Duplicates</span><select class="input" id="iDup">${opt('skip','Skip numbers already in the CRM')}${opt('keep','Import them anyway')}</select></label></div>
   <p id="iMsg" class="small muted" style="margin-top:12px"></p><div class="row"><button class="btn primary" data-act="impRun" id="iRun">Import leads</button><button class="btn" data-act="closeMd">Cancel</button></div>`);
   const upd=()=>{const r=prepImport();$('#iMsg').textContent=`${r.list.length} rows ready${r.dupFile?`, ${r.dupFile} repeated numbers in the file skipped`:''}${r.bad?`, ${r.bad} rows without a valid phone skipped`:''}. Numbers already in the CRM are checked when you import.`};
@@ -674,9 +677,10 @@ async function runImport(btn){
       for(const c of chunk(list.map(l=>pkey(l.phone)),300)){const {data}=await R(sb.from('leads').select('phone_key').in('phone_key',c));data.forEach(d=>exist.add(d.phone_key))}
       const before=list.length;list=list.filter(l=>!exist.has(pkey(l.phone)));dups=before-list.length}
     let pool=agents().filter(m=>m.role==='telecaller');if(!pool.length)pool=agents();
-    const rows=list.map((d,i)=>{const r={...d,source:d.source||src,campaign_id:cid,created_by:S.me.id,assigned_to:as==='rr'?(pool.length?pool[i%pool.length].id:null):(as||null)};if(!r.assigned_to)delete r.assigned_to;return r});
+    const contacts=as==='_contacts';
+    const rows=list.map((d,i)=>{const r={...d,source:d.source||src,campaign_id:cid,created_by:S.me.id,assigned_to:contacts?null:as==='rr'?(pool.length?pool[i%pool.length].id:null):(as||null)};if(contacts)r.contact_only=true;if(!r.assigned_to)delete r.assigned_to;return r});
     let done=0;for(const c of chunk(rows,500)){await R(sb.from('leads').insert(c));done+=c.length;btn.textContent=`Importing… ${done}/${rows.length}`}
-    closeModal();toast(`${rows.length} leads imported${dups?`, ${dups} already in the CRM skipped`:''}`);go('leads');
+    closeModal();toast(`${rows.length} ${contacts?'contacts added to the contact list':'leads imported'}${dups?`, ${dups} already in the CRM skipped`:''}`);if(contacts)S.lf.fu='contacts';go('leads');
   }catch(e){btn.disabled=false;btn.textContent='Import leads';fail(e)}
 }
 const csvCell=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
@@ -708,6 +712,7 @@ async function loadBase(){
   const [t,c,s]=await Promise.all([R(sb.from('profiles').select('*').order('created_at')),R(sb.from('campaigns').select('*').order('created_at',{ascending:false})),R(sb.from('settings').select('data').eq('id',1).maybeSingle())]);
   S.team=t.data;S.campaigns=c.data;S.cfg={...clone(DEF),...(s.data?.data||{})};S.cfg.ai={...DEF.ai,...(S.cfg.ai||{})};
   const me=S.team.find(m=>m.id===S.me.id);if(me)S.me=me;
+  if(S.hasContacts===undefined){const {error}=await sb.from('leads').select('contact_only').limit(1);S.hasContacts=!error}
 }
 
 /* ---------- sign in ---------- */
