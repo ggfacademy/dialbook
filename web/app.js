@@ -713,7 +713,7 @@ async function loadBase(){
 /* ---------- sign in ---------- */
 function showAuth(msg){
   $('#app').hidden=true;const a=$('#auth');a.hidden=false;
-  a.innerHTML=`<form class="auth" id="authForm"><div class="brand"><img src="media/ggf-logo.jpg" alt="Global Gold Foundation" style="width:100%;max-width:300px;height:auto"></div>
+  a.innerHTML=`<form class="auth" id="authForm"><div class="brand"><span class="brand-mark">${ic('phone')}</span><span>Dialbook</span></div>
   <div class="row"><button type="button" class="chip-toggle" data-act="authMode" data-v="in" aria-pressed="${S.authMode!=='up'}">Sign in</button><button type="button" class="chip-toggle" data-act="authMode" data-v="up" aria-pressed="${S.authMode==='up'}">Create account</button></div>
   ${S.authMode==='up'?'<label class="field"><span>Your full name</span><input class="input" id="aName" required autocomplete="name"></label>':''}
   <label class="field"><span>Email</span><input class="input" id="aEmail" type="email" required autocomplete="email"></label>
@@ -730,7 +730,7 @@ function showAuth(msg){
 }
 function showPending(email){
   $('#app').hidden=true;const a=$('#auth');a.hidden=false;
-  a.innerHTML=`<div class="auth"><div class="brand"><img src="media/ggf-logo.jpg" alt="Global Gold Foundation" style="width:100%;max-width:300px;height:auto"></div><h2>Waiting for approval</h2><p>Your account <b>${esc(email)}</b> is created. Ask your admin to approve you in <b>Team</b>, then press Check again.</p><div class="row"><button class="btn primary" data-act="recheck">Check again</button><button class="btn" data-act="logout">Sign out</button></div></div>`;
+  a.innerHTML=`<div class="auth"><div class="brand"><span class="brand-mark">${ic('phone')}</span><span>Dialbook</span></div><h2>Waiting for approval</h2><p>Your account <b>${esc(email)}</b> is created. Ask your admin to approve you in <b>Team</b>, then press Check again.</p><div class="row"><button class="btn primary" data-act="recheck">Check again</button><button class="btn" data-act="logout">Sign out</button></div></div>`;
 }
 function showSetupMissing(){const a=$('#auth');a.hidden=false;a.innerHTML=`<div class="auth"><h2>Almost there</h2><p>Open <b>config.js</b> and paste your Supabase project URL and anon key. The setup guide shows where to find them.</p></div>`}
 let subscribed=false;
