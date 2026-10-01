@@ -347,6 +347,30 @@ function workDays(calls){const g={};for(const c of calls){const st=ts(c.started_
     return {agent:d.agent,day:d.day,first,last:end,calls:d.list.length,talk,idle,longest,breaks,span:(end-first)/1000}}).sort((a,b)=>b.day-a.day||nameOf(a.agent).localeCompare(nameOf(b.agent)))}
 function exportWork(){const w=S.repWork;if(!w)return;saveCSV(`working-time-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['Date','Caller','First call','Last call ended','Calls','Talk time (min)','Idle time (min)','Idle %','Longest gap (min)','Breaks of 15 min+'],...w.map(d=>[toDateInput(d.day),nameOf(d.agent),fmtTm(d.first),fmtTm(d.last),d.calls,Math.round(d.talk/60),Math.round(d.idle/60),d.span?Math.round(d.idle/d.span*100):0,Math.round(d.longest/60),d.breaks])])}
 
+/* CONVERSIONS: per caller by month and by program (campaign). A conversion is a lead moved to the "won" stage,
+   credited to whoever moved it (by a call outcome or by hand). Conversion % = converted leads ÷ different leads they called. */
+async function allRows(mk){const out=[];for(let i=0;;i+=1000){const {data}=await R(mk().range(i,i+999));out.push(...data);if(data.length<1000)break}return out}
+const monthKey=t=>{const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`};
+const monthName=k=>new Date(k+'-01T00:00').toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+const progName=id=>id?(camp(id)?.name||'Other program'):'No program';
+async function convData(from,to,agent,campId){
+  const [wins,called]=await Promise.all([
+    allRows(()=>{let q=sb.from('activities').select('lead_id,actor_id,created_at,lead:leads(campaign_id,value)').eq('kind','stage').eq('data->>to','won').not('actor_id','is',null).gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(agent)q=q.eq('actor_id',agent);return q}),
+    allRows(()=>{let q=sb.from('calls').select('agent_id,lead_id,started_at,lead:leads(campaign_id)').neq('source','ai').not('agent_id','is',null).gte('started_at',iso(from)).lt('started_at',iso(to)).order('started_at');if(agent)q=q.eq('agent_id',agent);return q})]);
+  const g={month:{},prog:{}};
+  const row=(kind,key,agentId,label)=>{const k=key+'|'+agentId;return g[kind][k]||(g[kind][k]={key,label,agent:agentId,called:new Set(),won:new Set(),value:0})};
+  for(const c of called){const pc=c.lead?.campaign_id||'';if(campId&&pc!==campId)continue;
+    row('month',monthKey(c.started_at),c.agent_id,monthName(monthKey(c.started_at))).called.add(c.lead_id);row('prog',pc,c.agent_id,progName(pc)).called.add(c.lead_id)}
+  for(const w of wins){const pc=w.lead?.campaign_id||'';if(campId&&pc!==campId)continue;
+    for(const r of [row('month',monthKey(w.created_at),w.actor_id,monthName(monthKey(w.created_at))),row('prog',pc,w.actor_id,progName(pc))])if(!r.won.has(w.lead_id)){r.won.add(w.lead_id);r.value+=+w.lead?.value||0}}
+  const fin=o=>Object.values(o).map(r=>({...r,called:r.called.size,won:r.won.size}));
+  return {month:fin(g.month).sort((a,b)=>b.key.localeCompare(a.key)||b.won-a.won),prog:fin(g.prog).sort((a,b)=>a.label.localeCompare(b.label)||b.won-a.won)};
+}
+function convTable(rows,first){return `<div class="tbl-wrap"><table><thead><tr><th>${first}</th><th>Caller</th><th class="r">Leads called</th><th class="r">Converted</th><th class="r">Conversion %</th><th class="r">Value</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(nameOf(r.agent))}</b></td><td class="r num">${r.called}</td><td class="r num">${r.won}</td><td class="r num">${r.called?pct(r.won/r.called):'—'}</td><td class="r num">${r.value?inr(r.value):'—'}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No calls or conversions in this range.</td></tr>'}</tbody></table></div>`}
+function exportConv(){const c=S.repConv;if(!c)return;const line=(kind,r)=>[kind,r.label,nameOf(r.agent),r.called,r.won,r.called?Math.round(r.won/r.called*100):'',r.value||0];
+  saveCSV(`conversions-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['By','Month / program','Caller','Leads called','Converted','Conversion %','Value (₹)'],...c.month.map(r=>line('Month',r)),...c.prog.map(r=>line('Program',r))])}
+
 /* REPORTS */
 function callsQuery(){
   const r=S.rep;const inner=!!r.camp;
@@ -355,18 +379,20 @@ function callsQuery(){
   return q.order('started_at',{ascending:false});
 }
 V.reports={mount(){const r=S.rep;
-  return head('Reports','Calling performance for any date range.',`<button class="btn" data-act="expCalls">${ic('down')}Call log CSV</button><button class="btn" data-act="expAgents">${ic('down')}Summary CSV</button><button class="btn" data-act="expWork">${ic('down')}Working time CSV</button>`)+
-  `<div class="toolbar"><label class="field" style="flex:0 1 160px"><span>From</span><input class="input" type="date" id="rFrom" value="${toDateInput(r.from)}"></label><label class="field" style="flex:0 1 160px"><span>To</span><input class="input" type="date" id="rTo" value="${toDateInput(r.to)}"></label>
+  return head('Reports','Calling performance for any date range.',`<button class="btn" data-act="expCalls">${ic('down')}Call log CSV</button><button class="btn" data-act="expAgents">${ic('down')}Summary CSV</button><button class="btn" data-act="expWork">${ic('down')}Working time CSV</button><button class="btn" data-act="expConv">${ic('down')}Conversions CSV</button>`)+
+  `<div class="toolbar"><label class="field" style="flex:0 1 160px"><span>Quick range</span><select class="input" id="rPreset">${opt('','Custom')}${opt('m0','This month')}${opt('m1','Last month')}${opt('m3','Last 3 months')}${opt('m6','Last 6 months')}${opt('y0','This year')}</select></label><label class="field" style="flex:0 1 160px"><span>From</span><input class="input" type="date" id="rFrom" value="${toDateInput(r.from)}"></label><label class="field" style="flex:0 1 160px"><span>To</span><input class="input" type="date" id="rTo" value="${toDateInput(r.to)}"></label>
   ${isMgr()?`<label class="field" style="flex:0 1 180px"><span>Caller</span><select class="input" id="rAgent">${agentOpts(r.agent,'Whole team')}</select></label>`:''}<label class="field" style="flex:0 1 180px"><span>Campaign</span><select class="input" id="rCamp">${campOpts(r.camp,'All campaigns')}</select></label></div><div id="vb">${loadingHTML}</div>`;
 },async load(){
   const rv=S.rv;const r=S.rep;const from=r.from,to=r.to+DAY;
-  const [st,cl,wc]=await Promise.all([rpc('dashboard_stats',{p_from:iso(from),p_to:iso(to),p_agent:isMgr()?(r.agent||null):S.me.id,p_campaign:r.camp||null,p_tz:TZ}),R(callsQuery().limit(200)),workCalls(from,to,isMgr()?(r.agent||null):S.me.id)]);
-  if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;S.repStats=st;const work=S.repWork=workDays(wc);
+  const [st,cl,wc,cv]=await Promise.all([rpc('dashboard_stats',{p_from:iso(from),p_to:iso(to),p_agent:isMgr()?(r.agent||null):S.me.id,p_campaign:r.camp||null,p_tz:TZ}),R(callsQuery().limit(200)),workCalls(from,to,isMgr()?(r.agent||null):S.me.id),convData(from,to,isMgr()?(r.agent||null):S.me.id,r.camp||null)]);
+  if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;S.repStats=st;const work=S.repWork=workDays(wc);S.repConv=cv;
   const t=st.totals||{};const ag=[...(isMgr()?(r.agent?S.team.filter(m=>m.id===r.agent):agents()):[S.me]).map(m=>({name:m.name,s:st.by_agent?.[m.id]||{}})),...(st.by_agent?.ai&&!r.agent?[{name:'AI agent',s:st.by_agent.ai}]:[])];
   vb.innerHTML=`<div class="kpis"><div class="kpi"><div class="lbl">Calls</div><div class="val">${t.n||0}</div><div class="sub">${t.auto||0} phone app · ${t.ai||0} AI</div></div><div class="kpi"><div class="lbl">Connected</div><div class="val">${t.conn||0}</div><div class="sub">${pct(t.n?t.conn/t.n:0)}</div></div><div class="kpi"><div class="lbl">Talk time</div><div class="val">${dur(t.talk).replace(/ \d+s$/,'')}</div><div class="sub">avg ${dur(t.conn?t.talk/t.conn:0)}</div></div><div class="kpi"><div class="lbl">Converted</div><div class="val">${t.conv||0}</div></div><div class="kpi"><div class="lbl">Recorded</div><div class="val">${t.recorded||0}</div><div class="sub">calls with audio</div></div></div>
   <div class="card" style="margin-bottom:16px"><h2>${to-from<=DAY?'Calls by hour':'Calls per day'}</h2>${barChart(buckets(st,from,to))}</div>
   <div class="card" style="margin-bottom:16px"><h2>Caller performance</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th class="r">Calls</th><th class="r">Connected</th><th class="r">Connect %</th><th class="r">Talk time</th><th class="r">Avg call</th><th class="r">Interested</th><th class="r">Converted</th><th class="r">Follow-ups</th></tr></thead><tbody>
   ${ag.map(({name,s})=>`<tr><td><b>${esc(name)}</b></td><td class="r num">${s.n||0}</td><td class="r num">${s.conn||0}</td><td class="r num">${pct(s.n?s.conn/s.n:0)}</td><td class="r num">${dur(s.talk)}</td><td class="r num">${dur(s.conn?s.talk/s.conn:0)}</td><td class="r num">${s.intr||0}</td><td class="r num">${s.conv||0}</td><td class="r num">${s.fus||0}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="card" style="margin-bottom:16px"><h2>Conversions by month</h2><p class="small muted">A conversion is a lead moved to “Won” (by a call outcome such as Converted / Sale, or by hand), credited to the person who moved it. Conversion % = converted leads ÷ different leads that person called. Value is the leads' deal value.</p>${convTable(cv.month,'Month')}</div>
+  <div class="card" style="margin-bottom:16px"><h2>Conversions by program</h2><p class="small muted">Program is the lead's campaign. Create one campaign per program in Campaigns and put leads in it.</p>${convTable(cv.prog,'Program')}</div>
   <div class="card" style="margin-bottom:16px"><h2>Working time</h2><p class="small muted">Per caller per day, from their phone-app and logged calls (all campaigns). Idle time is the time between the end of one call and the start of the next; a gap of 15 minutes or more counts as a break.</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Caller</th><th class="r">First call</th><th class="r">Last call ended</th><th class="r">Calls</th><th class="r">Talk time</th><th class="r">Idle time</th><th class="r">Idle %</th><th class="r hide-sm">Longest gap</th><th class="r hide-sm">Breaks</th></tr></thead><tbody>
   ${work.slice(0,150).map(d=>`<tr><td class="small">${esc(fmtD(d.day))}</td><td><b>${esc(nameOf(d.agent))}</b></td><td class="r num">${esc(fmtTm(d.first))}</td><td class="r num">${esc(fmtTm(d.last))}</td><td class="r num">${d.calls}</td><td class="r num">${dur(d.talk)}</td><td class="r num">${dur(d.idle)}</td><td class="r num">${pct(d.span?d.idle/d.span:0)}</td><td class="r num hide-sm">${dur(d.longest)}</td><td class="r num hide-sm">${d.breaks}</td></tr>`).join('')||'<tr><td colspan="10" class="muted">No calls in this range.</td></tr>'}</tbody></table></div>${work.length>150?'<p class="small muted">Showing the latest 150 rows. Download the Working time CSV for all of them.</p>':''}</div>
   <div class="card" style="margin-bottom:16px"><h2>Call outcomes</h2><div class="tbl-wrap"><table><thead><tr><th>Outcome</th><th class="r">Calls</th><th class="r">Share</th></tr></thead><tbody>${[...S.cfg.dispositions,{id:'_none',name:'Outcome not logged yet'}].map(d=>{const n=st.outcomes?.[d.id]||0;return `<tr><td>${esc(d.name)}</td><td class="r num">${n}</td><td class="r num">${t.n?pct(n/t.n):'0%'}</td></tr>`}).join('')}</tbody></table></div></div>
@@ -737,6 +763,7 @@ document.addEventListener('click',async e=>{
     case'expCalls':exportCalls();break;
     case'expAgents':exportAgents();break;
     case'expWork':exportWork();break;
+    case'expConv':exportConv();break;
     case'addLead':leadModal();break;
     case'editLead':leadModal(S.openLead);break;
     case'pg':S.page=Math.max(0,S.page+(+v));S.sel.clear();V.leads.load().catch(fail);window.scrollTo(0,0);break;
@@ -807,6 +834,8 @@ document.addEventListener('change',async e=>{
   if(id==='pfAgent'){S.pf.agent=t.value;return V.pipeline.load()}
   if(id==='rFrom'||id==='rTo'){if(!t.value)return;S.rep[id==='rFrom'?'from':'to']=new Date(t.value+'T00:00').getTime();if(S.rep.to<S.rep.from)S.rep.to=S.rep.from;return V.reports.load()}
   if(id==='rAgent'){S.rep.agent=t.value;return V.reports.load()}
+  if(id==='rPreset'&&t.value){const d=new Date(),y=d.getFullYear(),m=d.getMonth(),k=t.value;const start=k==='y0'?new Date(y,0,1):new Date(y,m-(k==='m1'?1:k==='m3'?2:k==='m6'?5:0),1);const end=k==='m1'?new Date(y,m,0):d;
+    S.rep.from=sod(start.getTime());S.rep.to=sod(end.getTime());if($('#rFrom'))$('#rFrom').value=toDateInput(S.rep.from);if($('#rTo'))$('#rTo').value=toDateInput(S.rep.to);return V.reports.load()}
   if(id==='rCamp'){S.rep.camp=t.value;return V.reports.load()}
   if(id==='dsC'){S.dialSetup.camp=t.value;return V.dialer.load()}
   if(id==='dsW'){S.dialSetup.who=t.value;return V.dialer.load()}
