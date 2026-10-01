@@ -166,7 +166,7 @@ class MainActivity : BaseActivity() {
         val list = column(0); body.add(list, 10)
         list.add(text("Loading…", 14f, MUTED))
         var path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count" +
-            "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&order=next_follow_up_at.asc.nullslast,created_at.asc&limit=200"
+            "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&dnd=eq.false&order=next_follow_up_at.asc.nullslast,created_at.asc&limit=200"
         if (query.isNotEmpty()) {
             val q = Uri.encode(query.replace(Regex("[,()*]"), " "))
             path += "&or=(name.ilike.*$q*,phone.ilike.*$q*,city.ilike.*$q*)"

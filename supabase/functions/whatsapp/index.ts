@@ -481,6 +481,7 @@ Deno.serve(async (req) => {
         const { data: lead } = await admin.from("leads").select("id,name,phone,assigned_to,dnd").eq("id", b.lead_id).maybeSingle();
         if (!lead) throw new UserError("Lead not found.");
         if (!isMgr && lead.assigned_to !== me.id) throw new UserError("This lead is not assigned to you.");
+        if (lead.dnd) throw new UserError("This customer asked not to be contacted (Do not contact is on). Untick it on the lead first if they agreed again.");
         const { acc, sec } = await loadAccount(b.account_id);
         if (!acc.shared && acc.owner_id !== me.id) throw new UserError("You can only send from company numbers or your own WhatsApp.");
         const params: string[] = Array.isArray(b.params) ? b.params.map((p: unknown) => String(p ?? "")) : [];
