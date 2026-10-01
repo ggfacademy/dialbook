@@ -84,7 +84,9 @@ const isAdmin=()=>role()==='admin';
 const agents=()=>S.team.filter(m=>m.active);
 const nameOf=id=>id?(member(id)?.name||'Former member'):'Unassigned';
 const callerOf=c=>c.source==='ai'?'AI agent':nameOf(c.agent_id);
-const aiReady=()=>!!(S.cfg.ai&&S.cfg.ai.agentId);
+const aiSetUp=()=>!!(S.cfg.ai&&S.cfg.ai.agentId);
+const aiOn=()=>S.cfg.ai?.enabled!==false;
+const aiReady=()=>aiSetUp()&&aiOn();
 const stagePill=id=>`<span class="pill" style="color:${stageColor(id)}"><span class="dot"></span><span style="color:var(--fg)">${esc(stage(id)?.name||id||'New')}</span></span>`;
 const prioLabel=p=>p?`<span class="small prio-${esc(p)}">● ${esc(p[0].toUpperCase()+p.slice(1))}</span>`:'';
 const isOpen=l=>!['won','lost'].includes(l.stage);
@@ -403,7 +405,9 @@ V.reports={mount(){const r=S.rep;
 V.ai={mount(){
   const a=S.ai;
   return head('AI calling','An AI voice agent calls your leads, talks to them, and logs the outcome, summary, transcript and recording here.')+
-  (!aiReady()?`<div class="banner warn"><b>Not set up yet.</b><span>Add your Bolna agent ID in Settings → AI calling, and your Bolna API key in Supabase. The setup guide walks you through it.</span>${isAdmin()?'<button class="btn sm" data-act="nav" data-v="settings">Open Settings</button>':''}</div>`:'')+
+  `<div class="card" style="margin-bottom:16px;max-width:760px"><div class="row"><div class="grow"><h2 style="margin:0">AI calling is ${aiOn()?'<span style="color:var(--call)">ON</span>':'<span class="prio-hot">OFF</span>'}</h2><p class="small muted" style="margin:4px 0 0">${aiOn()?'Managers can start AI calling lists, and AI call buttons show on leads.':'No AI calls can be started by anyone until an admin turns it on. Calls already in progress finish normally.'}</p></div>
+    ${isAdmin()?`<button class="btn ${aiOn()?'danger':'primary'}" data-act="aiToggle">${aiOn()?'Turn AI calling off':'Turn AI calling on'}</button>`:''}</div></div>`+
+  (!aiSetUp()?`<div class="banner warn"><b>Not set up yet.</b><span>Add your Bolna agent ID in Settings → AI calling, and your Bolna API key in Supabase. The setup guide walks you through it.</span>${isAdmin()?'<button class="btn sm" data-act="nav" data-v="settings">Open Settings</button>':''}</div>`:'')+
   (isMgr()?`<div class="card" style="margin-bottom:16px;max-width:760px"><h2>Start an AI calling list</h2><div class="grid3">
     <label class="field"><span>Campaign</span><select class="input" id="aiCamp">${campOpts(a.camp,'All campaigns')}</select></label>
     <label class="field"><span>Who to call</span><select class="input" id="aiQueue">${opt('fresh','New leads, never called',a.queue)}${opt('due','Follow-ups due today',a.queue)}${opt('open','Any open lead',a.queue)}</select></label>
@@ -435,7 +439,7 @@ V.settings={live:false,mount(){
   <div id="waSet">${loadingHTML}</div>
   <div id="nuSet">${loadingHTML}</div>
   ${phone}
-  <div class="card"><h2>AI calling</h2><p class="small muted" style="margin-top:-6px">Uses Bolna voice agents. Create the agent at bolna.ai, then paste its ID here. The API key goes into Supabase secrets, never here.</p>
+  <div class="card"><h2>AI calling</h2><label class="row" style="margin:-4px 0 10px"><input type="checkbox" data-sp="ai.enabled" ${d.ai.enabled!==false?'checked':''}> <b>AI calling is on</b> <span class="small muted">(untick to stop anyone starting AI calls)</span></label><p class="small muted" style="margin-top:-6px">Uses Bolna voice agents. Create the agent at bolna.ai, then paste its ID here. The API key goes into Supabase secrets, never here.</p>
   <div class="grid2"><label class="field"><span>Default Bolna agent ID</span><input class="input mono" data-sp="ai.agentId" value="${esc(d.ai.agentId)}"></label><label class="field"><span>Caller ID number (optional)</span><input class="input mono" data-sp="ai.fromNumber" value="${esc(d.ai.fromNumber)}" placeholder="+91…"></label>
   <label class="field"><span>Start calling at (hour, IST)</span><input class="input" type="number" min="0" max="23" data-sp="ai.startHour" value="${esc(d.ai.startHour)}"></label><label class="field"><span>Stop calling at (hour, IST)</span><input class="input" type="number" min="1" max="24" data-sp="ai.endHour" value="${esc(d.ai.endHour)}"></label>
   <label class="field"><span>Most calls per list</span><input class="input" type="number" min="1" max="200" data-sp="ai.maxBatch" value="${esc(d.ai.maxBatch)}"></label></div>
@@ -791,6 +795,7 @@ document.addEventListener('click',async e=>{
     case'leadDel':arm(t,async()=>{const lid=S.openLead;closeDrawer();await R(sb.from('leads').delete().eq('id',lid));toast('Lead deleted');const v2=V[S.view];if(v2.load)v2.load()});break;
     case'aiOne':{t.disabled=true;const r=await fn({action:'call',lead_ids:[S.openLead],limit:1});toast(r.queued?'AI call started. The result will appear here.':(r.errors[0]||'Could not start the call'));loadDrawer();break}
     case'aiAssist':{const out=$('#aiOut');out.className='ai-out';out.textContent='Thinking…';t.disabled=true;try{const r=await fn({action:'assist',lead_id:S.openLead});out.textContent=r.text}catch(err){out.textContent=err.message}t.disabled=false;break}
+    case'aiToggle':{if(!isAdmin())break;t.disabled=true;const {data:cur}=await R(sb.from('settings').select('data').eq('id',1).single());const d=cur.data||{};d.ai={...(d.ai||{}),enabled:!aiOn()};await R(sb.from('settings').update({data:d,updated_at:iso(now())}).eq('id',1));S.sd=null;S.sdirty=false;await loadBase();toast(d.ai.enabled?'AI calling turned on':'AI calling turned off');render();break}
     case'aiStart':{const n=Math.max(1,+$('#aiN').value||1);S.ai={camp:$('#aiCamp').value,queue:$('#aiQueue').value,n};t.disabled=true;$('#aiMsg').textContent='Starting calls…';
       try{const r=await fn({action:'call',filter:{campaign:S.ai.camp||null,queue:S.ai.queue},limit:n});$('#aiMsg').textContent=`${r.queued} calls started.${r.errors.length?' '+r.errors.length+' failed: '+r.errors.slice(0,2).join('; '):''}`;V.ai.load()}catch(err){$('#aiMsg').textContent=err.message}t.disabled=false;break}
     case'campEdit':campModal(id);break;
