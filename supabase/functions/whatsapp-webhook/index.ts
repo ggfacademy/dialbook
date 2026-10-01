@@ -5,7 +5,7 @@
 // (The CRM shows the exact address in Settings → WhatsApp.)
 //
 // Understands: Meta WhatsApp Cloud API, Twilio, the Evolution API gateway (own WhatsApp by QR),
-// and any other provider for which you set the "incoming message" field paths.
+// Interakt (detected from its payload), and any other provider for which you set the "incoming message" field paths.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -156,6 +156,42 @@ async function handleEvolution(acc: Obj, p: Obj) {
   }
 }
 
+/* ---------------- Interakt ---------------- */
+// Interakt posts { type, data: { customer, message } }. "message_received" is a customer message;
+// "message_api_*" / "message_campaign_*" report on templates sent by the CRM or by Interakt campaigns.
+export function interaktText(msg: Obj): { body: string; media?: string } {
+  let raw: unknown = msg?.message ?? "";
+  if (typeof raw === "string" && /^\s*\{/.test(raw)) { try { raw = JSON.parse(raw); } catch { /* plain text */ } }
+  if (raw && typeof raw === "object") {
+    const j = raw as Obj;
+    const r = j.list_reply || j.button_reply || j.interactive?.list_reply || j.interactive?.button_reply;
+    raw = r?.title ? [r.title, r.description].filter(Boolean).join(" – ") : j.button?.text || j.text?.body || j.body || j.caption || JSON.stringify(j);
+  }
+  const kind = String(msg?.message_content_type || "").toLowerCase();
+  const media = ["image", "video", "document", "audio", "sticker"].find((k) => kind.includes(k));
+  const body = String(raw || "").trim() || (media ? `[${media}]` : "");
+  return { body, media };
+}
+export function isInterakt(p: Obj) { return typeof p?.type === "string" && p?.data && typeof p.data === "object" && ("customer" in p.data || "message" in p.data); }
+
+async function handleInterakt(acc: Obj, p: Obj) {
+  const type = String(p.type || ""), d = p.data || {}, c = d.customer || {}, msg = d.message || {};
+  const phone = String(c.channel_phone_number || `${String(c.country_code || "").replace(/\D/g, "")}${c.phone_number || ""}`);
+  const { body, media } = interaktText(msg);
+  if (type === "message_received") {
+    await storeIncoming(acc, { phone, body, media, id: String(msg.id || ""), name: c.traits?.name || undefined, at: msg.received_at_utc || undefined });
+    return;
+  }
+  const st = (type.match(/_(sent|delivered|read|failed)$/) || [])[1];
+  if (!st || !msg.id) return;
+  // Templates sent from an Interakt campaign are not in the CRM yet: record them in the lead's chat.
+  if (type.startsWith("message_campaign") && phone) {
+    const tpl = msg.meta_data?.template?.name || msg.template?.name || "";
+    await storeIncoming(acc, { phone, body: body || (tpl ? `Template: ${tpl}` : "Template sent from Interakt"), id: String(msg.id), fromMe: true });
+  }
+  await storeStatus(acc, String(msg.id), st, st === "failed" ? String(msg.channel_failure_reason || msg.failure_reason || "") : undefined);
+}
+
 /* ---------------- Any other provider ---------------- */
 async function handleCustom(acc: Obj, p: Obj) {
   const c = acc.config?.inbound || {};
@@ -204,6 +240,7 @@ Deno.serve(async (req) => {
       const p = JSON.parse(raw || "{}");
       if (acc.provider === "meta") await handleMeta(acc, p);
       else if (acc.provider === "qr") await handleEvolution(acc, p);
+      else if (isInterakt(p)) await handleInterakt(acc, p);
       else await handleCustom(acc, p);
     }
   } catch (e) {
