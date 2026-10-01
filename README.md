@@ -223,7 +223,7 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 ### 9c. Facebook and Instagram lead ads (any number of Pages)
 1. In **developers.facebook.com**, create an app of type **Business** (or use the one from WhatsApp). In **App settings → Basic**, copy the **App secret**.
-2. In **business.facebook.com → Settings → Users → System users**, add an **Admin** system user. Assign it your **Pages** (full control) and your **ad account**. Then press **Generate new token**, pick the app, and tick `leads_retrieval`, `pages_manage_metadata`, `pages_show_list`, `pages_read_engagement`, `ads_management` and `business_management`. Copy the token.
+2. In **business.facebook.com → Settings → Users → System users**, add an **Admin** system user. Assign it your **Pages** (full control) and your **ad account**. Then press **Generate new token**, pick the app, and tick `leads_retrieval`, `pages_manage_metadata`, `pages_show_list`, `pages_read_engagement`, `pages_manage_ads`, `ads_management` and `business_management`. Copy the token.
 3. In Dialbook: **Settings → Lead sources → Set up Facebook**. Paste the App secret and the token, then **Save**. Dialbook then shows a **Callback URL** and a **Verify token**.
 4. In your app: **Webhooks** (or "Use cases → Webhooks") → pick **Page** → paste the Callback URL and the Verify token → **Verify and save** → subscribe to **leadgen**. Switch the app to **Live** mode.
 5. In **Meta Business Suite → Settings → Integrations → Leads access**, make sure this app (the CRM) is allowed for each Page.
