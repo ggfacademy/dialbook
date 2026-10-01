@@ -1,4 +1,5 @@
-// Dialbook Pro – "whatsapp" edge function (keep "Verify JWT" ON)
+// Dialbook Pro – "whatsapp" edge function. Turn "Verify JWT" OFF: the nurture scheduler calls it without a
+// user token (it sends x-cron-token instead). Every other action checks the signed-in user itself.
 // Sends WhatsApp messages and manages connected numbers for the CRM website.
 //
 // Actions (POST JSON { action, ... }):
@@ -12,6 +13,8 @@
 //   qr_status     { account_id }
 //   qr_logout     { account_id }
 //   test_account  { account_id }            admin: checks the credentials work
+//   nurture_run   { }                       sends due nurture steps (called every 15 min by pg_cron with
+//                                           the x-cron-token header, or by an admin with "Run now")
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -243,9 +246,136 @@ async function syncTemplates(acc: Obj, sec: Obj): Promise<number> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sending to a lead (used by "send" and by nurture sequences)        */
+/* ------------------------------------------------------------------ */
+async function deliver(acc: Obj, sec: Obj, lead: Obj, o: { template?: Obj; params: string[]; text?: string; headerUrl?: string; senderId: string | null; note?: string }) {
+  const template = o.template;
+  const headerUrl = String(o.headerUrl || template?.header_url || "").trim();
+  if (template?.header_type && !/^https:\/\//i.test(headerUrl)) throw new UserError(`This template needs a public https link to its ${template.header_type}.`);
+  const header = template?.header_type ? { type: String(template.header_type), url: headerUrl } : undefined;
+  const m: SendReq = { to: digits(lead.phone), text: String(o.text || ""), template, params: o.params, header };
+  const shown = template ? renderTemplate(template.body || template.name, o.params) : m.text!;
+  let providerId = "", status = "sent", error: string | null = null;
+  try {
+    const cfg = { ...acc.config, __id: acc.id, __token: acc.webhook_token };
+    providerId = acc.provider === "meta" ? await sendMeta(cfg, sec, m)
+      : acc.provider === "twilio" ? await sendTwilio(cfg, sec, m)
+      : acc.provider === "custom" ? await sendCustom(cfg, sec, m)
+      : await sendQr(cfg, m);
+  } catch (e) {
+    status = "failed"; error = e instanceof Error ? e.message : String(e);
+  }
+  const row = {
+    account_id: acc.id, lead_id: lead.id, phone_key: pkey(lead.phone), direction: "out", sender_id: o.senderId,
+    body: shown, template_name: template?.name || null, status, error, provider_id: providerId || null,
+  };
+  let { data: msg, error: insErr } = await admin.from("wa_messages").insert(row).select("*").single();
+  if (insErr && providerId) {
+    // The provider's delivery report arrived first; attach our details to that message.
+    ({ data: msg } = await admin.from("wa_messages").update({ sender_id: o.senderId, template_name: row.template_name, body: shown })
+      .eq("account_id", acc.id).eq("provider_id", providerId).select("*").single());
+  }
+  if (status === "sent") {
+    await admin.from("activities").insert({ lead_id: lead.id, actor_id: o.senderId, kind: "msg", text: o.note || (template ? `Template: ${template.name}` : shown.slice(0, 120)), data: { channel: "whatsapp" } });
+    await admin.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", lead.id);
+  }
+  return { msg, status, error };
+}
+
+/* ------------------------------------------------------------------ */
+/* Nurture sequences                                                  */
+/* ------------------------------------------------------------------ */
+const istHour = () => Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Kolkata" }).format(new Date()));
+async function cronAllowed(req: Request): Promise<boolean> {
+  const t = req.headers.get("x-cron-token") || "";
+  if (!t) return false;
+  const { data } = await admin.from("integration_secrets").select("value").eq("key", "nurture_cron").maybeSingle();
+  return !!data?.value?.token && data.value.token === t;
+}
+export function fillLeadVars(text: string, v: Obj): string {
+  return String(text || "").replace(/\{(first_name|name|city|program|company|agent|phone)\}/g, (_m, k) => String(v[k] ?? ""));
+}
+async function runNurture(): Promise<Obj> {
+  const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
+  const cfg: Obj = st?.data || {};
+  const nu: Obj = cfg.nurture || {};
+  const h = istHour(), from = Number(nu.startHour ?? 9), to = Number(nu.endHour ?? 20);
+  if (h < from || h >= to) return { skipped: `Outside sending hours (${from}:00–${to}:00 IST)` };
+  const nowIso = new Date().toISOString();
+  const { data: due, error } = await admin.from("nurture_enrollments")
+    .select("*, seq:nurture_sequences(*), lead:leads(id,name,phone,city,stage,dnd,campaign_id,assigned_to)")
+    .eq("status", "active").lte("next_at", nowIso).order("next_at").limit(100);
+  if (error) throw new Error(error.message);
+  const out = { sent: 0, failed: 0, stopped: 0, done: 0, waiting: 0 };
+  const names: Obj = {};
+  const accounts: Obj = {};
+  for (const e of due || []) {
+    const set = (patch: Obj) => admin.from("nurture_enrollments").update(patch).eq("id", e.id);
+    const stop = async (reason: string) => { await set({ status: "stopped", stop_reason: reason }); out.stopped++; };
+    const seq = e.seq, lead = e.lead;
+    if (!seq || !lead) { await stop("Sequence or lead removed"); continue; }
+    if (!seq.active) { out.waiting++; continue; }            // paused: keep the lead waiting
+    if (lead.dnd) { await stop("Marked do not call"); continue; }
+    if (lead.stage === "won" || lead.stage === "lost") { await stop(lead.stage === "won" ? "Converted" : "Lost"); continue; }
+    if (seq.stop_on_reply) {
+      const { count } = await admin.from("wa_messages").select("id", { count: "exact", head: true })
+        .eq("lead_id", lead.id).eq("direction", "in").gt("created_at", e.enrolled_at);
+      if (count) { await stop("Replied on WhatsApp"); continue; }
+    }
+    const steps: Obj[] = Array.isArray(seq.steps) ? seq.steps : [];
+    const step = steps[e.step];
+    if (!step) { await set({ status: "done" }); out.done++; continue; }
+    if (!seq.account_id) { await stop("The sequence has no WhatsApp number"); continue; }
+    if (!step.template_id) { await stop(`Step ${e.step + 1} has no template`); continue; }
+    const { data: tpl } = await admin.from("wa_templates").select("*").eq("id", step.template_id).maybeSingle();
+    if (!tpl || tpl.account_id !== seq.account_id) { await stop(`Step ${e.step + 1}: template not found for this number`); continue; }
+    if (!accounts[seq.account_id]) {
+      const { data: acc } = await admin.from("wa_accounts").select("*").eq("id", seq.account_id).maybeSingle();
+      const { data: s } = await admin.from("wa_secrets").select("data").eq("account_id", seq.account_id).maybeSingle();
+      accounts[seq.account_id] = acc ? { acc, sec: s?.data || {} } : null;
+    }
+    const a = accounts[seq.account_id];
+    if (!a) { await stop("WhatsApp number not found"); continue; }
+    if (lead.assigned_to && !(lead.assigned_to in names)) {
+      const { data: pr } = await admin.from("profiles").select("name").eq("id", lead.assigned_to).maybeSingle();
+      names[lead.assigned_to] = pr?.name || "";
+    }
+    let program = "";
+    if (lead.campaign_id) { const { data: c } = await admin.from("campaigns").select("name").eq("id", lead.campaign_id).maybeSingle(); program = c?.name || ""; }
+    const vars = { first_name: String(lead.name || "").split(" ")[0] || "there", name: lead.name || "", city: lead.city || "", program,
+      company: cfg.company || "", agent: names[lead.assigned_to] || "", phone: lead.phone || "" };
+    const params = String(step.params ?? "").split("|").map((x) => fillLeadVars(x.trim(), vars)).slice(0, Number(tpl.params) || 0);
+    while (params.length < (Number(tpl.params) || 0)) params.push("");
+    let r: Obj;
+    try { r = await deliver(a.acc, a.sec, lead, { template: tpl, params, headerUrl: step.header_url || "", senderId: null, note: `Nurture: ${seq.name} · step ${e.step + 1} (${tpl.name})` }); }
+    catch (err) { r = { status: "failed", error: err instanceof Error ? err.message : String(err) }; }
+    if (r.status !== "sent") {
+      out.failed++;
+      const attempts = (e.attempts || 0) + 1;
+      if (attempts >= 3) await set({ status: "stopped", stop_reason: `Could not send: ${String(r.error || "").slice(0, 200)}`, attempts, last_error: r.error });
+      else await set({ attempts, last_error: r.error, next_at: new Date(Date.now() + 3600e3).toISOString() });
+      continue;
+    }
+    out.sent++;
+    const next = steps[e.step + 1];
+    if (next) {
+      const at = Math.max(new Date(e.enrolled_at).getTime() + Number(next.day || 0) * 864e5, Date.now() + 3600e3);
+      await set({ step: e.step + 1, next_at: new Date(at).toISOString(), last_sent_at: nowIso, attempts: 0, last_error: null });
+    } else {
+      await set({ step: e.step + 1, status: "done", last_sent_at: nowIso, attempts: 0, last_error: null });
+      out.done++;
+      if (seq.end_followup) await admin.from("leads").update({ next_follow_up_at: nowIso }).eq("id", lead.id);
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
+    const b: Obj = await req.json().catch(() => ({}));
+    if (b.action === "nurture_run" && await cronAllowed(req)) return json(await runNurture());
     const userClient = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "Please sign in again." }, 401);
@@ -253,7 +383,6 @@ Deno.serve(async (req) => {
     if (!me?.active) return json({ error: "Your account is not approved yet." }, 403);
     const isAdmin = me.role === "admin";
     const isMgr = isAdmin || me.role === "manager";
-    const b: Obj = await req.json();
 
     const loadAccount = async (id: string) => {
       const { data: acc } = await admin.from("wa_accounts").select("*").eq("id", id).maybeSingle();
@@ -263,6 +392,10 @@ Deno.serve(async (req) => {
     };
 
     switch (b.action) {
+      case "nurture_run": {
+        if (!isAdmin) throw new UserError("Only admins can run nurture sequences.");
+        return json(await runNurture());
+      }
       case "status": {
         const { data } = await admin.from("wa_gateway").select("url,api_key").eq("id", 1).maybeSingle();
         return json({ gateway: !!(data?.url && data?.api_key), gatewayUrl: isAdmin ? data?.url || "" : "" });
@@ -357,36 +490,7 @@ Deno.serve(async (req) => {
           if (!t || t.account_id !== acc.id) throw new UserError("That template does not belong to this number.");
           template = t;
         } else if (!String(b.text || "").trim()) throw new UserError("Type a message or pick a template.");
-        const to = digits(lead.phone);
-        const headerUrl = String(b.header_url || template?.header_url || "").trim();
-        if (template?.header_type && !/^https:\/\//i.test(headerUrl)) throw new UserError(`This template needs a public https link to its ${template.header_type}.`);
-        const header = template?.header_type ? { type: String(template.header_type), url: headerUrl } : undefined;
-        const m: SendReq = { to, text: String(b.text || ""), template, params, header };
-        const shown = template ? renderTemplate(template.body || template.name, params) : m.text!;
-        let providerId = "", status = "sent", error: string | null = null;
-        try {
-          const cfg = { ...acc.config, __id: acc.id, __token: acc.webhook_token };
-          providerId = acc.provider === "meta" ? await sendMeta(cfg, sec, m)
-            : acc.provider === "twilio" ? await sendTwilio(cfg, sec, m)
-            : acc.provider === "custom" ? await sendCustom(cfg, sec, m)
-            : await sendQr(cfg, m);
-        } catch (e) {
-          status = "failed"; error = e instanceof Error ? e.message : String(e);
-        }
-        const row = {
-          account_id: acc.id, lead_id: lead.id, phone_key: pkey(lead.phone), direction: "out", sender_id: me.id,
-          body: shown, template_name: template?.name || null, status, error, provider_id: providerId || null,
-        };
-        let { data: msg, error: insErr } = await admin.from("wa_messages").insert(row).select("*").single();
-        if (insErr && providerId) {
-          // The provider's delivery report arrived first; attach our details to that message.
-          ({ data: msg } = await admin.from("wa_messages").update({ sender_id: me.id, template_name: row.template_name, body: shown })
-            .eq("account_id", acc.id).eq("provider_id", providerId).select("*").single());
-        }
-        if (status === "sent") {
-          await admin.from("activities").insert({ lead_id: lead.id, actor_id: me.id, kind: "msg", text: template ? `Template: ${template.name}` : shown.slice(0, 120), data: { channel: "whatsapp" } });
-          await admin.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", lead.id);
-        }
+        const { msg, status, error } = await deliver(acc, sec, lead, { template, params, text: String(b.text || ""), headerUrl: b.header_url, senderId: me.id });
         if (status === "failed") return json({ error, message: msg }, 400);
         return json({ ok: true, message: msg });
       }
