@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1f4b">
+<meta name="theme-color" content="#5e2a2c">
 <title>Dialbook Pro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Colours: Global Gold Foundation navy and gold. Layout: fixed navy rail on desktop, bottom tab bar on phones; content is a single scrolling work surface. */
+/* Colours: Global Gold Foundation logo – maroon #5e2a2c and orange-gold #e48a10. Layout: fixed navy rail on desktop, bottom tab bar on phones; content is a single scrolling work surface. */
 :root{
-  --bg:#f6f4ef; --surface:#ffffff; --surface2:#efebe2; --line:#e3ddd0; --fg:#1b1e2b; --muted:#5e6273;
-  --accent:#946600; --accent-fg:#ffffff; --accent-soft:#fbf1d9; --gold:#e3b341; --gold-hi:#f2c14e;
+  --bg:#f7f3ee; --surface:#ffffff; --surface2:#f0e9e1; --line:#e6dcd2; --fg:#231a1b; --muted:#6a5e5f;
+  --accent:#7b2e31; --accent-fg:#ffffff; --accent-soft:#f8ece0; --gold:#e48a10; --gold-hi:#f2a63a;
   --call:#12834a; --call-soft:#e1f3e8; --warn:#a86300; --warn-soft:#fbefdc; --danger:#bd3434; --danger-soft:#f9e3e3;
-  --side:#0b1f4b; --side-fg:#c8d2ea; --side-hi:#ffffff; --side-line:#1c3366;
+  --side:#5e2a2c; --side-fg:#ecd9d6; --side-hi:#ffffff; --side-line:#74393b;
   --s1:#5b6b8c; --s2:#3a7bd5; --s3:#12834a; --s4:#a86300; --s5:#8a4fc4; --s6:#0e7c7b; --s7:#bd3434; --s8:#6b7280;
   --shadow:0 1px 2px rgba(20,30,40,.06),0 4px 16px rgba(20,30,40,.06);
   --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
@@ -23,17 +23,17 @@
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0e111a; --surface:#161a26; --surface2:#1d2231; --line:#2a3044; --fg:#e8e9ef; --muted:#9a9fb2;
-  --accent:#e3b341; --accent-fg:#12161f; --accent-soft:#3a2f12; --gold:#e3b341; --gold-hi:#f2c14e;
+  --bg:#151012; --surface:#1e1719; --surface2:#271e20; --line:#3a2c2e; --fg:#f0e8e6; --muted:#b0a2a2;
+  --accent:#f2a63a; --accent-fg:#151012; --accent-soft:#3d2a12; --gold:#e48a10; --gold-hi:#f2a63a;
   --call:#3fcf80; --call-soft:#143322; --warn:#f0a940; --warn-soft:#3a2a10; --danger:#f27b7b; --danger-soft:#3d1d1d;
-  --side:#071433; --side-fg:#b4c0dd; --side-hi:#ffffff; --side-line:#16295a;
+  --side:#2e1415; --side-fg:#e2cfcb; --side-hi:#ffffff; --side-line:#4a2426;
   --s1:#8e9cc0; --s2:#6aa6ff; --s3:#3fcf80; --s4:#f0a940; --s5:#b98cf0; --s6:#3fc4c2; --s7:#f27b7b; --s8:#9aa3b2;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0e111a; --surface:#161a26; --surface2:#1d2231; --line:#2a3044; --fg:#e8e9ef; --muted:#9a9fb2;
-  --accent:#e3b341; --accent-fg:#12161f; --accent-soft:#3a2f12; --gold:#e3b341; --gold-hi:#f2c14e;
+  --bg:#151012; --surface:#1e1719; --surface2:#271e20; --line:#3a2c2e; --fg:#f0e8e6; --muted:#b0a2a2;
+  --accent:#f2a63a; --accent-fg:#151012; --accent-soft:#3d2a12; --gold:#e48a10; --gold-hi:#f2a63a;
   --call:#3fcf80; --call-soft:#143322; --warn:#f0a940; --warn-soft:#3a2a10; --danger:#f27b7b; --danger-soft:#3d1d1d;
-  --side:#071433; --side-fg:#b4c0dd; --side-hi:#ffffff; --side-line:#16295a;
+  --side:#2e1415; --side-fg:#e2cfcb; --side-hi:#ffffff; --side-line:#4a2426;
   --s1:#8e9cc0; --s2:#6aa6ff; --s3:#3fcf80; --s4:#f0a940; --s5:#b98cf0; --s6:#3fc4c2; --s7:#f27b7b; --s8:#9aa3b2;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25); color-scheme:dark}
 *{box-sizing:border-box}
@@ -50,7 +50,7 @@ h1{font-size:1.6rem} h2{font-size:1.15rem} h3{font-size:1rem}
 #app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100%}
 .side{background:var(--side);color:var(--side-fg);display:flex;flex-direction:column;gap:4px;padding:18px 12px;position:sticky;top:env(safe-area-inset-top,0px);height:100vh;height:100dvh;overflow:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px;color:var(--side-hi);font-family:var(--f-display);font-weight:700;font-size:1.2rem}
-.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--gold-hi),#b8860b);display:grid;place-items:center;color:#0b1f4b}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--gold-hi),var(--gold));display:grid;place-items:center;color:#5e2a2c}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:var(--side-fg);padding:9px 10px;border-radius:8px;cursor:pointer;font-weight:500}
 .nav-btn:hover{background:var(--side-line);color:var(--side-hi)}
 .nav-btn[aria-current="page"]{background:var(--side-line);color:var(--gold-hi);box-shadow:inset 3px 0 0 var(--gold)}
