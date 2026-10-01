@@ -7,7 +7,7 @@
 //   save_account  { id?, name, provider, shared, phone, config, secrets }   admin
 //   delete_account{ id }                    admin, or the owner of a QR account
 //   sync_templates{ account_id }            admin: fetch approved templates (Meta, Twilio)
-//   send          { lead_id, account_id, text? | template_id + params[] }
+//   send          { lead_id, account_id, text? | template_id + params[] + header_url? }
 //   qr_start      { }                       any user: link their own WhatsApp, returns QR
 //   qr_status     { account_id }
 //   qr_logout     { account_id }
@@ -79,7 +79,7 @@ const gwError = (d: any) => {
 /* ------------------------------------------------------------------ */
 /* Provider senders. Each returns the provider's message id.          */
 /* ------------------------------------------------------------------ */
-type SendReq = { to: string; text?: string; template?: Obj; params: string[] };
+type SendReq = { to: string; text?: string; template?: Obj; params: string[]; header?: { type: string; url: string } };
 
 async function sendMeta(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
   const v = cfg.api_version || "v23.0";
@@ -87,7 +87,10 @@ async function sendMeta(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
   if (m.template) {
     body.type = "template";
     body.template = { name: m.template.name, language: { code: m.template.language || "en" } };
-    if (m.params.length) body.template.components = [{ type: "body", parameters: m.params.map((t) => ({ type: "text", text: t || "-" })) }];
+    const comps: Obj[] = [];
+    if (m.header) comps.push({ type: "header", parameters: [{ type: m.header.type, [m.header.type]: { link: m.header.url } }] });
+    if (m.params.length) comps.push({ type: "body", parameters: m.params.map((t) => ({ type: "text", text: t || "-" })) });
+    if (comps.length) body.template.components = comps;
   } else {
     body.type = "text";
     body.text = { preview_url: true, body: m.text };
@@ -131,7 +134,8 @@ async function sendCustom(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
   const vars: Obj = {
     to: "+" + m.to, to_digits: m.to, to_local: m.to.slice(-10), text: m.text || "",
     template: m.template?.name || "", language: m.template?.language || "en",
-    params_json: m.params, ...Object.fromEntries(m.params.map((p, i) => [`param${i + 1}`, p])),
+    params_json: m.params, header_type: m.header?.type || "", header_url: m.header?.url || "",
+    header_values_json: m.header ? [m.header.url] : [], ...Object.fromEntries(m.params.map((p, i) => [`param${i + 1}`, p])),
     ...Object.fromEntries(Object.entries(sec).map(([k, v]) => [`secret.${k}`, v])),
   };
   const bodyTpl = m.template ? (cfg.template_body || cfg.text_body) : cfg.text_body;
@@ -354,7 +358,10 @@ Deno.serve(async (req) => {
           template = t;
         } else if (!String(b.text || "").trim()) throw new UserError("Type a message or pick a template.");
         const to = digits(lead.phone);
-        const m: SendReq = { to, text: String(b.text || ""), template, params };
+        const headerUrl = String(b.header_url || template?.header_url || "").trim();
+        if (template?.header_type && !/^https:\/\//i.test(headerUrl)) throw new UserError(`This template needs a public https link to its ${template.header_type}.`);
+        const header = template?.header_type ? { type: String(template.header_type), url: headerUrl } : undefined;
+        const m: SendReq = { to, text: String(b.text || ""), template, params, header };
         const shown = template ? renderTemplate(template.body || template.name, params) : m.text!;
         let providerId = "", status = "sent", error: string | null = null;
         try {
