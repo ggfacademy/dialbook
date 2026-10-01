@@ -104,6 +104,7 @@ WhatsApp message: a short friendly message the caller (${me.name}) can send. Use
     if (body.action === "call") {
       const key = Deno.env.get("BOLNA_API_KEY");
       const ai = cfg.ai || {};
+      if (ai.enabled === false) return json({ error: "AI calling is switched off. An admin can turn it on in AI calling or Settings." }, 400);
       if (!key) return json({ error: "Add BOLNA_API_KEY in Supabase Edge Function secrets first." }, 400);
       const langAgents: Record<string, string> = ai.agents || {};
       if (!ai.agentId && !Object.values(langAgents).some(Boolean)) return json({ error: "Add a Bolna agent ID in Settings → AI calling first." }, 400);
