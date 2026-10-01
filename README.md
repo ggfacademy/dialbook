@@ -185,6 +185,15 @@ Add your approved templates under **Templates** (name, language, text with {{1}}
 
 If you're not sure what to type, send me (or your provider's support) their API page and I'll fill the form in for you.
 
+### 8f. Nurture sequences (automatic WhatsApp follow-ups)
+Send approved templates automatically over the days after a lead arrives, for example Day 0 brochure, Day 2 video, Day 5 reminder, Day 10 last call.
+1. Supabase → **SQL Editor** → paste everything from `supabase/nurture.sql`. In the last block, replace `YOUR-PROJECT` with your project reference → **Run**. This creates the tables and a schedule that runs every 15 minutes.
+2. Redeploy the `whatsapp` function, with "Verify JWT" **off**.
+3. In the CRM: **Settings → Nurture sequences** → **Edit** the "Default follow-up" sequence (or **New sequence**). Pick the WhatsApp number, the program (or any program), a template for each step and the values for {{1}}, {{2}}… (`{first_name}`, `{program}`, `{city}`, `{company}`, `{agent}`). Tick **Sequence is on** → **Save**.
+4. New leads join automatically. Use **Add existing leads** for leads you already have, or **Start sequence** on a lead.
+
+A lead's sequence stops when they reply on WhatsApp, are converted or lost, or are marked do not call. After the last step, the lead moves to today's follow-ups for a call. Messages go out between 9:00 and 20:00 IST; you can change the hours in Settings. Each lead page shows which step it is on, with a **Stop** button.
+
 ### 8e. Option D – Own WhatsApp by QR code
 This links a normal WhatsApp or WhatsApp Business app, the same way WhatsApp Web does. It runs through **Evolution API**, a free, open-source WhatsApp gateway you host yourself.
 
@@ -258,6 +267,7 @@ Edit any file on GitHub (or upload a new version). The **Actions** tab rebuilds 
 supabase/schema.sql                  database tables, security rules and automation
 supabase/functions/ai/index.ts       starts AI calls; "Suggest next step"
 supabase/functions/ai-webhook/index.ts  receives AI call results from Bolna
+supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
 supabase/functions/whatsapp-webhook/ receives WhatsApp replies and delivery updates
