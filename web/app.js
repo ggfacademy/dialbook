@@ -215,12 +215,14 @@ function leadQuery(select='*',opts){
   if(S.hasContacts&&!['contacts','dnd','all'].includes(f.fu)&&!f.q.trim())q=q.eq('contact_only',false); // the contact list is hidden unless asked for or searched
   if(f.fu==='dnd')q=q.eq('dnd',true);
   const s=f.q.replace(/[%,()*\\"]/g,' ').trim();
-  if(s){const d=s.replace(/\D/g,'');q=q.or([`name.ilike.%${s}%`,`city.ilike.%${s}%`,`company.ilike.%${s}%`,`email.ilike.%${s}%`,...(d.length>=3?[`phone_key.like.%${d}%`]:[])].join(','))}
+  if(s){const d=s.replace(/\D/g,'');const lc=s.toLowerCase();const camps=S.campaigns.filter(c=>c.name.toLowerCase().includes(lc)).map(c=>c.id);
+    // name, phone, city, company, email, course (tags), notes, source and campaign name
+    q=q.or([`name.ilike.%${s}%`,`city.ilike.%${s}%`,`company.ilike.%${s}%`,`email.ilike.%${s}%`,`source.ilike.%${s}%`,`note.ilike.%${s}%`,...(S.hasTagsText?[`tags_text.ilike.%${s}%`]:[]),...(camps.length?[`campaign_id.in.(${camps.join(',')})`]:[]),...(d.length>=3?[`phone_key.like.%${d}%`]:[])].join(','))}
   return q;
 }
 V.leads={mount(){const f=S.lf;
   return head('Leads','<span id="lcount">&nbsp;</span>',`<button class="btn" data-act="import">${ic('up')}Import</button><button class="btn" data-act="exportLeads">${ic('down')}Export</button><button class="btn primary" data-act="addLead">${ic('plus')}Add lead</button>`)+
-  `<div class="toolbar"><input class="input" id="lq" type="search" placeholder="Search name, phone, city" value="${esc(f.q)}" aria-label="Search leads">
+  `<div class="toolbar"><input class="input" id="lq" type="search" placeholder="Search name, phone, city, course, notes" value="${esc(f.q)}" aria-label="Search leads">
    <select class="input" id="lf-stage" aria-label="Stage">${stageOpts(f.stage,'All stages')}</select>
    <select class="input" id="lf-camp" aria-label="Campaign">${campOpts(f.camp,'All campaigns')}${opt('_none','No campaign',f.camp)}</select>
    ${isMgr()?`<select class="input" id="lf-agent" aria-label="Assigned to">${agentOpts(f.agent,'Anyone')}${opt('_none','Unassigned',f.agent)}</select>`:''}
@@ -713,6 +715,7 @@ async function loadBase(){
   S.team=t.data;S.campaigns=c.data;S.cfg={...clone(DEF),...(s.data?.data||{})};S.cfg.ai={...DEF.ai,...(S.cfg.ai||{})};
   const me=S.team.find(m=>m.id===S.me.id);if(me)S.me=me;
   if(S.hasContacts===undefined){const {error}=await sb.from('leads').select('contact_only').limit(1);S.hasContacts=!error}
+  if(S.hasTagsText===undefined){const {error}=await sb.from('leads').select('tags_text').limit(1);S.hasTagsText=!error}
 }
 
 /* ---------- sign in ---------- */
