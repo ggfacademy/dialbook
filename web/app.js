@@ -162,12 +162,20 @@ V.home={mount(){
 },async load(){
   const rv=S.rv;const to=endToday(),from=S.range==='0'?sod(now()):sod(now())-(+S.range-1)*DAY;
   const agent=isMgr()?(S.hAgent||null):S.me.id;
-  const [st,ls,fu]=await Promise.all([
+  const [st,ls,fu,inl]=await Promise.all([
     rpc('dashboard_stats',{p_from:iso(from),p_to:iso(to),p_agent:agent,p_campaign:null,p_tz:TZ}),
     rpc('lead_summary',{p_agent:agent,p_campaign:null,p_tz:TZ}),
-    (()=>{let q=sb.from('leads').select('*').not('stage','in','(won,lost)').not('next_follow_up_at','is',null).lt('next_follow_up_at',iso(now()+7*DAY)).order('next_follow_up_at').limit(6);if(agent)q=q.eq('assigned_to',agent);return R(q)})()]);
+    (()=>{let q=sb.from('leads').select('*').not('stage','in','(won,lost)').not('next_follow_up_at','is',null).lt('next_follow_up_at',iso(now()+7*DAY)).order('next_follow_up_at').limit(6);if(agent)q=q.eq('assigned_to',agent);return R(q)})(),
+    // new leads that arrived in the period (the contact list of imported old data is not counted)
+    fetchAll(()=>{let q=sb.from('leads').select('source').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q})]);
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
   const t=st.totals||{};let html='';
+  {const by={};for(const l of inl){const k=(l.source||'').trim()||'Source not set';by[k]=(by[k]||0)+1}
+   const col=k=>/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
+   const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v,color:col(label)}));
+   const per=S.range==='0'?'today':`in the last ${S.range} days`;
+   html+=`<div class="card" style="margin-bottom:16px"><div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px">${inl.length}</div><div class="small muted">${per}${agent?' · assigned to '+esc(nameOf(agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
+     <div class="hbar-wide" style="flex:1;min-width:260px"><div class="small muted" style="margin-bottom:6px">By source</div>${rows.length?hbars(rows):'<p class="muted small">No new leads in this period.</p>'}</div></div></div>`}
   if(!ls.total&&isMgr())html+=`<div class="card" style="margin-bottom:16px"><h2>Get your calling team started</h2><div class="grid3">
     <div><b>1. Invite your team</b><p class="muted small">Send them this website's link. They create an account and you approve them in Team.</p><button class="btn" data-act="nav" data-v="team">${ic('team')}Open Team</button></div>
     <div><b>2. Import leads</b><p class="muted small">Upload an Excel or CSV file and share the leads out to callers automatically.</p><button class="btn primary" data-act="import">${ic('up')}Import leads</button></div>
