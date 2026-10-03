@@ -275,6 +275,7 @@ Edit any file on GitHub (or upload a new version). The **Actions** tab rebuilds 
 supabase/schema.sql                  database tables, security rules and automation
 supabase/functions/ai/index.ts       starts AI calls; "Suggest next step"
 supabase/functions/ai-webhook/index.ts  receives AI call results from Bolna
+supabase/search.sql                  lets the Leads search find courses (tags), notes and sources
 supabase/contacts.sql                contact lists (old data) and do-not-contact blocking
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
