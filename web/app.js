@@ -746,13 +746,14 @@ function showAuth(msg){
 }
 function showPending(email){
   $('#app').hidden=true;const a=$('#auth');a.hidden=false;
-  a.innerHTML=`<div class="auth"><div class="brand"><span class="brand-mark">${ic('phone')}</span><span>Dialbook</span></div><h2>Waiting for approval</h2><p>Your account <b>${esc(email)}</b> is created. Ask your admin to approve you in <b>Team</b>, then press Check again.</p><div class="row"><button class="btn primary" data-act="recheck">Check again</button><button class="btn" data-act="logout">Sign out</button></div></div>`;
+  a.innerHTML=`<div class="auth"><div class="brand"><span class="brand-mark">${ic('phone')}</span><span>Dialbook</span></div><h2>Waiting for approval</h2><p>Your account <b>${esc(email)}</b> is created. Ask your admin to approve you in <b>Team</b>, then press Check again.</p><p class="small muted">Wrong email? Press <b>Sign out</b>, then <b>Create account</b> with the right one.</p><div class="row"><button class="btn primary" data-act="recheck">Check again</button><button class="btn" data-act="logout">Sign out</button></div></div>`;
 }
 function showSetupMissing(){const a=$('#auth');a.hidden=false;a.innerHTML=`<div class="auth"><h2>Almost there</h2><p>Open <b>config.js</b> and paste your Supabase project URL and anon key. The setup guide shows where to find them.</p></div>`}
 let subscribed=false;
 async function afterLogin(){
   const {data:{user}}=await sb.auth.getUser();if(!user)return showAuth();
-  const {data:p}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  let {data:p}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  if(!p){await sb.rpc('request_access');({data:p}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle())}
   if(!p||!p.active)return showPending(user.email);
   S.me=p;await loadBase();
   $('#auth').hidden=true;$('#app').hidden=false;
@@ -819,7 +820,7 @@ document.addEventListener('click',async e=>{
     case'campLeads':S.lf={q:'',stage:'',camp:id,agent:'',source:'',prio:'',fu:''};S.page=0;go('leads');break;
     case'campDial':S.dialSetup.camp=id;S.dialer=null;go('dialer');break;
     case'memberEdit':memberModal(id);break;
-    case'memberDel':arm(t,async()=>{await R(sb.from('profiles').delete().eq('id',id));await loadBase();closeModal();toast('Removed. Their leads are now unassigned.');render()});break;
+    case'memberDel':arm(t,async()=>{const{error}=await sb.rpc('remove_member',{p_id:id});if(error){if(!/remove_member|function/i.test(error.message))throw error;await R(sb.from('profiles').delete().eq('id',id))}await loadBase();closeModal();toast('Removed. Their leads are now unassigned.');render()});break;
     case'approve':{await R(sb.from('profiles').update({active:true,role:$('#ap-'+id).value}).eq('id',id));toast('Approved');render();break}
     case'distribute':distributeModal();break;
     case'dsRun':{const ids=$$('.dsA:checked').map(x=>x.value);if(!ids.length)return toast('Pick at least one person');t.disabled=true;const n=await rpc('distribute_leads',{p_which:$('#dsWhich').value,p_campaign:$('#dsCamp').value||null,p_agents:ids});closeModal();toast(`${n} leads shared out`);render();break}
