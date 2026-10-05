@@ -252,6 +252,8 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 
 ### Old data as a contact list, and "Do not contact"
+**Rejecting or removing team members.** Run `supabase/team.sql` once. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
+
 **Contact list (old data for messages).** Run `supabase/contacts.sql` once in the SQL Editor. Then **Leads → Import → Assign to: “Don’t assign: contact list for messages only”**. These contacts are not given to telecallers and are left out of calling lists, share-outs, AI calling lists and automatic nurture. Find them with **Leads → status filter → Contact list**. Message them with a nurture sequence (**Add existing leads**) or export the filtered list for an Interakt campaign. When a contact enquires again through Facebook/Instagram/a form, or replies on WhatsApp, they become a normal new lead and are assigned by your rules. Giving one to a telecaller by hand does the same.
 
 **Do not contact.** On a lead, tick **Do not contact**, or pick the call outcome **Asked not to be contacted**. The lead is then left out of calling lists, the phone app, AI calls, nurture and WhatsApp sending, also if they enquire again. Untick it only if the customer agrees to be contacted again.
@@ -277,6 +279,7 @@ supabase/functions/ai/index.ts       starts AI calls; "Suggest next step"
 supabase/functions/ai-webhook/index.ts  receives AI call results from Bolna
 supabase/search.sql                  lets the Leads search find courses (tags), notes and sources
 supabase/contacts.sql                contact lists (old data) and do-not-contact blocking
+supabase/team.sql                    Reject/Remove in Team also deletes the login, so the email can sign up again
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
