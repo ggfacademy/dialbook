@@ -1,4 +1,4 @@
--- Dialbook Pro – removing and rejecting team members properly.
+-- Dialbook Pro – removing and rejecting team members properly, and admin password resets.
 -- Run once in Supabase → SQL Editor, after schema.sql. Safe to run again.
 --
 -- Before this, "Reject" / "Remove" in Team only deleted the person's team row. Their login stayed,
@@ -31,6 +31,19 @@ begin
 end $$;
 revoke execute on function public.request_access() from anon, public;
 grant execute on function public.request_access() to authenticated;
+
+-- Admin sets a new password for anyone on the team (Team → Edit → Set a new password)
+create or replace function public.set_member_password(p_id uuid, p_password text) returns void
+language plpgsql security definer set search_path = public, auth, extensions as $$
+begin
+  if not public.is_admin() then raise exception 'only admins can change passwords'; end if;
+  if length(coalesce(p_password, '')) < 6 then raise exception 'use at least 6 characters'; end if;
+  update auth.users set encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf')), updated_at = now()
+   where id = p_id;
+  if not found then raise exception 'this person has no login'; end if;
+end $$;
+revoke execute on function public.set_member_password(uuid, text) from anon, public;
+grant execute on function public.set_member_password(uuid, text) to authenticated;
 
 -- One-time clean-up: delete logins of people already rejected or removed (they have no team row),
 -- so their emails can be used to sign up again.

@@ -338,7 +338,8 @@ function memberModal(id){
   <label class="field"><span>Phone</span><input class="input" id="mPhone" value="${esc(m.phone||'')}" inputmode="tel"></label>
   <div class="field"><span>Languages they speak (used to assign leads)</span><div class="row">${(S.cfg.languages||[]).map(x=>`<label class="row small" style="gap:4px"><input type="checkbox" class="mLang" value="${esc(x)}" ${(m.languages||[]).includes(x)?'checked':''} ${isAdmin()?'':'disabled'}>${esc(x)}</label>`).join('')}</div></div>
   ${isAdmin()?`<label class="field"><span>Role</span><select class="input" id="mRole">${opt('telecaller','Telecaller – sees only their own leads',m.role)}${opt('manager','Manager – sees all leads and reports',m.role)}${opt('admin','Admin – also approves people and changes settings',m.role)}</select></label>
-  ${self?'':`<label class="row"><input type="checkbox" id="mActive" ${m.active?'checked':''}> Can sign in (untick to block access)</label>`}`:''}
+  ${self?'':`<label class="row"><input type="checkbox" id="mActive" ${m.active?'checked':''}> Can sign in (untick to block access)</label>`}
+  <div class="field"><span>Set a new password${self?'':' for '+esc(m.name)}</span><div class="row" style="flex-wrap:nowrap"><input class="input" id="mPass" type="text" minlength="6" autocomplete="off" placeholder="At least 6 characters" style="flex:1"><button class="btn" type="button" data-act="memberPass" data-id="${m.id}">Set password</button></div><span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">${self?'Use this to change your own password.':'Tell them the new password; they sign in with their email and this password.'}</span></div>`:''}
   <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="closeMd">Cancel</button>${isAdmin()&&!self?`<span class="spacer"></span><button class="btn danger" type="button" data-act="memberDel" data-id="${m.id}">Remove</button>`:''}</div></form>`);
   $('#mForm').onsubmit=async e=>{e.preventDefault();const d={name:$('#mName').value.trim(),phone:$('#mPhone').value.trim()};
     if(isAdmin()){d.languages=$$('.mLang:checked').map(x=>x.value);d.role=$('#mRole').value;if($('#mActive'))d.active=$('#mActive').checked}
@@ -838,6 +839,10 @@ document.addEventListener('click',async e=>{
     case'campLeads':S.lf={q:'',stage:'',camp:id,agent:'',source:'',prio:'',fu:''};S.page=0;go('leads');break;
     case'campDial':S.dialSetup.camp=id;S.dialer=null;go('dialer');break;
     case'memberEdit':memberModal(id);break;
+    case'memberPass':{const pw=$('#mPass').value;if(pw.length<6)return toast('Use at least 6 characters');t.disabled=true;
+      const {error}=await sb.rpc('set_member_password',{p_id:id,p_password:pw});t.disabled=false;
+      if(error){toast(/set_member_password|function/i.test(error.message)?'Run supabase/team.sql in Supabase → SQL Editor first':error.message);break}
+      $('#mPass').value='';toast('Password changed');break}
     case'memberDel':arm(t,async()=>{const{error}=await sb.rpc('remove_member',{p_id:id});if(error){if(!/remove_member|function/i.test(error.message))throw error;await R(sb.from('profiles').delete().eq('id',id))}await loadBase();closeModal();toast('Removed. Their leads are now unassigned.');render()});break;
     case'approve':{await R(sb.from('profiles').update({active:true,role:$('#ap-'+id).value}).eq('id',id));toast('Approved');render();break}
     case'distribute':distributeModal();break;
