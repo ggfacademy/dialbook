@@ -736,6 +736,7 @@ function showAuth(msg){
   <label class="field"><span>Password</span><input class="input" id="aPass" type="password" required minlength="6" autocomplete="${S.authMode==='up'?'new-password':'current-password'}"></label>
   <p class="small ${msg&&msg.ok?'':'prio-hot'}" id="aMsg">${esc(msg?.text||'')}</p>
   <button class="btn primary lg" type="submit">${S.authMode==='up'?'Create account':'Sign in'}</button>
+  ${S.authMode!=='up'?'<button type="button" class="btn ghost sm" data-act="authForgot">Forgot password?</button>':''}
   ${S.authMode==='up'?'<p class="small muted">The first account becomes the admin. Everyone after that is approved by the admin in Team.</p>':''}</form>`;
   $('#authForm').onsubmit=async e=>{e.preventDefault();const email=$('#aEmail').value.trim(),password=$('#aPass').value;const m=$('#aMsg');m.className='small muted';m.textContent='Please wait…';
     try{
@@ -743,6 +744,20 @@ function showAuth(msg){
       else{const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error}
       await afterLogin();
     }catch(err){m.className='small prio-hot';m.textContent=err.message==='Invalid login credentials'?'Wrong email or password.':err.message}};
+}
+function showNewPass(){
+  $('#app').hidden=true;const a=$('#auth');a.hidden=false;
+  a.innerHTML=`<form class="auth" id="npForm"><div class="brand"><span class="brand-mark">${ic('phone')}</span><span>Dialbook</span></div><h2>Set a new password</h2>
+  <label class="field"><span>New password</span><input class="input" id="np1" type="password" required minlength="6" autocomplete="new-password"></label>
+  <label class="field"><span>Type it again</span><input class="input" id="np2" type="password" required minlength="6" autocomplete="new-password"></label>
+  <p class="small prio-hot" id="npMsg"></p><button class="btn primary lg" type="submit">Save new password</button></form>`;
+  $('#npForm').onsubmit=async e=>{e.preventDefault();const m=$('#npMsg'),p1=$('#np1').value,p2=$('#np2').value;
+    if(p1!==p2){m.textContent='The two passwords are not the same.';return}
+    m.className='small muted';m.textContent='Please wait…';
+    const {error}=await sb.auth.updateUser({password:p1});
+    if(error){m.className='small prio-hot';m.textContent=error.message;return}
+    S.recovery=false;try{history.replaceState(null,'',location.pathname)}catch(_){}
+    toast('Password changed');afterLogin().catch(err=>{fail(err);showAuth()});};
 }
 function showPending(email){
   $('#app').hidden=true;const a=$('#auth');a.hidden=false;
@@ -772,6 +787,9 @@ document.addEventListener('click',async e=>{
     case'nav':closeModal();go(v);break;
     case'moreNav':modal(`<h2>More</h2><div class="list" style="margin-top:12px">${NAV.filter(([k])=>!TABS.includes(k)).map(([k,l,i])=>`<button class="li btn" style="justify-content:flex-start" data-act="nav" data-v="${k}">${ic(i)}${l}</button>`).join('')}<button class="li btn" style="justify-content:flex-start" data-act="logout">Sign out</button></div>`);break;
     case'authMode':S.authMode=v;showAuth();break;
+    case'authForgot':{const email=($('#aEmail')?.value||'').trim(),m=$('#aMsg');if(!email){m.className='small prio-hot';m.textContent='Type your email above, then press Forgot password.';break}
+      m.className='small muted';m.textContent='Please wait…';const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      if(error){m.className='small prio-hot';m.textContent=error.message}else{m.className='small';m.textContent='If this email has an account, a reset link is on its way. Open it on this device to set a new password.'}break}
     case'recheck':afterLogin();break;
     case'logout':closeModal();closeDrawer();await sb.auth.signOut();S.me=null;showAuth();break;
     case'range':S.range=v;render();break;
@@ -1324,9 +1342,12 @@ document.addEventListener('change',async e=>{
 async function boot(){
   if(!CFG.url||!CFG.anonKey||/YOUR-/.test(CFG.url+CFG.anonKey))return showSetupMissing();
   if(!window.supabase)return showAuth({text:'Could not load the sign-in library. Check your internet connection and reload.'});
+  S.recovery=/type=recovery/.test(location.hash);
   sb=window.supabase.createClient(CFG.url,CFG.anonKey);
+  sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY'){S.recovery=true;setTimeout(showNewPass,0)}});
   const {data:{session}}=await sb.auth.getSession();
-  if(!session)return showAuth();
+  if(!session)return showAuth(/error_description=/.test(location.hash)?{text:'That reset link has expired or was already used. Press Forgot password again.'}:undefined);
+  if(S.recovery)return showNewPass();
   afterLogin().catch(e=>{fail(e);showAuth()});
 }
 boot();
