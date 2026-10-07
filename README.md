@@ -253,10 +253,21 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 ### Old data as a contact list, and "Do not contact"
 **Rejecting or removing team members.** Run `supabase/team.sql` once. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
+.github/workflows/backup.yml         nightly backup to Dropbox (.github/backup.sh; setup page web/backup-setup.html)
 
 **Contact list (old data for messages).** Run `supabase/contacts.sql` once in the SQL Editor. Then **Leads → Import → Assign to: “Don’t assign: contact list for messages only”**. These contacts are not given to telecallers and are left out of calling lists, share-outs, AI calling lists and automatic nurture. Find them with **Leads → status filter → Contact list**. Message them with a nurture sequence (**Add existing leads**) or export the filtered list for an Interakt campaign. When a contact enquires again through Facebook/Instagram/a form, or replies on WhatsApp, they become a normal new lead and are assigned by your rules. Giving one to a telecaller by hand does the same.
 
 **Do not contact.** On a lead, tick **Do not contact**, or pick the call outcome **Asked not to be contacted**. The lead is then left out of calling lists, the phone app, AI calls, nurture and WhatsApp sending, also if they enquire again. Untick it only if the customer agrees to be contacted again.
+
+## Backups (daily, to Dropbox)
+
+Every night at 2:00 am India time, GitHub copies the CRM data into your Dropbox folder `/CRM` (on the PC: `F:\Dropbox\CRM`) as `dialbook-YYYY-MM-DD.zip`. Each zip has the main tables as CSV files for Excel (`csv/leads.csv`…), a full copy for restoring (`database.sql`, `logins.sql`) and a README. The last 30 days are kept. Call recordings are not included.
+
+Set it up once:
+1. Open `https://ggfacademy.github.io/dialbook/backup-setup.html` and follow it. At the end it gives two values, `DROPBOX_APP_KEY` and `DROPBOX_REFRESH_TOKEN`.
+2. Supabase → **Connect** (top of the project) → **Session pooler** → copy the URI. Replace `[YOUR-PASSWORD]` with your database password (reset it in **Project Settings → Database** if needed; use only letters and numbers).
+3. GitHub → this repository → **Settings → Secrets and variables → Actions → New repository secret**, three times: `SUPABASE_DB_URL` (the URI), `DROPBOX_APP_KEY`, `DROPBOX_REFRESH_TOKEN`.
+4. **Actions → Daily backup to Dropbox → Run workflow** to test. A green tick means the zip is in Dropbox.
 
 ## Everyday use
 

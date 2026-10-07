@@ -1,0 +1,31 @@
+# Backs up the CRM data to Dropbox every night at 2:00 am India time, or when you press "Run workflow".
+# Setup: README, "Backups". The backup goes straight to Dropbox; nothing is kept on GitHub.
+name: Daily backup to Dropbox
+
+on:
+  schedule:
+    - cron: "30 20 * * *"   # 20:30 UTC = 2:00 am IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 tools
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Back up and upload
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: bash .github/backup.sh

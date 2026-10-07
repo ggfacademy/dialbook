@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dropbox Backup Setup</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#f6f4ef;--surface:#fff;--line:#e3ddd0;--fg:#1b1e2b;--muted:#5e6273;--accent:#946600;--navy:#0b1f4b;--gold:#e3b341;--bad:#b42318}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e111a;--surface:#161a26;--line:#2a3044;--fg:#e8e9ef;--muted:#9a9fb2;--accent:#e3b341;--bad:#f97066}}
+:root[data-theme="dark"]{--bg:#0e111a;--surface:#161a26;--line:#2a3044;--fg:#e8e9ef;--muted:#9a9fb2;--accent:#e3b341;--bad:#f97066}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,"Segoe UI",Roboto,sans-serif;overflow-wrap:anywhere}
+header{background:var(--navy);color:#fff;padding:24px 16px}header h1{margin:0;font-size:26px}header p{margin:4px 0 0;color:#d7ddec}
+main{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+h2{margin:0 0 6px;font-size:19px}ol{padding-left:22px;margin:6px 0}li{margin:4px 0}
+input,textarea{width:100%;font:15px ui-monospace,Consolas,monospace;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 16px;background:var(--accent);color:#fff;cursor:pointer;margin-top:10px}
+button:disabled{opacity:.5;cursor:default}.muted{color:var(--muted);font-size:14px}.bad{color:var(--bad)}code{background:var(--bg);padding:1px 5px;border-radius:4px}
+</style></head><body>
+<header><h1>Connect Dropbox for daily backups</h1><p>Do this once. It gives GitHub permission to put the nightly backup in your Dropbox.</p></header>
+<main>
+<section><h2>1. Create a Dropbox app</h2><ol>
+<li>Open <a href="https://www.dropbox.com/developers/apps/create" target="_blank" rel="noopener">dropbox.com/developers/apps/create</a> and sign in with the Dropbox account that syncs to <code>F:\Dropbox</code>.</li>
+<li>Choose <b>Scoped access</b> → <b>Full Dropbox</b>. Name it e.g. <b>GGF CRM Backup</b> → <b>Create app</b>.</li>
+<li>Open the <b>Permissions</b> tab, tick <b>files.metadata.read</b>, <b>files.content.write</b> and <b>files.content.read</b>, then press <b>Submit</b> at the bottom.</li>
+<li>Back on the <b>Settings</b> tab, copy the <b>App key</b> and paste it here:</li></ol>
+<input id="key" placeholder="App key" autocomplete="off"></section>
+
+<section><h2>2. Allow access</h2>
+<p>Press the button, then <b>Continue</b> and <b>Allow</b> in Dropbox. Dropbox shows a code; copy it.</p>
+<button id="go">Open Dropbox to allow access</button>
+<p style="margin-top:14px">Paste the code from Dropbox:</p><input id="code" placeholder="Access code" autocomplete="off">
+<button id="make">Get my backup key</button><p id="msg" class="muted"></p></section>
+
+<section id="done" hidden><h2>3. Save two secrets in GitHub</h2>
+<p>Open <a href="https://github.com/ggfacademy/dialbook/settings/secrets/actions" target="_blank" rel="noopener">GitHub → dialbook → Settings → Secrets and variables → Actions</a> and press <b>New repository secret</b> for each:</p>
+<p><b>Name:</b> <code>DROPBOX_APP_KEY</code><br><b>Secret:</b></p><textarea id="outKey" rows="1" readonly></textarea>
+<p><b>Name:</b> <code>DROPBOX_REFRESH_TOKEN</code><br><b>Secret:</b></p><textarea id="outTok" rows="3" readonly></textarea>
+<p class="muted">Keep this key private. Anyone with it can write to your Dropbox. Nothing on this page is saved or sent anywhere except to Dropbox.</p></section>
+</main>
+<script>
+const $=s=>document.querySelector(s);let verifier='';
+const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+$('#go').onclick=async()=>{
+  const key=$('#key').value.trim();if(!key){$('#msg').textContent='Paste the App key first.';$('#msg').className='bad';return}
+  verifier=b64(crypto.getRandomValues(new Uint8Array(48)));
+  try{sessionStorage.setItem('dbx_v',verifier)}catch(e){}
+  const challenge=b64(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+  window.open('https://www.dropbox.com/oauth2/authorize?'+new URLSearchParams({client_id:key,response_type:'code',token_access_type:'offline',code_challenge:challenge,code_challenge_method:'S256'}),'_blank','noopener');
+  $('#msg').className='muted';$('#msg').textContent='Dropbox opened in a new tab. Allow access, then paste the code above.';
+};
+$('#make').onclick=async()=>{
+  const key=$('#key').value.trim(),code=$('#code').value.trim(),m=$('#msg');
+  if(!verifier){try{verifier=sessionStorage.getItem('dbx_v')||''}catch(e){}}
+  if(!key||!code||!verifier){m.className='bad';m.textContent='Do steps 1 and 2 first: App key, then "Open Dropbox", then paste the code.';return}
+  m.className='muted';m.textContent='Please wait…';
+  try{
+    const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({grant_type:'authorization_code',code,client_id:key,code_verifier:verifier})});
+    const j=await r.json();if(!r.ok||!j.refresh_token)throw new Error(j.error_description||j.error||('Dropbox said '+r.status));
+    $('#outKey').value=key;$('#outTok').value=j.refresh_token;$('#done').hidden=false;m.textContent='Done. Now save the two secrets below.';
+    $('#done').scrollIntoView({behavior:'smooth'});
+  }catch(e){m.className='bad';m.textContent='That did not work: '+e.message+'. Press "Open Dropbox" again and use the new code (each code works once).'}
+};
+</script></body></html>
