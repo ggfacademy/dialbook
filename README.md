@@ -252,7 +252,7 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 
 ### Old data as a contact list, and "Do not contact"
-**Rejecting or removing team members.** Run `supabase/team.sql` once. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
+**Rejecting or removing team members, and resetting passwords.** Run `supabase/team.sql` once (run it again if you ran an older copy). Admins can set a new password for anyone in **Team → Edit → Set a new password**. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
 .github/workflows/backup.yml         nightly backup to Dropbox (.github/backup.sh; setup page web/backup-setup.html)
 
 **Contact list (old data for messages).** Run `supabase/contacts.sql` once in the SQL Editor. Then **Leads → Import → Assign to: “Don’t assign: contact list for messages only”**. These contacts are not given to telecallers and are left out of calling lists, share-outs, AI calling lists and automatic nurture. Find them with **Leads → status filter → Contact list**. Message them with a nurture sequence (**Add existing leads**) or export the filtered list for an Interakt campaign. When a contact enquires again through Facebook/Instagram/a form, or replies on WhatsApp, they become a normal new lead and are assigned by your rules. Giving one to a telecaller by hand does the same.
