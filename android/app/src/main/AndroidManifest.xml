@@ -34,6 +34,7 @@
         </activity>
         <activity android:name=".LeadActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".OutcomeActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".UnknownCallActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
 
         <receiver android:name=".CallReceiver" android:exported="true">
             <intent-filter>

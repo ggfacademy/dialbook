@@ -1,13 +1,15 @@
--- Dialbook Pro – keep telecallers' personal calls out of the CRM.
+-- Dialbook Pro – only leads' calls are saved; personal calls never reach the CRM.
 -- Run once in Supabase → SQL Editor, after schema.sql. Safe to run again.
 --
--- The phone app only logs calls with numbers that are leads. The one exception is
--- Settings → "When an unknown number calls a telecaller's phone, add it as a new lead".
--- With this file:
---   * an unknown caller whose number is saved in the telecaller's phone contacts (family, friends)
---     is never added as a lead (needs the updated phone app);
---   * a telecaller can mark an auto-added "New caller" lead as "Personal number": the lead is deleted
---     and calls with that number from their phone are never logged again.
+-- The phone app saves a call (and its recording) only when the number is already a lead.
+-- A call with any other number is not saved. After such a call the phone app asks the telecaller:
+--   "Add as lead"   → the lead is created and this call + recording are saved;
+--   "Personal call" → nothing is saved, and the app does not ask again for that number.
+-- (Unknown numbers are no longer added automatically from phone calls. The Settings switch for
+-- unknown numbers now only applies to WhatsApp messages to the company number.)
+--
+-- Old "New caller …" leads made from personal calls can be removed with
+-- "This is a personal number" on the lead, or with the clean-up at the end of this file.
 
 create table if not exists public.personal_numbers (
   owner_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
@@ -31,7 +33,6 @@ declare
   l record;
   cid uuid;
   dup boolean := false;
-  auto boolean;
 begin
   if not public.is_active() then raise exception 'not approved'; end if;
   if length(k) < 6 then return null; end if;
@@ -41,15 +42,7 @@ begin
    order by (assigned_to = auth.uid()) desc nulls last, updated_at desc limit 1;
 
   if not found then
-    select coalesce((data->>'autoCreateIncoming')::boolean, false) into auto from public.settings where id = 1;
-    if auto and not coalesce(p_saved_contact, false) and p_direction in ('incoming','missed') then
-      insert into public.leads(name, phone, source, assigned_to, created_by)
-      values ('New caller ' || right(k, 4), p_phone, 'Incoming call', auth.uid(), auth.uid())
-      returning id, name into l;
-      insert into public.activities(lead_id, actor_id, kind, text) values (l.id, auth.uid(), 'created', 'Incoming call');
-    else
-      return null;
-    end if;
+    return null;   -- not a lead: personal or unknown, never saved (the phone app asks the telecaller)
   end if;
 
   insert into public.calls(lead_id, agent_id, source, direction, started_at, duration, connected, external_id)
@@ -66,6 +59,27 @@ begin
 end $$;
 revoke execute on function public.log_phone_call(text, text, timestamptz, int, text, boolean) from anon, public;
 grant execute on function public.log_phone_call(text, text, timestamptz, int, text, boolean) to authenticated;
+
+-- After a call with an unknown number, the telecaller tapped "Add as lead" in the phone app
+create or replace function public.add_call_lead(
+  p_phone text, p_name text, p_direction text, p_started_at timestamptz, p_duration int, p_external_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare k text := right(regexp_replace(coalesce(p_phone,''), '\D', '', 'g'), 10); lid uuid;
+begin
+  if not public.is_active() then raise exception 'not approved'; end if;
+  if length(k) < 6 then raise exception 'this number is too short'; end if;
+  delete from public.personal_numbers where owner_id = auth.uid() and phone_key = k;
+  if not exists (select 1 from public.leads where phone_key = k) then
+    insert into public.leads(name, phone, source, assigned_to, created_by)
+    values (coalesce(nullif(trim(p_name), ''), 'New caller ' || right(k, 4)), p_phone,
+            case when p_direction = 'outgoing' then 'Phone call' else 'Incoming call' end, auth.uid(), auth.uid())
+    returning id into lid;
+    insert into public.activities(lead_id, actor_id, kind, text) values (lid, auth.uid(), 'created', 'Added by the telecaller after a phone call');
+  end if;
+  return public.log_phone_call(p_phone, p_direction, p_started_at, p_duration, p_external_id);
+end $$;
+revoke execute on function public.add_call_lead(text, text, text, timestamptz, int, text) from anon, public;
+grant execute on function public.add_call_lead(text, text, text, timestamptz, int, text) to authenticated;
 
 -- "Personal number": only for leads the phone app added from an unknown incoming call
 create or replace function public.mark_personal(p_lead uuid) returns void
