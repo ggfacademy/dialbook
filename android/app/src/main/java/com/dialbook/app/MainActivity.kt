@@ -198,6 +198,26 @@ class MainActivity : BaseActivity() {
 
     private fun logTab(body: LinearLayout) {
         val p = Prefs(this)
+        val unknown = try { JSONArray(p.unknownCalls) } catch (e: Exception) { JSONArray() }
+        if (unknown.length() > 0) {
+            body.add(text("New numbers", 17f, FG, true))
+            body.add(text("Not in the CRM. Tap one: add as lead, or mark as personal (nothing is saved).", 14f, MUTED), 2)
+            for (i in unknown.length() - 1 downTo 0) {
+                val o = unknown.getJSONObject(i)
+                val k = card()
+                k.add(text(o.optString("number"), 17f, FG, true))
+                val d = o.optLong("seconds"); val dir = o.optString("direction")
+                val what = when { dir == "missed" -> "Missed call"; d > 0 -> "${dir.replaceFirstChar { it.uppercase() }} · ${Fmt.dur(d)}"; else -> "${dir.replaceFirstChar { it.uppercase() }} · not connected" }
+                k.add(text("$what · ${Fmt.when_(o.optLong("start"))}", 14f, MUTED), 2)
+                k.setOnClickListener {
+                    startActivity(Intent(this, UnknownCallActivity::class.java).putExtra("number", o.optString("number"))
+                        .putExtra("direction", dir).putExtra("start", o.optLong("start")).putExtra("seconds", d)
+                        .putExtra("external_id", o.optString("external_id")))
+                }
+                body.add(k, 8)
+            }
+            body.add(text("Calls with leads", 17f, FG, true), 18)
+        }
         body.add(text("Calls with leads that still need an outcome.", 14f, MUTED))
         val list = column(0); body.add(list, 10)
         list.add(text("Loading…", 14f, MUTED))

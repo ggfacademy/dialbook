@@ -78,6 +78,26 @@ class Prefs(ctx: Context) {
     var personal: Set<String> get() = p.getStringSet("personal", emptySet()) ?: emptySet(); set(v) = p.edit().putStringSet("personal", v).apply()
     fun isPersonal(digits: String) = personal.contains(digits.takeLast(10))
     fun addPersonal(digits: String) { personal = personal + digits.takeLast(10) }
+    /** Calls with numbers not in the CRM, waiting for "Add as lead" / "Personal call". Kept only on this phone. */
+    var unknownCalls: String get() = p.getString("unknownCalls", "[]") ?: "[]"; set(v) = p.edit().putString("unknownCalls", v).apply()
+    fun addUnknown(o: JSONObject) {
+        val arr = try { JSONArray(unknownCalls) } catch (e: Exception) { JSONArray() }
+        for (i in 0 until arr.length()) if (arr.getJSONObject(i).optString("external_id") == o.optString("external_id")) return
+        arr.put(o)
+        val keep = JSONArray(); val from = maxOf(0, arr.length() - 30)
+        for (i in from until arr.length()) keep.put(arr.get(i))
+        unknownCalls = keep.toString()
+    }
+    /** Removes the given call, and every other waiting call with the same number. */
+    fun removeUnknown(externalId: String, digits: String) {
+        val arr = try { JSONArray(unknownCalls) } catch (e: Exception) { JSONArray() }
+        val keep = JSONArray()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optString("external_id") != externalId && Fmt.digits(o.optString("number")).takeLast(10) != digits.takeLast(10)) keep.put(o)
+        }
+        unknownCalls = keep.toString()
+    }
 
     val connected get() = url.isNotEmpty() && anonKey.isNotEmpty()
     val loggedIn get() = connected && refresh.isNotEmpty() && userId.isNotEmpty()
@@ -249,7 +269,19 @@ fun Context.has(perm: String) = ContextCompat.checkSelfPermission(this, perm) ==
 class CallReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         if (intent.getStringExtra(TelephonyManager.EXTRA_STATE) == TelephonyManager.EXTRA_STATE_IDLE) {
-            SyncWorker.runSoon(ctx, 6)
+            // Check the call history right away (background jobs can be delayed for a long time on
+            // Samsung and others, which hid the question after incoming calls). Uploads wait for the job.
+            val app = ctx.applicationContext
+            val done = goAsync()
+            Thread {
+                try {
+                    Thread.sleep(3000)   // give the phone time to write the call into its history
+                    val p = Prefs(app)
+                    if (p.loggedIn && app.has(android.Manifest.permission.READ_CALL_LOG)) CallSync.run(app, uploads = false)
+                } catch (e: Exception) {
+                } finally { done.finish() }
+            }.start()
+            SyncWorker.runSoon(ctx, 20)
         }
     }
 }
@@ -282,6 +314,8 @@ object Notify {
 
     /** After a call with a number that is not a lead: ask "Add as lead" or "Personal call". Nothing is saved until they choose. */
     fun askUnknown(ctx: Context, number: String, direction: String, start: Long, seconds: Long, externalId: String) {
+        Prefs(ctx).addUnknown(JSONObject().put("number", number).put("direction", direction).put("start", start)
+            .put("seconds", seconds).put("external_id", externalId))
         if (Build.VERSION.SDK_INT >= 33 && !ctx.has(android.Manifest.permission.POST_NOTIFICATIONS)) return
         val i = Intent(ctx, UnknownCallActivity::class.java)
             .putExtra("number", number).putExtra("direction", direction).putExtra("start", start)

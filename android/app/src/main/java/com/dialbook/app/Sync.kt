@@ -43,8 +43,9 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
 object CallSync {
     private data class Row(val number: String, val type: Int, val date: Long, val duration: Long)
 
+    /** uploads = false: only log calls (used right after a call ends); recordings are queued for the background job. */
     @Synchronized
-    fun run(ctx: Context) {
+    fun run(ctx: Context, uploads: Boolean = true) {
         val p = Prefs(ctx)
         // First run: only look back 2 hours so personal history is never uploaded in bulk.
         val since = if (p.lastSync == 0L) System.currentTimeMillis() - 2 * 3600_000L else p.lastSync
@@ -87,7 +88,7 @@ object CallSync {
                         val callId = o.getString("call_id")
                         p.callsLogged = p.callsLogged + 1
                         if (r.duration > 0 && p.recordingsEnabled) {
-                            if (!Recordings.tryUpload(ctx, callId, r.date, r.duration, digits)) {
+                            if (!uploads || !Recordings.tryUpload(ctx, callId, r.date, r.duration, digits)) {
                                 Recordings.addPending(ctx, callId, r.date, r.duration, digits)
                             }
                         }
@@ -99,7 +100,7 @@ object CallSync {
             }
             p.lastSync = r.date
         }
-        Recordings.retryPending(ctx)
+        if (uploads) Recordings.retryPending(ctx)
         p.lastRun = System.currentTimeMillis()
     }
 }
