@@ -222,6 +222,9 @@ function leadQuery(select='*',opts){
   if(f.fu==='contacts')q=q.eq('contact_only',true).eq('dnd',false);
   if(S.hasContacts&&!['contacts','dnd','all'].includes(f.fu)&&!f.q.trim())q=q.eq('contact_only',false); // the contact list is hidden unless asked for or searched
   if(f.fu==='dnd')q=q.eq('dnd',true);
+  // date the lead was added (from / to, both days included, local time)
+  if(f.from)q=q.gte('created_at',iso(new Date(f.from+'T00:00:00').getTime()));
+  if(f.to)q=q.lt('created_at',iso(new Date(f.to+'T00:00:00').getTime()+DAY));
   const s=f.q.replace(/[%,()*\\"]/g,' ').trim();
   if(s){const d=s.replace(/\D/g,'');const lc=s.toLowerCase();const camps=S.campaigns.filter(c=>c.name.toLowerCase().includes(lc)).map(c=>c.id);
     // name, phone, city, company, email, course (tags), notes, source and campaign name
@@ -237,7 +240,10 @@ V.leads={mount(){const f=S.lf;
    <select class="input" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}</select>
    <select class="input" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
    <select class="input" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
-   <select class="input" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select></div><div id="vb">${loadingHTML}</div>`;
+   <select class="input" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select>
+   <label class="row small" style="gap:6px;flex-wrap:nowrap" title="Date the lead was added"><span class="muted" style="white-space:nowrap">Added from</span><input class="input" type="date" id="lf-from" value="${esc(f.from||'')}" style="width:auto"></label>
+   <label class="row small" style="gap:6px;flex-wrap:nowrap"><span class="muted">to</span><input class="input" type="date" id="lf-to" value="${esc(f.to||'')}" style="width:auto"></label>
+   ${f.from||f.to?'<button class="btn sm ghost" data-act="lfDates">Clear dates</button>':''}</div><div id="vb">${loadingHTML}</div>`;
 },async load(){
   const rv=S.rv;const from=S.page*S.PS;
   const {data,count}=await R(leadQuery('*',{count:'exact'}).order('updated_at',{ascending:false}).range(from,from+S.PS-1));
@@ -862,6 +868,7 @@ document.addEventListener('click',async e=>{
       try{const r=await fn({action:'call',filter:{campaign:S.ai.camp||null,queue:S.ai.queue},limit:n});$('#aiMsg').textContent=`${r.queued} calls started.${r.errors.length?' '+r.errors.length+' failed: '+r.errors.slice(0,2).join('; '):''}`;V.ai.load()}catch(err){$('#aiMsg').textContent=err.message}t.disabled=false;break}
     case'campEdit':campModal(id);break;
     case'campDel':arm(t,async()=>{await R(sb.from('campaigns').delete().eq('id',id));await loadBase();closeModal();toast('Campaign deleted. Its leads were kept.');render()});break;
+    case'lfDates':S.lf.from='';S.lf.to='';S.page=0;S.sel.clear();render();break;
     case'campLeads':S.lf={q:'',stage:'',camp:id,agent:'',source:'',prio:'',fu:''};S.page=0;go('leads');break;
     case'campDial':S.dialSetup.camp=id;S.dialer=null;go('dialer');break;
     case'memberEdit':memberModal(id);break;
@@ -894,7 +901,7 @@ document.addEventListener('change',async e=>{
   const t=e.target,id=t.id;
   try{
   if(id==='hAgent'){S.hAgent=t.value;return V.home.load()}
-  if(id&&id.startsWith('lf-')){S.lf[id.slice(3)]=t.value;S.page=0;S.sel.clear();return V.leads.load()}
+  if(id&&id.startsWith('lf-')){S.lf[id.slice(3)]=t.value;S.page=0;S.sel.clear();return id==='lf-from'||id==='lf-to'?render():V.leads.load()}
   if(id==='selAll'){(S.pageLeads||[]).forEach(l=>t.checked?S.sel.add(l.id):S.sel.delete(l.id));return V.leads.load()}
   if(t.classList.contains('selOne')){t.checked?S.sel.add(t.dataset.id):S.sel.delete(t.dataset.id);return V.leads.load()}
   if(id==='bk-agent'||id==='bk-stage'||id==='bk-camp'){const v=t.value;if(!v)return;const ids=[...S.sel];t.disabled=true;
