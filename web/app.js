@@ -409,11 +409,22 @@ V.reports={mount(){const r=S.rep;
   ${ag.map(({name,s})=>`<tr><td><b>${esc(name)}</b></td><td class="r num">${s.n||0}</td><td class="r num">${s.conn||0}</td><td class="r num">${pct(s.n?s.conn/s.n:0)}</td><td class="r num">${dur(s.talk)}</td><td class="r num">${dur(s.conn?s.talk/s.conn:0)}</td><td class="r num">${s.intr||0}</td><td class="r num">${s.conv||0}</td><td class="r num">${s.fus||0}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card" style="margin-bottom:16px"><h2>Conversions by month</h2><p class="small muted">A conversion is a lead moved to “Won” (by a call outcome such as Converted / Sale, or by hand), credited to the person who moved it. Conversion % = converted leads ÷ different leads that person called. Value is the leads' deal value.</p>${convTable(cv.month,'Month')}</div>
   <div class="card" style="margin-bottom:16px"><h2>Conversions by program</h2><p class="small muted">Program is the lead's campaign. Create one campaign per program in Campaigns and put leads in it.</p>${convTable(cv.prog,'Program')}</div>
+  ${isMgr()?'<div class="card" style="margin-bottom:16px" id="rTransfers"><h2>Lead transfers</h2><p class="small muted">Loading…</p></div>':''}
   <div class="card" style="margin-bottom:16px"><h2>Working time</h2><p class="small muted">Per caller per day, from their phone-app and logged calls (all campaigns). Idle time is the time between the end of one call and the start of the next; a gap of 15 minutes or more counts as a break.</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Caller</th><th class="r">First call</th><th class="r">Last call ended</th><th class="r">Calls</th><th class="r">Talk time</th><th class="r">Idle time</th><th class="r">Idle %</th><th class="r hide-sm">Longest gap</th><th class="r hide-sm">Breaks</th></tr></thead><tbody>
   ${work.slice(0,150).map(d=>`<tr><td class="small">${esc(fmtD(d.day))}</td><td><b>${esc(nameOf(d.agent))}</b></td><td class="r num">${esc(fmtTm(d.first))}</td><td class="r num">${esc(fmtTm(d.last))}</td><td class="r num">${d.calls}</td><td class="r num">${dur(d.talk)}</td><td class="r num">${dur(d.idle)}</td><td class="r num">${pct(d.span?d.idle/d.span:0)}</td><td class="r num hide-sm">${dur(d.longest)}</td><td class="r num hide-sm">${d.breaks}</td></tr>`).join('')||'<tr><td colspan="10" class="muted">No calls in this range.</td></tr>'}</tbody></table></div>${work.length>150?'<p class="small muted">Showing the latest 150 rows. Download the Working time CSV for all of them.</p>':''}</div>
   <div class="card" style="margin-bottom:16px"><h2>Call outcomes</h2><div class="tbl-wrap"><table><thead><tr><th>Outcome</th><th class="r">Calls</th><th class="r">Share</th></tr></thead><tbody>${[...S.cfg.dispositions,{id:'_none',name:'Outcome not logged yet'}].map(d=>{const n=st.outcomes?.[d.id]||0;return `<tr><td>${esc(d.name)}</td><td class="r num">${n}</td><td class="r num">${t.n?pct(n/t.n):'0%'}</td></tr>`}).join('')}</tbody></table></div></div>
   <div class="card"><h2>Call log</h2><div class="tbl-wrap"><table><thead><tr><th>When</th><th>Lead</th><th class="hide-sm">Caller</th><th>Outcome</th><th class="r">Duration</th><th class="hide-sm">Recording</th></tr></thead><tbody>${cl.data.map(c=>`<tr class="click" data-act="lead" data-id="${c.lead_id}"><td class="small">${esc(fmtDT(c.started_at))}<div>${srcBadge(c.source)}</div></td><td><b>${esc(c.lead?.name||'')}</b><div class="lead-phone">${esc(c.lead?.phone||'')}</div></td><td class="hide-sm">${esc(callerOf(c))}</td><td class="small">${esc(dispo(c.outcome)?.name||(c.outcome?c.outcome:'Not logged'))}${c.note?`<div class="muted">${esc(c.note.slice(0,70))}</div>`:''}</td><td class="r num">${dur(c.duration)}</td><td class="hide-sm small">${c.recording_path||c.recording_url?'Yes':'<span class="muted">—</span>'}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No calls in this range.</td></tr>'}</tbody></table></div>${cl.data.length>=200?'<p class="small muted">Showing the latest 200 calls. Download the CSV for all of them.</p>':''}</div>`;
+  if(isMgr())loadTransfers(from,to).catch(e=>{const b=$('#rTransfers');if(b)b.innerHTML='<h2>Lead transfers</h2><p class="small muted">'+esc(e.message)+'</p>'});
 }};
+async function loadTransfers(from,to){
+  const {data,error}=await sb.from('activities').select('created_at,actor_id,data,lead:leads(name,phone)').eq('kind','assign').eq('data->>transfer','true')
+    .gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at',{ascending:false}).limit(500);
+  const b=$('#rTransfers');if(!b)return;if(error)throw error;S.repTransfers=data;
+  b.innerHTML=`<div class="row"><h2 style="margin:0">Lead transfers</h2><span class="spacer"></span>${data.length?`<button class="btn sm" data-act="expTransfers">${ic('down')}CSV</button>`:''}</div>
+  <p class="small muted">Leads one person passed to another (Transfer to a colleague), with the reason.</p>
+  <div class="tbl-wrap"><table><thead><tr><th>When</th><th>Lead</th><th>From</th><th>To</th><th class="hide-sm">By</th><th>Reason</th></tr></thead><tbody>
+  ${data.map(a=>`<tr><td class="small">${esc(fmtDT(a.created_at))}</td><td><b>${esc(a.lead?.name||'')}</b><div class="lead-phone">${esc(a.lead?.phone||'')}</div></td><td>${esc(nameOf(a.data.from))}</td><td>${esc(nameOf(a.data.to))}</td><td class="hide-sm">${esc(nameOf(a.actor_id))}</td><td class="small">${esc(a.data.note||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No transfers in this range.</td></tr>'}</tbody></table></div>`;
+}
 
 /* AI CALLING */
 V.ai={mount(){
@@ -496,7 +507,7 @@ function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
     <div id="dwNu"></div>
     <div class="card" style="margin-top:14px"><h2>Activity</h2><div class="row" style="margin:10px 0 14px;align-items:flex-start"><textarea class="input" id="dwNoteAdd" rows="2" placeholder="Add a note" style="flex:1;min-height:44px"></textarea><button class="btn" data-act="addNote">Add note</button></div><div id="dwTl"></div></div>
     <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">AI assistant</h2><span class="spacer"></span><button class="btn sm" data-act="aiAssist">${ic('spark')}Suggest next step</button></div><div id="aiOut" class="small muted" style="margin-top:8px">Reads this lead's calls, transcripts and notes and suggests what to do next, with a ready-to-send message.</div></div>
-    ${isMgr()?`<div class="row" style="margin-top:14px"><span class="spacer"></span><button class="btn sm danger" data-act="leadDel">Delete lead</button></div>`:''}</div>`;
+    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
   loadDrawer().catch(fail);
 }
 function closeDrawer(){tStop('dw');S.openLead=null;S.lead=null;$('#dw').innerHTML=''}
@@ -536,7 +547,7 @@ async function loadDrawer(){
     if(it.x)return `<div class="tl"><b>AI call ${esc(it.x.status)}</b>${it.x.error?`<div class="small prio-hot">${esc(it.x.error)}</div>`:''}<div class="meta">${esc(fmtDT(it.x.created_at))}</div></div>`;
     const a=it.a;let txt='';
     if(a.kind==='stage')txt=`Moved from <b>${esc(stage(a.data.from)?.name||a.data.from||'New')}</b> to <b>${esc(stage(a.data.to)?.name||a.data.to)}</b>`;
-    else if(a.kind==='assign')txt=a.data.to?`Assigned to <b>${esc(nameOf(a.data.to))}</b>`:'Unassigned';
+    else if(a.kind==='assign')txt=a.data.transfer?`Transferred from <b>${esc(nameOf(a.data.from))}</b> to <b>${esc(nameOf(a.data.to))}</b>${a.data.note?' · '+esc(a.data.note):''}`:a.data.to?`Assigned to <b>${esc(nameOf(a.data.to))}</b>`:'Unassigned';
     else if(a.kind==='msg')txt=`Sent ${a.data.channel==='sms'?'SMS':'WhatsApp'} · ${esc(a.text)}`;
     else if(a.kind==='created')txt=`Lead added${a.text?' · '+esc(a.text):''}`;
     else if(a.kind==='ai')txt=esc(a.text);
@@ -775,7 +786,7 @@ async function afterLogin(){
   if(!p||!p.active)return showPending(user.email);
   S.me=p;await loadBase();
   $('#auth').hidden=true;$('#app').hidden=false;
-  const h=(location.hash||'').slice(1);if(V[h])S.view=h;
+  const h=(location.hash||'').slice(1);if(V[h])S.view=h;else if(h.startsWith('wa:')&&/^[0-9a-f-]{36}$/i.test(h.slice(3))){S.view='wa';S.wa.lead=h.slice(3)}
   await loadWa();await loadSourceNames();
   render();updateBadge();waBadge();
   if(!subscribed){subscribed=true;sb.channel('dialbook').on('postgres_changes',{event:'*',schema:'public',table:'leads'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'ai_calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'wa_messages'},onLive).subscribe()}
@@ -830,6 +841,16 @@ document.addEventListener('click',async e=>{
     case'savePending':{const o=readOutcome('pm');if(!o.outcome)return toast('Pick a call outcome first');await rpc('set_call_outcome',{p_call:id,p_outcome:o.outcome,p_note:o.note,p_follow_up:o.fu?iso(o.fu):null});closeModal();toast('Outcome saved');loadDrawer();break}
     case'playRec':{const {data,error}=await sb.storage.from('recordings').createSignedUrl(v,3600);if(error)throw error;const box=t.parentElement;box.innerHTML=`<audio controls autoplay src="${esc(data.signedUrl)}"></audio>`;break}
     case'addNote':{const tx=$('#dwNoteAdd').value.trim();if(!tx||!S.openLead)return;await addActivity(S.openLead,'note',tx);$('#dwNoteAdd').value='';loadDrawer();break}
+    case'expTransfers':saveCSV(`lead-transfers-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['Date & time','Lead','Phone','From','To','By','Reason'],...(S.repTransfers||[]).map(a=>[new Date(a.created_at).toLocaleString('en-IN'),a.lead?.name||'',a.lead?.phone||'',nameOf(a.data.from),nameOf(a.data.to),nameOf(a.actor_id),a.data.note||''])]);break;
+    case'leadTransfer':{const l=S.lead;if(!l)break;const others=agents().filter(m=>m.id!==l.assigned_to);
+      modal(`<h2>Transfer ${esc(l.name||'this lead')}</h2><p class="small muted">The lead, its calls and notes move to your colleague. ${isMgr()?'':'You will no longer see it. '}Admins see every transfer in Reports.</p>
+        <label class="field" style="margin-top:12px"><span>Give it to</span><select class="input" id="trTo">${opt('','Choose…')}${others.map(m=>opt(m.id,m.name+((m.languages||[]).length?' ('+m.languages.join(', ')+')':''))).join('')}</select></label>
+        <label class="field" style="margin-top:10px"><span>Reason (required)</span><input class="input" id="trNote" placeholder="e.g. Telugu lead"></label>
+        <p id="trMsg" class="small prio-hot"></p><div class="row"><button class="btn primary" data-act="leadTransferGo">Transfer</button><button class="btn" data-act="closeMd">Cancel</button></div>`);break}
+    case'leadTransferGo':{const to=$('#trTo').value,note=$('#trNote').value.trim(),m=$('#trMsg');if(!to){m.textContent='Choose a colleague.';break}if(note.length<2){m.textContent='Add a short reason, e.g. "Telugu lead".';break}
+      t.disabled=true;const {error}=await sb.rpc('transfer_lead',{p_lead:S.openLead,p_to:to,p_note:note});t.disabled=false;
+      if(error){m.textContent=/transfer_lead|function/i.test(error.message)?'Ask your admin to run supabase/transfer.sql first.':error.message;break}
+      closeModal();toast('Transferred to '+nameOf(to));if(isMgr())loadDrawer().catch(fail);else{closeDrawer();const v2=V[S.view];if(v2.load)v2.load()}break}
     case'markPersonal':arm(t,async()=>{const lid=S.openLead;const {error}=await sb.rpc('mark_personal',{p_lead:lid});
       if(error){toast(/mark_personal|function/i.test(error.message)?'Ask your admin to run supabase/personal-calls.sql first':error.message);return}
       closeDrawer();toast('Removed. Calls with this number from your phone will not be logged again.');const v2=V[S.view];if(v2.load)v2.load()},'Click again: delete this lead');break;
@@ -940,7 +961,7 @@ V.wa={mount(){
   box.innerHTML=convs.length?convs.map(c=>`<button class="wa-conv ${S.wa.lead===c.lead_id?'on':''}" data-act="waOpen" data-id="${c.lead_id}">
     <span class="wa-av" style="background:${stageColor('new')}">${esc((c.lead_name||'?').trim()[0]||'?')}</span>
     <span class="grow"><span class="row" style="gap:6px"><b class="wa-name">${esc(c.lead_name||c.phone)}</b><span class="spacer"></span><span class="small muted">${esc(fmtWhen(c.last_at))}</span></span>
-    <span class="row" style="gap:6px"><span class="small muted wa-snip">${c.last_dir==='out'?esc((c.last_sender===S.me.id?'You':nameOf(c.last_sender).split(' ')[0]))+': ':''}${esc((c.last_body||'').slice(0,80))}</span><span class="spacer"></span>${c.unread?`<span class="badge" style="background:var(--call)">${c.unread}</span>`:''}</span>
+    <span class="row" style="gap:6px"><span class="small muted wa-snip">${c.last_dir==='out'?esc((c.last_sender===S.me.id?'You':c.last_sender?nameOf(c.last_sender).split(' ')[0]:'Auto'))+': ':''}${esc((c.last_body||'').slice(0,80))}</span><span class="spacer"></span>${c.unread?`<span class="badge" style="background:var(--call)">${c.unread}</span>`:''}</span>
     ${isMgr()?`<span class="small muted">${esc(nameOf(c.assigned_to))}</span>`:''}</span></button>`).join(''):`<p class="muted small" style="padding:12px">${f.unread||f.q?'No chats match.':'No chats yet.'}</p>`;
   if(S.wa.lead)await waThread(rv);
 }};
@@ -954,7 +975,7 @@ async function waThread(rv,keepComposer){
   if(!S.wa.sendAcc||!usable.find(a=>a.id===S.wa.sendAcc)){const lastAcc=[...msgs].reverse().find(m=>m.account_id&&usable.find(a=>a.id===m.account_id))?.account_id;S.wa.sendAcc=lastAcc||usable[0]?.id||''}
   const acc=S.wa.accounts.find(a=>a.id===S.wa.sendAcc);
   const bubbles=msgs.map(m=>{const a=S.wa.accounts.find(x=>x.id===m.account_id);return `<div class="bub ${m.direction}"><div class="bub-in">${m.template_name?`<span class="tag" style="margin-bottom:4px">Template · ${esc(m.template_name)}</span><br>`:''}<span class="bub-t">${esc(m.body)||'<i>(empty)</i>'}</span>${m.error?`<div class="small prio-hot">${esc(m.error)}</div>`:''}
-    <div class="bub-meta">${m.direction==='out'?esc(m.sender_id?nameOf(m.sender_id):'Sent')+' · ':''}${a?esc(a.provider==='qr'?a.name:a.name)+' · ':''}${esc(fmtDT(m.created_at))} ${m.direction==='out'?tick(m.status):''}</div></div></div>`}).join('')||'<p class="muted small" style="text-align:center">No messages yet. Say hello, or send an approved template.</p>';
+    <div class="bub-meta">${m.direction==='out'?esc(m.sender_id?nameOf(m.sender_id):'Automatic message')+' · ':''}${a?esc(a.provider==='qr'?a.name:a.name)+' · ':''}${esc(fmtDT(m.created_at))} ${m.direction==='out'?tick(m.status):''}</div></div></div>`}).join('')||'<p class="muted small" style="text-align:center">No messages yet. Say hello, or send an approved template.</p>';
   const needT=waNeedsTemplate(acc,lastIn);
   if(!keepComposer||!$('#waMsgs')){
     th.innerHTML=`<div class="wa-head"><button class="btn sm ghost wa-back" data-act="waBack" aria-label="Back to chats">‹</button><div class="grow" style="min-width:0"><b>${esc(l.name||'Unnamed')}</b><div class="small muted">${esc(l.phone)}${isMgr()?' · '+esc(nameOf(l.assigned_to)):''}</div></div><button class="btn sm" data-act="lead" data-id="${l.id}">Lead</button><a class="btn sm call" href="tel:${esc(normPhone(l.phone))}">${ic('phone')}</a></div>

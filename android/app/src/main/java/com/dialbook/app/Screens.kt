@@ -25,6 +25,8 @@ class LeadActivity : BaseActivity() {
         if (::leadId.isInitialized) load()
     }
 
+    fun transfer(name: String) = transferImpl(leadId, name)
+
     private fun load() {
         val c = page()
         c.add(button("‹ Back", ACCENT, false) { finish() }.apply { textSize = 14f })
@@ -49,6 +51,11 @@ class LeadActivity : BaseActivity() {
             btns.add(button("Call", CALL) { startCall(phone) }, 0, 1f)
             btns.add(button("WhatsApp", ACCENT, false) { openWhatsApp(phone) }, 8, 1f)
             box.add(btns, 14)
+            val btns2 = row()
+            btns2.add(button("Company WhatsApp", CALL, false) { openWeb("wa:$leadId") }, 0, 1f)
+            btns2.add(button("Transfer", ACCENT, false) { transfer(name) }, 8, 1f)
+            box.add(btns2, 8)
+            box.add(text("WhatsApp = your own WhatsApp. Company WhatsApp = templates from the company number, saved in the CRM.", 12f, MUTED), 4)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
             if (fu > 0) box.add(text("Next follow-up: " + Fmt.when_(fu), 15f, if (fu < System.currentTimeMillis()) DANGER else ACCENT, true), 14)
             if (l.optString("note").isNotEmpty()) {
@@ -77,6 +84,31 @@ class LeadActivity : BaseActivity() {
             }
         }, { e -> box.removeAllViews(); box.add(text(e.message ?: "Could not load this lead", 15f, DANGER)) })
     }
+}
+
+/** Pass this lead to a colleague, with a reason (e.g. "Telugu lead"). */
+private fun LeadActivity.transferImpl(leadId: String, leadName: String) {
+    val me = Prefs(this).userId
+    io({ JSONArray(Api.get(this, "/rest/v1/profiles?select=id,name,languages&active=eq.true&order=name.asc")) }, { arr ->
+        val people = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { it.optString("id") != me }
+        if (people.isEmpty()) { toast("No colleagues to transfer to"); return@io }
+        val labels = people.map { o ->
+            val langs = o.optJSONArray("languages")?.let { a -> (0 until a.length()).joinToString(", ") { a.optString(it) } } ?: ""
+            o.optString("name") + if (langs.isNotEmpty()) " ($langs)" else ""
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this).setTitle("Transfer $leadName to").setItems(labels) { _, which ->
+            val to = people[which]
+            val reason = android.widget.EditText(this).apply { hint = "Reason, e.g. Telugu lead"; setSingleLine() }
+            android.app.AlertDialog.Builder(this).setTitle("Transfer to ${to.optString("name")}").setView(reason)
+                .setPositiveButton("Transfer") { _, _ ->
+                    val note = reason.text.toString().trim()
+                    if (note.length < 2) { toast("Add a short reason"); return@setPositiveButton }
+                    io({ Api.rpc(this, "transfer_lead", JSONObject().put("p_lead", leadId).put("p_to", to.optString("id")).put("p_note", note)) }, {
+                        toast("Transferred to ${to.optString("name")}"); finish()
+                    }, { e -> toast(if (e is ApiError && e.code == 404) "Ask your admin to run supabase/transfer.sql" else (e.message ?: "Could not transfer")) })
+                }.setNegativeButton("Cancel", null).show()
+        }.setNegativeButton("Cancel", null).show()
+    })
 }
 
 fun dispoName(dispos: JSONArray, id: String): String {
