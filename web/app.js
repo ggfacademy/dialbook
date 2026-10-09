@@ -653,7 +653,7 @@ async function saveCall(p){
 }
 
 /* ---------- import / export ---------- */
-const FIELDS=[['alt_phone','Alternate phone',/alt|alternate|second|other/i],['email','Email',/mail/i],['company','Company',/company|business|firm|organi/i],['phone','Phone (required)',/phone|mobile|contact.?n|number|whatsapp|cell/i],['name','Name',/name|customer|contact|lead/i],['city','City',/city|location|place|area|state/i],['source','Source',/source|platform|channel/i],['tags','Tags',/tag|product|interest|course|service/i],['note','Notes',/note|remark|comment|message|requirement|query/i],['value','Deal value',/value|amount|budget|price/i],['language','Language',/lang|bhasha/i]];
+const FIELDS=[['alt_phone','Alternate phone',/alt|alternate|second|other/i],['email','Email',/mail/i],['company','Company',/company|business|firm|organi/i],['phone','Phone (required)',/phone|mobile|contact.?n|number|whatsapp|cell/i],['name','Name',/name|customer|contact|lead/i],['city','City',/city|location|place|area|state/i],['source','Source',/source|platform|channel/i],['campaign','Campaign (program name)',/campaign|program|batch/i],['tags','Tags',/\btags?\b|product|interest|course|service/i],['note','Notes',/note|remark|comment|message|requirement|query/i],['value','Deal value',/value|amount|budget|price/i],['language','Language',/lang|bhasha/i]];
 function parseCSV(text){
   const first=text.split(/\r?\n/)[0]||'';const cnt=c=>(first.match(new RegExp(c,'g'))||[]).length;const dl=cnt(';')>cnt(',')?';':cnt('\t')>cnt(',')?'\t':',';
   const rows=[];let row=[],f='',q=false;
@@ -686,32 +686,43 @@ function mapStep(rows){
   <label class="field"><span>Add to campaign</span><select class="input" id="iCamp">${campOpts(S.lf.camp&&S.lf.camp!=='_none'?S.lf.camp:'','No campaign')}</select></label>
   <label class="field"><span>Source (if the file has none)</span><select class="input" id="iSrc">${srcOpts('Excel import','Not set')}</select></label>
   <label class="field"><span>Assign to</span><select class="input" id="iAssign">${isMgr()?(S.hasContacts?opt('_contacts','Don’t assign: contact list for messages only (old data)'):'')+(S.cfg.assignment?.enabled?opt('','Use assignment rules (language, source…)'):'')+opt('rr','Share equally among telecallers')+opt('',S.cfg.assignment?.enabled?'Leave unassigned (rules still apply)':'Leave unassigned')+agents().map(m=>opt(m.id,m.name)).join(''):opt(S.me.id,'Me')}</select></label>
-  <label class="field"><span>Duplicates</span><select class="input" id="iDup">${opt('skip','Skip numbers already in the CRM')}${opt('keep','Import them anyway')}</select></label></div>
+  <label class="field"><span>Duplicates</span><select class="input" id="iDup">${opt('skip','Skip numbers already in the CRM')}${isMgr()?opt('update','Update numbers already in the CRM (campaign, source, language)'):''}${opt('keep','Import them anyway')}</select></label></div>
   <p id="iMsg" class="small muted" style="margin-top:12px"></p><div class="row"><button class="btn primary" data-act="impRun" id="iRun">Import leads</button><button class="btn" data-act="closeMd">Cancel</button></div>`);
   const upd=()=>{const r=prepImport();$('#iMsg').textContent=`${r.list.length} rows ready${r.dupFile?`, ${r.dupFile} repeated numbers in the file skipped`:''}${r.bad?`, ${r.bad} rows without a valid phone skipped`:''}. Numbers already in the CRM are checked when you import.`};
   $$('.imap,#iDup').forEach(s=>s.onchange=upd);upd();
 }
 function prepImport(){
   const m={};$$('.imap').forEach(s=>{if(s.value!=='')m[s.dataset.k]=+s.value});
-  const skip=$('#iDup').value==='skip';const list=[];let dupFile=0,bad=0;const seen=new Set();
+  const skip=$('#iDup').value!=='keep';const list=[];let dupFile=0,bad=0;const seen=new Set();
   for(const r of S.imp.body){const g=k=>m[k]===undefined?'':String(r[m[k]]??'').trim();const ph=normPhone(g('phone'));const k=pkey(ph);
     if(k.length<6){bad++;continue}if(skip&&seen.has(k)){dupFile++;continue}seen.add(k);
-    list.push({name:g('name')||'Unnamed',phone:ph,alt_phone:normPhone(g('alt_phone')),email:g('email'),city:g('city'),company:g('company'),source:g('source'),tags:g('tags')?g('tags').split(/[,;|]/).map(s=>s.trim()).filter(Boolean):[],note:g('note'),language:g('language'),value:+(g('value').replace(/[^\d.]/g,''))||0})}
+    let note=g('note'),language=g('language');
+    // a Notes cell that is just a language name ("Telugu") is used as the language
+    if(!language&&note&&(S.cfg.languages||[]).some(x=>x.toLowerCase()===note.toLowerCase())){language=note;note=''}
+    const cn=g('campaign').toLowerCase();const campaign_id=cn?(S.campaigns.find(c=>c.name.trim().toLowerCase()===cn)?.id||null):null;
+    list.push({name:g('name')||'Unnamed',phone:ph,alt_phone:normPhone(g('alt_phone')),email:g('email'),city:g('city'),company:g('company'),source:g('source'),tags:g('tags')?g('tags').split(/[,;|]/).map(s=>s.trim()).filter(Boolean):[],note,language,value:+(g('value').replace(/[^\d.]/g,''))||0,campaign_id})}
   return{list,dupFile,bad};
 }
 async function runImport(btn){
   let {list}=prepImport();if(!list.length)return toast('Nothing to import');
-  const cid=$('#iCamp').value||null,src=$('#iSrc').value,as=$('#iAssign').value,skip=$('#iDup').value==='skip';
-  btn.disabled=true;let dups=0;
+  const cid=$('#iCamp').value||null,src=$('#iSrc').value,as=$('#iAssign').value,mode=$('#iDup').value,skip=mode!=='keep';
+  btn.disabled=true;let dups=0,updated=0;
   try{
     if(skip){btn.textContent='Checking duplicates…';const exist=new Set();
       for(const c of chunk(list.map(l=>pkey(l.phone)),300)){const {data}=await R(sb.from('leads').select('phone_key').in('phone_key',c));data.forEach(d=>exist.add(d.phone_key))}
-      const before=list.length;list=list.filter(l=>!exist.has(pkey(l.phone)));dups=before-list.length}
+      const old=list.filter(l=>exist.has(pkey(l.phone)));list=list.filter(l=>!exist.has(pkey(l.phone)));dups=old.length;
+      if(mode==='update'&&old.length){
+        // same changes for many numbers are sent together
+        const groups=new Map();
+        for(const l of old){const patch={};const c=l.campaign_id||cid;if(c)patch.campaign_id=c;if(l.source)patch.source=l.source;if(l.language)patch.language=l.language;
+          if(!Object.keys(patch).length)continue;const key=JSON.stringify(patch);if(!groups.has(key))groups.set(key,{patch,keys:[]});groups.get(key).keys.push(pkey(l.phone))}
+        for(const {patch,keys} of groups.values())for(const c of chunk(keys,200)){await R(sb.from('leads').update(patch).in('phone_key',c));updated+=c.length;btn.textContent=`Updating… ${updated}`}
+        dups-=updated}}
     let pool=agents().filter(m=>m.role==='telecaller');if(!pool.length)pool=agents();
     const contacts=as==='_contacts';
-    const rows=list.map((d,i)=>{const r={...d,source:d.source||src,campaign_id:cid,created_by:S.me.id,assigned_to:contacts?null:as==='rr'?(pool.length?pool[i%pool.length].id:null):(as||null)};if(contacts)r.contact_only=true;if(!r.assigned_to)delete r.assigned_to;return r});
+    const rows=list.map((d,i)=>{const r={...d,source:d.source||src,campaign_id:d.campaign_id||cid,created_by:S.me.id,assigned_to:contacts?null:as==='rr'?(pool.length?pool[i%pool.length].id:null):(as||null)};if(contacts)r.contact_only=true;if(!r.assigned_to)delete r.assigned_to;return r});
     let done=0;for(const c of chunk(rows,500)){await R(sb.from('leads').insert(c));done+=c.length;btn.textContent=`Importing… ${done}/${rows.length}`}
-    closeModal();toast(`${rows.length} ${contacts?'contacts added to the contact list':'leads imported'}${dups?`, ${dups} already in the CRM skipped`:''}`);if(contacts)S.lf.fu='contacts';go('leads');
+    closeModal();toast(`${rows.length} ${contacts?'contacts added to the contact list':'leads imported'}${updated?`, ${updated} existing leads updated`:''}${dups?`, ${dups} already in the CRM skipped`:''}`);if(contacts)S.lf.fu='contacts';go('leads');
   }catch(e){btn.disabled=false;btn.textContent='Import leads';fail(e)}
 }
 const csvCell=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
