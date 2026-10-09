@@ -56,7 +56,7 @@ const ic=n=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const DEF={company:'Dialbook',
   stages:[{id:'new',name:'New'},{id:'contacted',name:'Contacted'},{id:'interested',name:'Interested'},{id:'followup',name:'Follow-up'},{id:'negotiation',name:'Negotiation'},{id:'won',name:'Converted'},{id:'lost',name:'Lost'}],
   dispositions:[{id:'interested',name:'Interested',connected:true,stage:'interested',fu:true},{id:'callback',name:'Call back later',connected:true,stage:'followup',fu:true},{id:'info_shared',name:'Details shared',connected:true,stage:'contacted',fu:true},{id:'converted',name:'Converted / Sale',connected:true,stage:'won',fu:false},{id:'not_interested',name:'Not interested',connected:true,stage:'lost',fu:false},{id:'no_answer',name:'Did not pick',connected:false,stage:'',fu:true},{id:'busy',name:'Busy / Cut the call',connected:false,stage:'',fu:true},{id:'unreachable',name:'Switched off / Not reachable',connected:false,stage:'',fu:true},{id:'wrong_number',name:'Wrong number',connected:false,stage:'lost',fu:false},{id:'dnd',name:'Asked not to be contacted',connected:true,stage:'lost',fu:false}],
-  sources:['Facebook Ads','Google Ads','Website','IndiaMART','JustDial','Referral','Walk-in','Incoming call','Excel import'],
+  sources:['Facebook Ads','Google Ads','Website','Interakt','WhatsApp','IndiaMART','JustDial','Referral','Walk-in','Incoming call','Excel import'],
   templates:[{id:'t1',name:'Intro after call',channel:'whatsapp',body:'Hi {name}, this is {agent} from {company}. Thanks for your time on the call. Sharing the details we discussed.'}],
   autoCreateIncoming:true,ai:{agentId:'',fromNumber:'',startHour:10,endHour:19,maxBatch:50,agents:{}},
   languages:['English','Hindi','Tamil','Telugu','Kannada','Malayalam','Marathi','Bengali','Gujarati','Punjabi','Odia'],
@@ -136,7 +136,7 @@ const opt=(v,l,sel)=>`<option value="${esc(v)}"${String(v)===String(sel??'')?' s
 const stageOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.cfg.stages.map(s=>opt(s.id,s.name,sel)).join('');
 const campOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.campaigns.map(c=>opt(c.id,c.name,sel)).join('');
 const agentOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+agents().map(m=>opt(m.id,m.name,sel)).join('');
-const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[])])].map(s=>opt(s,s,sel)).join('');
+const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp'])].map(s=>opt(s,s,sel)).join('');
 const prioOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+opt('hot','Hot',sel)+opt('warm','Warm',sel)+opt('cold','Cold',sel);
 const head=(title,sub,actions='')=>`<div class="page-head"><div><h1>${esc(title)}</h1>${sub?`<p class="muted">${sub}</p>`:''}</div><div class="row">${actions}</div></div>`;
 const endToday=()=>sod(now())+DAY;

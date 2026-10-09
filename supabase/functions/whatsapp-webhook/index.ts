@@ -35,11 +35,13 @@ async function leadFor(acc: Obj, phone: string, name: string | undefined, create
   if (!createIfMissing) return null;
   const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
   if (st?.data?.autoCreateIncoming === false) return null;
+  // Source shows where the enquiry came from: "Interakt" for an Interakt number, otherwise "WhatsApp"
+  const source = /interakt/i.test(String(acc.name || "") + JSON.stringify(acc.config || {})) ? "Interakt" : "WhatsApp";
   const { data: l } = await admin.from("leads").insert({
-    name: name || `WhatsApp ${k.slice(-4)}`, phone: "+" + String(phone).replace(/\D/g, ""), source: "WhatsApp",
+    name: name || `WhatsApp ${k.slice(-4)}`, phone: "+" + String(phone).replace(/\D/g, ""), source,
     assigned_to: acc.provider === "qr" ? acc.owner_id : null, created_by: acc.owner_id || null,
   }).select("id,name,assigned_to").single();
-  if (l) await admin.from("activities").insert({ lead_id: l.id, kind: "created", text: "WhatsApp message" });
+  if (l) await admin.from("activities").insert({ lead_id: l.id, kind: "created", text: `${source} message` });
   return l;
 }
 
