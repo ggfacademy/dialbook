@@ -6,7 +6,8 @@
 set -euo pipefail
 
 die() { echo "::error title=Backup failed::$1"; exit 1; }
-first_line() { tr -d '\r' | grep -v '^\s*$' | head -c 300 | head -n 2 | tr '\n' ' '; }
+# never show anything that could be part of the connection address or password
+first_line() { tr -d '\r' | grep -v '^\s*$' | sed -E 's/"[^"]*@/"…@/g; s#postgres(ql)?://[^ ]*#(address hidden)#g' | head -c 300 | head -n 2 | tr '\n' ' '; }
 
 missing=""
 for v in SUPABASE_DB_URL DROPBOX_APP_KEY DROPBOX_REFRESH_TOKEN; do
@@ -15,6 +16,7 @@ done
 [ -z "$missing" ] || die "These secrets are missing:$missing. Add them in GitHub → Settings → Secrets and variables → Actions → New repository secret (names exactly as shown)."
 case "$SUPABASE_DB_URL" in
   *"[YOUR-PASSWORD]"*) die "SUPABASE_DB_URL still contains [YOUR-PASSWORD]. Replace it (and the brackets) with your database password and save the secret again." ;;
+  postgres*://*@*@*) die "The database password in SUPABASE_DB_URL contains an @ sign, which breaks the address. Reset the password in Supabase → Project Settings → Database using only letters and numbers, put it in the URI and save the secret again." ;;
   postgres://*|postgresql://*) ;;
   *) die "SUPABASE_DB_URL must start with postgresql:// . Copy the Session pooler URI from Supabase → Connect → Direct." ;;
 esac
