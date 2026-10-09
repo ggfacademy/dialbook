@@ -74,6 +74,10 @@ class Prefs(ctx: Context) {
     var extraFolder: String get() = p.getString("folder", "") ?: ""; set(v) = p.edit().putString("folder", v).apply()
     var dispositions: String get() = p.getString("dispos", "") ?: ""; set(v) = p.edit().putString("dispos", v).apply()
     var pendingRecs: String get() = p.getString("pendingRecs", "[]") ?: "[]"; set(v) = p.edit().putString("pendingRecs", v).apply()
+    /** Numbers the telecaller marked "Personal call" (last 10 digits). Kept only on this phone. */
+    var personal: Set<String> get() = p.getStringSet("personal", emptySet()) ?: emptySet(); set(v) = p.edit().putStringSet("personal", v).apply()
+    fun isPersonal(digits: String) = personal.contains(digits.takeLast(10))
+    fun addPersonal(digits: String) { personal = personal + digits.takeLast(10) }
 
     val connected get() = url.isNotEmpty() && anonKey.isNotEmpty()
     val loggedIn get() = connected && refresh.isNotEmpty() && userId.isNotEmpty()
@@ -275,6 +279,29 @@ object Notify {
     }
 
     fun cancel(ctx: Context, callId: String) = NotificationManagerCompat.from(ctx).cancel(callId.hashCode())
+
+    /** After a call with a number that is not a lead: ask "Add as lead" or "Personal call". Nothing is saved until they choose. */
+    fun askUnknown(ctx: Context, number: String, direction: String, start: Long, seconds: Long, externalId: String) {
+        if (Build.VERSION.SDK_INT >= 33 && !ctx.has(android.Manifest.permission.POST_NOTIFICATIONS)) return
+        val i = Intent(ctx, UnknownCallActivity::class.java)
+            .putExtra("number", number).putExtra("direction", direction).putExtra("start", start)
+            .putExtra("seconds", seconds).putExtra("external_id", externalId)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pi = PendingIntent.getActivity(ctx, externalId.hashCode(), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val what = when { direction == "missed" -> "Missed call"; seconds > 0 -> "Talked ${Fmt.dur(seconds)}"; else -> "Not connected" }
+        val n = NotificationCompat.Builder(ctx, App.CHANNEL)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle("New number: $number")
+            .setContentText("$what. Not in the CRM. Tap: add as lead, or mark as personal.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(externalId.hashCode(), n) } catch (e: SecurityException) { }
+    }
+
+    fun cancelUnknown(ctx: Context, externalId: String) = NotificationManagerCompat.from(ctx).cancel(externalId.hashCode())
 }
 
 object Work {

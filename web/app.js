@@ -449,7 +449,8 @@ V.settings={live:false,mount(){
   const stOpts=sel=>opt('','No stage change',sel)+d.stages.map(s=>opt(s.id,'→ '+s.name,sel)).join('');
   return head('Settings','Shape the CRM around how your team sells.',`<button class="btn primary" data-act="saveSet" ${S.sdirty?'':'disabled'}>Save changes</button>`)+`<div style="display:flex;flex-direction:column;gap:16px">
   <div class="card"><h2>Business</h2><label class="field" style="max-width:420px"><span>Company name (used in messages and by the AI agent)</span><input class="input" data-sp="company" value="${esc(d.company)}"></label>
-  <label class="row" style="margin-top:12px"><input type="checkbox" data-sp="autoCreateIncoming" ${d.autoCreateIncoming?'checked':''}> When an unknown number calls a telecaller's phone, add it as a new lead <span class="small muted">(numbers saved in the telecaller's phone contacts are skipped as personal)</span></label></div>
+  <label class="row" style="margin-top:12px"><input type="checkbox" data-sp="autoCreateIncoming" ${d.autoCreateIncoming?'checked':''}> When an unknown number messages the company WhatsApp, add it as a new lead</label>
+  <p class="small muted" style="margin:6px 0 0 26px">Phone calls: only calls with leads are saved and recorded. After a call with a number that is not in the CRM, the phone app asks the telecaller “Add as lead” or “Personal call”. Personal calls are never saved.</p></div>
   <div id="waSet">${loadingHTML}</div>
   <div id="nuSet">${loadingHTML}</div>
   ${phone}
@@ -509,7 +510,7 @@ async function loadDrawer(){
   $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div></div>
     <div class="dial-phone" style="margin-top:12px;font-size:1.3rem">${esc(l.phone)}</div>
     <div class="row" style="margin-top:10px"><a class="btn call" href="tel:${esc(normPhone(l.phone))}" data-act="dial" data-p="dw">${ic('phone')}Call</a><button class="btn" data-act="wa">${ic('msg')}WhatsApp / SMS</button><button class="btn" data-act="copy" data-v="${esc(l.phone)}">${ic('copy')}Copy</button><button class="btn" data-act="editLead">${ic('edit')}Edit</button>${aiBtn}</div>`;
-  if(l.source==='Incoming call')$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added automatically from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
+  if(l.source==='Incoming call')$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
   const f=(k,v)=>`<div><div class="small muted">${k}</div><div>${v||'<span class="muted">—</span>'}</div></div>`;
   $('#dwInfo').innerHTML=`<div class="grid2">
     <label class="field"><span>Stage</span><select class="input" data-lset="stage">${stageOpts(l.stage)}</select></label>

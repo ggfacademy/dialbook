@@ -41,7 +41,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
 }
 
 object CallSync {
-    private data class Row(val number: String, val type: Int, val date: Long, val duration: Long, val savedName: String)
+    private data class Row(val number: String, val type: Int, val date: Long, val duration: Long)
 
     @Synchronized
     fun run(ctx: Context) {
@@ -49,12 +49,12 @@ object CallSync {
         // First run: only look back 2 hours so personal history is never uploaded in bulk.
         val since = if (p.lastSync == 0L) System.currentTimeMillis() - 2 * 3600_000L else p.lastSync
         val rows = mutableListOf<Row>()
-        val proj = arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.CACHED_NAME)
+        val proj = arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION)
         ctx.contentResolver.query(
             CallLog.Calls.CONTENT_URI, proj, "${CallLog.Calls.DATE} > ?", arrayOf(since.toString()),
             "${CallLog.Calls.DATE} ASC"
         )?.use { c ->
-            while (c.moveToNext()) rows.add(Row(c.getString(0) ?: "", c.getInt(1), c.getLong(2), c.getLong(3), c.getString(4) ?: ""))
+            while (c.moveToNext()) rows.add(Row(c.getString(0) ?: "", c.getInt(1), c.getLong(2), c.getLong(3)))
         }
 
         for (r in rows) {
@@ -67,23 +67,21 @@ object CallSync {
                 else -> "other"
             }
             val digits = Fmt.digits(r.number)
-            if (digits.length >= 6 && direction != "blocked") {
+            if (digits.length >= 6 && direction != "blocked" && !p.isPersonal(digits)) {
+                val externalId = "${p.userId}:${r.date}:${digits.takeLast(10)}"
                 val args = JSONObject()
                     .put("p_phone", r.number)
                     .put("p_direction", direction)
                     .put("p_started_at", Fmt.iso(r.date))
                     .put("p_duration", r.duration)
-                    .put("p_external_id", "${p.userId}:${r.date}:${digits.takeLast(10)}")
-                // A number saved in the phone's contacts (family, friends) is never added as a new lead.
-                val saved = r.savedName.isNotBlank()
-                if (saved) args.put("p_saved_contact", true)
-                val res = try {
-                    Api.rpc(ctx, "log_phone_call", args).trim()
-                } catch (e: ApiError) {
-                    // Database not updated yet (supabase/personal-calls.sql): call the older version
-                    if (saved && e.code == 404) { args.remove("p_saved_contact"); Api.rpc(ctx, "log_phone_call", args).trim() } else throw e
-                }
-                if (res.isNotEmpty() && res != "null") {
+                    .put("p_external_id", externalId)
+                val res = Api.rpc(ctx, "log_phone_call", args).trim()
+                if (res.isEmpty() || res == "null") {
+                    // Not a lead: nothing is saved. Ask the telecaller whether it was a new enquiry.
+                    if (direction == "incoming" || direction == "outgoing" || direction == "missed") {
+                        Notify.askUnknown(ctx, r.number, direction, r.date, r.duration, externalId)
+                    }
+                } else {
                     val o = JSONObject(res)
                     if (!o.optBoolean("duplicate")) {
                         val callId = o.getString("call_id")

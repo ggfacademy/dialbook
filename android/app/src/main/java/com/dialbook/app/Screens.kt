@@ -164,3 +164,56 @@ class OutcomeActivity : BaseActivity() {
         fuLabel?.setTextColor(if (followUp == 0L) MUTED else ACCENT)
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* After a call with a number that is not in the CRM                   */
+/* ------------------------------------------------------------------ */
+class UnknownCallActivity : BaseActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val number = intent.getStringExtra("number") ?: run { finish(); return }
+        val externalId = intent.getStringExtra("external_id") ?: run { finish(); return }
+        val direction = intent.getStringExtra("direction") ?: "incoming"
+        val start = intent.getLongExtra("start", 0)
+        val seconds = intent.getLongExtra("seconds", 0)
+        val digits = Fmt.digits(number)
+        val c = page()
+        c.add(heading("New number"), 8)
+        c.add(text(number, 22f, FG, true))
+        val what = when { direction == "missed" -> "Missed call"; seconds > 0 -> "Talked for ${Fmt.dur(seconds)}"; else -> "The call did not connect" }
+        c.add(text("$what · ${Fmt.when_(start)}", 14f, MUTED), 2)
+        c.add(text("This number is not in the CRM, so nothing about this call has been saved. Was it a customer enquiry?", 15f), 14)
+
+        val name = input("Their name (optional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
+        c.add(name, 16)
+        c.add(button("Add as lead", CALL) {
+            val args = JSONObject().put("p_phone", number).put("p_name", name.text.toString().trim()).put("p_direction", direction)
+                .put("p_started_at", Fmt.iso(start)).put("p_duration", seconds).put("p_external_id", externalId)
+            io({
+                val o = JSONObject(Api.rpc(this, "add_call_lead", args))
+                val callId = o.getString("call_id")
+                if (seconds > 0 && Prefs(this).recordingsEnabled && !o.optBoolean("duplicate")) {
+                    if (!Recordings.tryUpload(this, callId, start, seconds, digits)) Recordings.addPending(this, callId, start, seconds, digits)
+                }
+                o
+            }, { o ->
+                Notify.cancelUnknown(this, externalId)
+                toast("Added as a lead. Its calls are saved from now on.")
+                if (direction != "missed") {
+                    startActivity(Intent(this, OutcomeActivity::class.java).putExtra("call_id", o.getString("call_id"))
+                        .putExtra("lead_name", o.optString("lead_name")).putExtra("lead_id", o.optString("lead_id"))
+                        .putExtra("seconds", seconds).putExtra("direction", direction))
+                }
+                finish()
+            })
+        }, 12)
+        c.add(button("Personal call, don't save", ACCENT, false) {
+            Prefs(this).addPersonal(digits)
+            Notify.cancelUnknown(this, externalId)
+            toast("Not saved. You won't be asked about this number again.")
+            finish()
+        }, 10)
+        c.add(button("Decide later", MUTED, false) { finish() }, 10)
+        c.add(text("Personal calls and their recordings never leave your phone.", 13f, MUTED), 14)
+    }
+}
