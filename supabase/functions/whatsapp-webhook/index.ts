@@ -24,13 +24,43 @@ async function hmacHex(secret: string, body: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Incoming = { phone: string; body: string; id: string; at?: string; name?: string; media?: string; fromMe?: boolean };
+type Incoming = { phone: string; body: string; id: string; at?: string; name?: string; media?: string; fromMe?: boolean; hint?: string };
+
+/** Ad details a provider sends with a message from a click-to-WhatsApp ad (referral, ad id/name, headline…). */
+export function adHints(o: unknown, path = "", out: string[] = [], depth = 0): string[] {
+  if (!o || typeof o !== "object" || depth > 6 || out.length > 20) return out;
+  for (const [k, v] of Object.entries(o as Obj)) {
+    const p = path + "." + k;
+    if (v && typeof v === "object") adHints(v, p, out, depth + 1);
+    else if ((typeof v === "string" || typeof v === "number") && String(v).trim() &&
+      /referral|ctwa|headline|source_url|source_id|source_type|ad_id|ad_name|adset|campaign|utm/i.test(p)) out.push(`${k}: ${String(v).slice(0, 200)}`);
+  }
+  return out;
+}
+
+/** Puts a lead without a campaign into the campaign whose WhatsApp keywords appear in the message or its ad details. */
+async function campaignByKeywords(lead: Obj, text: string) {
+  if (!lead || lead.campaign_id || !text.trim()) return;
+  const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
+  const map = (st?.data?.waKeywords || {}) as Record<string, string>;
+  const t = text.toLowerCase();
+  for (const [cid, list] of Object.entries(map)) {
+    const kw = String(list || "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => x.length >= 3).find((x) => t.includes(x));
+    if (!kw) continue;
+    const { data: c } = await admin.from("campaigns").select("id,name,active").eq("id", cid).maybeSingle();
+    if (!c || c.active === false) continue;
+    await admin.from("leads").update({ campaign_id: c.id }).eq("id", lead.id).is("campaign_id", null);
+    await admin.from("activities").insert({ lead_id: lead.id, kind: "note", text: `Added to campaign ${c.name} (WhatsApp keyword “${kw}”)` });
+    lead.campaign_id = c.id;
+    return;
+  }
+}
 
 /** Finds the lead for a phone number, or creates one when that is allowed. */
 async function leadFor(acc: Obj, phone: string, name: string | undefined, createIfMissing: boolean): Promise<Obj | null> {
   const k = pkey(phone);
   if (k.length < 6) return null;
-  const { data } = await admin.from("leads").select("id,name,assigned_to").eq("phone_key", k).order("updated_at", { ascending: false }).limit(1);
+  const { data } = await admin.from("leads").select("id,name,assigned_to,campaign_id").eq("phone_key", k).order("updated_at", { ascending: false }).limit(1);
   if (data && data.length) return data[0];
   if (!createIfMissing) return null;
   const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
@@ -40,7 +70,7 @@ async function leadFor(acc: Obj, phone: string, name: string | undefined, create
   const { data: l } = await admin.from("leads").insert({
     name: name || `WhatsApp ${k.slice(-4)}`, phone: "+" + String(phone).replace(/\D/g, ""), source,
     assigned_to: acc.provider === "qr" ? acc.owner_id : null, created_by: acc.owner_id || null,
-  }).select("id,name,assigned_to").single();
+  }).select("id,name,assigned_to,campaign_id").single();
   if (l) await admin.from("activities").insert({ lead_id: l.id, kind: "created", text: `${source} message` });
   return l;
 }
@@ -58,6 +88,10 @@ async function storeIncoming(acc: Obj, m: Incoming) {
   const { error } = await admin.from("wa_messages").insert(row);
   if (error && !String(error.message).includes("duplicate")) console.error(error.message);
   if (!error) await admin.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", lead.id);
+  if (!error && !m.fromMe) {
+    if (m.hint && !lead.campaign_id) await admin.from("activities").insert({ lead_id: lead.id, kind: "note", text: `Came from an ad · ${m.hint.slice(0, 500)}` });
+    await campaignByKeywords(lead, `${m.body || ""} ${m.hint || ""}`).catch((e) => console.error("keywords", e));
+  }
 }
 
 async function storeStatus(acc: Obj, providerId: string, status: string, err?: string) {
@@ -89,7 +123,7 @@ async function handleMeta(acc: Obj, p: Obj) {
     for (const msg of v.messages || []) {
       const t = metaText(msg);
       await storeIncoming(acc, { phone: msg.from, body: t.body, media: t.media, id: msg.id, name: names[msg.from],
-        at: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : undefined });
+        at: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : undefined, hint: adHints({ referral: msg.referral }).join(" · ") });
     }
     for (const s of v.statuses || []) {
       await storeStatus(acc, s.id, s.status, s.errors?.[0]?.error_data?.details || s.errors?.[0]?.title);
@@ -181,7 +215,9 @@ async function handleInterakt(acc: Obj, p: Obj) {
   const phone = String(c.channel_phone_number || `${String(c.country_code || "").replace(/\D/g, "")}${c.phone_number || ""}`);
   const { body, media } = interaktText(msg);
   if (type === "message_received") {
-    await storeIncoming(acc, { phone, body, media, id: String(msg.id || ""), name: c.traits?.name || undefined, at: msg.received_at_utc || undefined });
+    const hint = adHints({ message: msg, customer: { traits: c.traits }, referral: d.referral, meta: d.meta_data }).join(" · ");
+    if (hint) console.log("interakt ad details:", hint);
+    await storeIncoming(acc, { phone, body, media, id: String(msg.id || ""), name: c.traits?.name || undefined, at: msg.received_at_utc || undefined, hint });
     return;
   }
   const st = (type.match(/_(sent|delivered|read|failed)$/) || [])[1];

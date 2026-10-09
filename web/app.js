@@ -314,11 +314,14 @@ function campModal(id){
   <label class="field"><span>Description</span><input class="input" id="cDesc" value="${esc(c.description)}"></label>
   <label class="field"><span>Call script</span><textarea class="input" id="cScript" rows="8" placeholder="Opening line, questions, objections and answers. {name} becomes the lead's first name.">${esc(c.script)}</textarea></label>
   <label class="field"><span>Language of these leads (optional)</span><select class="input" id="cLang">${langOpts(c.language||'','Mixed / not set')}</select></label>
+  ${isAdmin()?`<label class="field"><span>WhatsApp keywords (optional)</span><input class="input" id="cKw" value="${esc((S.cfg.waKeywords||{})[id]||'')}" placeholder="e.g. Vijayawada, VJW, విజయవాడ"><span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">A WhatsApp enquiry (Interakt or Meta) without a campaign goes into this one when its message, or the ad it came from, contains one of these words. Separate with commas. Tip: give each ad its own pre-filled message, e.g. “Details of Vijayawada Gold Appraisal training”.</span></label>`:''}
   <label class="field"><span>AI agent ID for this campaign (optional)</span><input class="input mono" id="cAgent" value="${esc(c.ai_agent_id)}" placeholder="Leave empty to use the default from Settings"></label>
   <label class="row"><input type="checkbox" id="cActive" ${c.active?'checked':''}> Active</label>
   <div class="row"><button class="btn primary" type="submit">Save campaign</button><button class="btn" type="button" data-act="closeMd">Cancel</button>${id?`<span class="spacer"></span><button class="btn danger" type="button" data-act="campDel" data-id="${id}">Delete</button>`:''}</div></form>`);
   $('#campForm').onsubmit=async e=>{e.preventDefault();const d={name:$('#cName').value.trim(),description:$('#cDesc').value.trim(),script:$('#cScript').value,ai_agent_id:$('#cAgent').value.trim(),language:$('#cLang').value,active:$('#cActive').checked};if(!d.name)return;
-    try{if(id)await R(sb.from('campaigns').update(d).eq('id',id));else await R(sb.from('campaigns').insert(d));await loadBase();closeModal();toast('Campaign saved');render()}catch(err){fail(err)}};
+    try{let cid=id;if(id)await R(sb.from('campaigns').update(d).eq('id',id));else{const {data:nc}=await R(sb.from('campaigns').insert(d).select('id').single());cid=nc.id}
+      const kw=$('#cKw');if(kw&&isAdmin()&&kw.value.trim()!==((S.cfg.waKeywords||{})[id]||'')){const {data:cur}=await R(sb.from('settings').select('data').eq('id',1).single());const sd=cur.data||{};sd.waKeywords={...(sd.waKeywords||{})};if(kw.value.trim())sd.waKeywords[cid]=kw.value.trim();else delete sd.waKeywords[cid];await R(sb.from('settings').update({data:sd,updated_at:iso(now())}).eq('id',1))}
+      await loadBase();closeModal();toast('Campaign saved');render()}catch(err){fail(err)}};
 }
 
 /* TEAM */
