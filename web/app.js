@@ -656,7 +656,7 @@ async function saveCall(p){
 }
 
 /* ---------- import / export ---------- */
-const FIELDS=[['alt_phone','Alternate phone',/alt|alternate|second|other/i],['email','Email',/mail/i],['company','Company',/company|business|firm|organi/i],['phone','Phone (required)',/phone|mobile|contact.?n|number|whatsapp|cell/i],['name','Name',/name|customer|contact|lead/i],['city','City',/city|location|place|area|state/i],['source','Source',/source|platform|channel/i],['campaign','Campaign (program name)',/campaign|program|batch/i],['tags','Tags',/\btags?\b|product|interest|course|service/i],['note','Notes',/note|remark|comment|message|requirement|query/i],['value','Deal value',/value|amount|budget|price/i],['language','Language',/lang|bhasha/i]];
+const FIELDS=[['alt_phone','Alternate phone',/alt|alternate|second|other/i],['email','Email',/mail/i],['company','Company',/company|business|firm|organi[sz]ation/i],['phone','Phone (required)',/phone|mobile|contact.?n|number|whatsapp|cell/i],['name','Name',/name|customer|contact|lead/i],['city','City',/city|location|place|area|state/i],['source','Source',/source|platform|channel/i],['campaign','Campaign (program name)',/campaign|program|batch/i],['tags','Tags',/\btags?\b|product|interest|course|service/i],['note','Notes',/note|remark|comment|message|requirement|query/i],['value','Deal value',/value|amount|budget|price/i],['language','Language',/lang|bhasha/i]];
 function parseCSV(text){
   const first=text.split(/\r?\n/)[0]||'';const cnt=c=>(first.match(new RegExp(c,'g'))||[]).length;const dl=cnt(';')>cnt(',')?';':cnt('\t')>cnt(',')?'\t':',';
   const rows=[];let row=[],f='',q=false;
@@ -679,7 +679,9 @@ function importModal(){
 }
 function mapStep(rows){
   const hdr=rows[0].map(h=>String(h).trim());const body=rows.slice(1);S.imp={hdr,body};const used=new Set();const guess={};
-  for(const[k,,re]of FIELDS){const i=hdr.findIndex((h,j)=>!used.has(j)&&re.test(h));if(i>=0){guess[k]=i;used.add(i)}}
+  const EXACT={name:/^(full[ _]?name|name|customer name|lead name)$/i,phone:/^(phone[ _]?number|phone|mobile( number)?|whatsapp( number)?)$/i,campaign:/^campaign[ _]?name$|^campaign$|^program$/i,city:/^city$/i,source:/^(source|platform)$/i,email:/^e-?mail$/i,language:/^(preferred_)?language\??$/i};
+  for(const k of Object.keys(EXACT)){const i=hdr.findIndex((h,j)=>!used.has(j)&&EXACT[k].test(h));if(i>=0){guess[k]=i;used.add(i)}}
+  for(const[k,,re]of FIELDS){if(guess[k]!==undefined)continue;const i=hdr.findIndex((h,j)=>!used.has(j)&&re.test(h)&&!/(^|_)(id|ad_name|adset_name|form_name|url)$/i.test(h)&&!/\?\s*$/.test(h));if(i>=0){guess[k]=i;used.add(i)}}
   if(guess.phone===undefined){const i=hdr.findIndex((h,j)=>!used.has(j)&&body.slice(0,5).some(r=>pkey(r[j]).length===10));if(i>=0)guess.phone=i}
   const colOpts=sel=>opt('','— skip —',sel===undefined?'':sel)+hdr.map((h,i)=>opt(i,h||'Column '+(i+1),sel)).join('');
   const order=['name','phone',...FIELDS.map(f=>f[0]).filter(k=>k!=='name'&&k!=='phone')];
@@ -689,7 +691,7 @@ function mapStep(rows){
   <label class="field"><span>Add to campaign</span><select class="input" id="iCamp">${campOpts(S.lf.camp&&S.lf.camp!=='_none'?S.lf.camp:'','No campaign')}</select></label>
   <label class="field"><span>Source (if the file has none)</span><select class="input" id="iSrc">${srcOpts('Excel import','Not set')}</select></label>
   <label class="field"><span>Assign to</span><select class="input" id="iAssign">${isMgr()?(S.hasContacts?opt('_contacts','Don’t assign: contact list for messages only (old data)'):'')+(S.cfg.assignment?.enabled?opt('','Use assignment rules (language, source…)'):'')+opt('rr','Share equally among telecallers')+opt('',S.cfg.assignment?.enabled?'Leave unassigned (rules still apply)':'Leave unassigned')+agents().map(m=>opt(m.id,m.name)).join(''):opt(S.me.id,'Me')}</select></label>
-  <label class="field"><span>Duplicates</span><select class="input" id="iDup">${opt('skip','Skip numbers already in the CRM')}${isMgr()?opt('update','Update numbers already in the CRM (campaign, source, language)'):''}${opt('keep','Import them anyway')}</select></label></div>
+  <label class="field"><span>Duplicates</span><select class="input" id="iDup">${opt('skip','Skip numbers already in the CRM')}${isMgr()?opt('update','Update numbers already in the CRM: new enquiry today, history kept'):''}${opt('keep','Import them anyway')}</select></label></div>
   <p id="iMsg" class="small muted" style="margin-top:12px"></p><div class="row"><button class="btn primary" data-act="impRun" id="iRun">Import leads</button><button class="btn" data-act="closeMd">Cancel</button></div>`);
   const upd=()=>{const r=prepImport();$('#iMsg').textContent=`${r.list.length} rows ready${r.dupFile?`, ${r.dupFile} repeated numbers in the file skipped`:''}${r.bad?`, ${r.bad} rows without a valid phone skipped`:''}. Numbers already in the CRM are checked when you import.`};
   $$('.imap,#iDup').forEach(s=>s.onchange=upd);upd();
@@ -700,10 +702,15 @@ function prepImport(){
   for(const r of S.imp.body){const g=k=>m[k]===undefined?'':String(r[m[k]]??'').trim();const ph=normPhone(g('phone'));const k=pkey(ph);
     if(k.length<6){bad++;continue}if(skip&&seen.has(k)){dupFile++;continue}seen.add(k);
     let note=g('note'),language=g('language');
+    // form questions (columns ending with "?") go into the notes, e.g. "your profession: jewellery business"
+    const qa=S.imp.hdr.map((h,j)=>[h,j]).filter(([h,j])=>/\?\s*$/.test(h)&&!Object.values(m).includes(j)&&String(r[j]??'').trim()).map(([h,j])=>`${h.replace(/[_?]+/g,' ').trim()}: ${String(r[j]).replace(/_/g,' ').replace(/\uFFFD/g,'').replace(/\s+/g,' ').trim()}`);
+    if(qa.length)note=[note,...qa].filter(Boolean).join('\n');
+    language=language.replace(/_/g,' ').trim();if(language)language=language[0].toUpperCase()+language.slice(1).toLowerCase();
     // a Notes cell that is just a language name ("Telugu") is used as the language
     if(!language&&note&&(S.cfg.languages||[]).some(x=>x.toLowerCase()===note.toLowerCase())){language=note;note=''}
     const cn=g('campaign').toLowerCase();const campaign_id=cn?(S.campaigns.find(c=>c.name.trim().toLowerCase()===cn)?.id||null):null;
-    list.push({name:g('name')||'Unnamed',phone:ph,alt_phone:normPhone(g('alt_phone')),email:g('email'),city:g('city'),company:g('company'),source:g('source'),tags:g('tags')?g('tags').split(/[,;|]/).map(s=>s.trim()).filter(Boolean):[],note,language,value:+(g('value').replace(/[^\d.]/g,''))||0,campaign_id})}
+    const src0=g('source');const source=/^fb$|^facebook$/i.test(src0)?'Facebook':/^ig$|^instagram$/i.test(src0)?'Instagram':src0;
+    list.push({name:g('name')||'Unnamed',phone:ph,alt_phone:normPhone(g('alt_phone')),email:g('email'),city:g('city'),company:g('company'),source,tags:g('tags')?g('tags').split(/[,;|]/).map(s=>s.trim()).filter(Boolean):[],note,language,value:+(g('value').replace(/[^\d.]/g,''))||0,campaign_id})}
   return{list,dupFile,bad};
 }
 async function runImport(btn){
@@ -719,8 +726,15 @@ async function runImport(btn){
         const groups=new Map();
         for(const l of old){const patch={};const c=l.campaign_id||cid;if(c)patch.campaign_id=c;if(l.source)patch.source=l.source;if(l.language)patch.language=l.language;
           if(!Object.keys(patch).length)continue;const key=JSON.stringify(patch);if(!groups.has(key))groups.set(key,{patch,keys:[]});groups.get(key).keys.push(pkey(l.phone))}
-        for(const {patch,keys} of groups.values())for(const c of chunk(keys,200)){await R(sb.from('leads').update(patch).in('phone_key',c));updated+=c.length;btn.textContent=`Updating… ${updated}`}
-        dups-=updated}}
+        for(const {patch,keys} of groups.values())for(const c of chunk(keys,200)){await R(sb.from('leads').update(patch).in('phone_key',c));btn.textContent=`Updating… ${updated}`}
+        // every existing number in the file counts as a new enquiry today: due for a call today, history kept
+        const oldKeys=[...new Set(old.map(l=>pkey(l.phone)))];const notes=new Map(old.map(l=>[pkey(l.phone),l]));
+        for(const c of chunk(oldKeys,200)){
+          const {data:ex}=await R(sb.from('leads').select('id,phone_key,stage').in('phone_key',c));
+          await R(sb.from('leads').update({next_follow_up_at:iso(now()),contact_only:false}).in('phone_key',c).neq('stage','won'));
+          const acts=ex.map(x=>{const l=notes.get(x.phone_key)||{};return{lead_id:x.id,actor_id:S.me.id,kind:'enquiry',text:'Enquired again'+(l.source?' via '+l.source:'')+' (import)'+(l.note?': '+l.note.replace(/\n/g,' · ').slice(0,400):''),data:{source:l.source||src||'Import'}}});
+          if(acts.length)await R(sb.from('activities').insert(acts));updated+=ex.length;btn.textContent=`Updating… ${updated}`}
+        dups=Math.max(0,dups-updated)}}
     let pool=agents().filter(m=>m.role==='telecaller');if(!pool.length)pool=agents();
     const contacts=as==='_contacts';
     const rows=list.map((d,i)=>{const r={...d,source:d.source||src,campaign_id:d.campaign_id||cid,created_by:S.me.id,assigned_to:contacts?null:as==='rr'?(pool.length?pool[i%pool.length].id:null):(as||null)};if(contacts)r.contact_only=true;if(!r.assigned_to)delete r.assigned_to;return r});
