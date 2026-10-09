@@ -298,6 +298,7 @@ supabase/team.sql                    Reject/Remove in Team also deletes the logi
 supabase/personal-calls.sql          keeps telecallers' personal calls out of the CRM
 supabase/transfer.sql                lets telecallers pass a lead to a colleague, with a reason
 supabase/enquiry-date.sql            "enquired" date per lead (also set when someone enquires again), used by the Leads date filter
+supabase/merge-duplicates.sql        merges leads duplicated by importing a file twice (keeps the oldest, with its history)
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
