@@ -222,9 +222,10 @@ function leadQuery(select='*',opts){
   if(f.fu==='contacts')q=q.eq('contact_only',true).eq('dnd',false);
   if(S.hasContacts&&!['contacts','dnd','all'].includes(f.fu)&&!f.q.trim())q=q.eq('contact_only',false); // the contact list is hidden unless asked for or searched
   if(f.fu==='dnd')q=q.eq('dnd',true);
-  // date the lead was added (from / to, both days included, local time)
-  if(f.from)q=q.gte('created_at',iso(new Date(f.from+'T00:00:00').getTime()));
-  if(f.to)q=q.lt('created_at',iso(new Date(f.to+'T00:00:00').getTime()+DAY));
+  // date the lead came in: added, or enquired again (from / to, both days included, local time)
+  const dcol=S.hasEnq?'last_enquiry_at':'created_at';
+  if(f.from)q=q.gte(dcol,iso(new Date(f.from+'T00:00:00').getTime()));
+  if(f.to)q=q.lt(dcol,iso(new Date(f.to+'T00:00:00').getTime()+DAY));
   const s=f.q.replace(/[%,()*\\"]/g,' ').trim();
   if(s){const d=s.replace(/\D/g,'');const lc=s.toLowerCase();const camps=S.campaigns.filter(c=>c.name.toLowerCase().includes(lc)).map(c=>c.id);
     // name, phone, city, company, email, course (tags), notes, source and campaign name
@@ -241,7 +242,7 @@ V.leads={mount(){const f=S.lf;
    <select class="input" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
    <select class="input" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
    <select class="input" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select>
-   <label class="row small" style="gap:6px;flex-wrap:nowrap" title="Date the lead was added"><span class="muted" style="white-space:nowrap">Added from</span><input class="input" type="date" id="lf-from" value="${esc(f.from||'')}" style="width:auto"></label>
+   <label class="row small" style="gap:6px;flex-wrap:nowrap" title="Date the lead came in: added, or enquired again"><span class="muted" style="white-space:nowrap">${S.hasEnq?'Enquired from':'Added from'}</span><input class="input" type="date" id="lf-from" value="${esc(f.from||'')}" style="width:auto"></label>
    <label class="row small" style="gap:6px;flex-wrap:nowrap"><span class="muted">to</span><input class="input" type="date" id="lf-to" value="${esc(f.to||'')}" style="width:auto"></label>
    ${f.from||f.to?'<button class="btn sm ghost" data-act="lfDates">Clear dates</button>':''}</div><div id="vb">${loadingHTML}</div>`;
 },async load(){
@@ -537,7 +538,7 @@ async function loadDrawer(){
     ${f('Next follow-up',l.next_follow_up_at?esc(fmtDT(l.next_follow_up_at))+` <span class="small muted">(${rel(l.next_follow_up_at)})</span>`:'')}
     ${f('Calls made',`<span class="num">${l.call_count}</span>${l.last_call_at?' · last '+rel(l.last_call_at):''}`)}
     ${f('Alternate phone',esc(l.alt_phone))}${f('Email',esc(l.email))}${f('City',esc(l.city))}${f('Company',esc(l.company))}
-    ${f('Source',esc(l.source))}${f('Deal value',+l.value?inr(l.value):'')}${f('Added',esc(fmtDT(l.created_at)))}${f('Tags',(l.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(' '))}</div>
+    ${f('Source',esc(l.source))}${f('Deal value',+l.value?inr(l.value):'')}${f('Added',esc(fmtDT(l.created_at)))}${l.last_enquiry_at&&ts(l.last_enquiry_at)-ts(l.created_at)>36e5?f('Last enquiry',esc(fmtDT(l.last_enquiry_at))):''}${f('Tags',(l.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(' '))}</div>
     <label class="row" style="margin-top:12px"><input type="checkbox" data-lset="dnd" ${l.dnd?'checked':''}> Do not contact: the customer asked us to stop (blocks calls, AI calls, WhatsApp and nurture)</label>
     ${l.note?`<div style="margin-top:12px"><div class="small muted">Notes</div><div style="white-space:pre-wrap">${esc(l.note)}</div></div>`:''}`;
   const items=[...cr.data.map(c=>({at:ts(c.started_at),c})),...ar.data.map(a=>({at:ts(a.created_at),a})),...air.data.map(x=>({at:ts(x.created_at),x}))].sort((a,b)=>b.at-a.at);
@@ -744,6 +745,7 @@ async function loadBase(){
   const me=S.team.find(m=>m.id===S.me.id);if(me)S.me=me;
   if(S.hasContacts===undefined){const {error}=await sb.from('leads').select('contact_only').limit(1);S.hasContacts=!error}
   if(S.hasTagsText===undefined){const {error}=await sb.from('leads').select('tags_text').limit(1);S.hasTagsText=!error}
+  if(S.hasEnq===undefined){const {error}=await sb.from('leads').select('last_enquiry_at').limit(1);S.hasEnq=!error}
 }
 
 /* ---------- sign in ---------- */
