@@ -449,7 +449,7 @@ V.settings={live:false,mount(){
   const stOpts=sel=>opt('','No stage change',sel)+d.stages.map(s=>opt(s.id,'→ '+s.name,sel)).join('');
   return head('Settings','Shape the CRM around how your team sells.',`<button class="btn primary" data-act="saveSet" ${S.sdirty?'':'disabled'}>Save changes</button>`)+`<div style="display:flex;flex-direction:column;gap:16px">
   <div class="card"><h2>Business</h2><label class="field" style="max-width:420px"><span>Company name (used in messages and by the AI agent)</span><input class="input" data-sp="company" value="${esc(d.company)}"></label>
-  <label class="row" style="margin-top:12px"><input type="checkbox" data-sp="autoCreateIncoming" ${d.autoCreateIncoming?'checked':''}> When an unknown number calls a telecaller's phone, add it as a new lead</label></div>
+  <label class="row" style="margin-top:12px"><input type="checkbox" data-sp="autoCreateIncoming" ${d.autoCreateIncoming?'checked':''}> When an unknown number calls a telecaller's phone, add it as a new lead <span class="small muted">(numbers saved in the telecaller's phone contacts are skipped as personal)</span></label></div>
   <div id="waSet">${loadingHTML}</div>
   <div id="nuSet">${loadingHTML}</div>
   ${phone}
@@ -509,6 +509,7 @@ async function loadDrawer(){
   $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div></div>
     <div class="dial-phone" style="margin-top:12px;font-size:1.3rem">${esc(l.phone)}</div>
     <div class="row" style="margin-top:10px"><a class="btn call" href="tel:${esc(normPhone(l.phone))}" data-act="dial" data-p="dw">${ic('phone')}Call</a><button class="btn" data-act="wa">${ic('msg')}WhatsApp / SMS</button><button class="btn" data-act="copy" data-v="${esc(l.phone)}">${ic('copy')}Copy</button><button class="btn" data-act="editLead">${ic('edit')}Edit</button>${aiBtn}</div>`;
+  if(l.source==='Incoming call')$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added automatically from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
   const f=(k,v)=>`<div><div class="small muted">${k}</div><div>${v||'<span class="muted">—</span>'}</div></div>`;
   $('#dwInfo').innerHTML=`<div class="grid2">
     <label class="field"><span>Stage</span><select class="input" data-lset="stage">${stageOpts(l.stage)}</select></label>
@@ -828,6 +829,9 @@ document.addEventListener('click',async e=>{
     case'savePending':{const o=readOutcome('pm');if(!o.outcome)return toast('Pick a call outcome first');await rpc('set_call_outcome',{p_call:id,p_outcome:o.outcome,p_note:o.note,p_follow_up:o.fu?iso(o.fu):null});closeModal();toast('Outcome saved');loadDrawer();break}
     case'playRec':{const {data,error}=await sb.storage.from('recordings').createSignedUrl(v,3600);if(error)throw error;const box=t.parentElement;box.innerHTML=`<audio controls autoplay src="${esc(data.signedUrl)}"></audio>`;break}
     case'addNote':{const tx=$('#dwNoteAdd').value.trim();if(!tx||!S.openLead)return;await addActivity(S.openLead,'note',tx);$('#dwNoteAdd').value='';loadDrawer();break}
+    case'markPersonal':arm(t,async()=>{const lid=S.openLead;const {error}=await sb.rpc('mark_personal',{p_lead:lid});
+      if(error){toast(/mark_personal|function/i.test(error.message)?'Ask your admin to run supabase/personal-calls.sql first':error.message);return}
+      closeDrawer();toast('Removed. Calls with this number from your phone will not be logged again.');const v2=V[S.view];if(v2.load)v2.load()},'Click again: delete this lead');break;
     case'leadDel':arm(t,async()=>{const lid=S.openLead;closeDrawer();await R(sb.from('leads').delete().eq('id',lid));toast('Lead deleted');const v2=V[S.view];if(v2.load)v2.load()});break;
     case'aiOne':{t.disabled=true;const r=await fn({action:'call',lead_ids:[S.openLead],limit:1});toast(r.queued?'AI call started. The result will appear here.':(r.errors[0]||'Could not start the call'));loadDrawer();break}
     case'aiAssist':{const out=$('#aiOut');out.className='ai-out';out.textContent='Thinking…';t.disabled=true;try{const r=await fn({action:'assist',lead_id:S.openLead});out.textContent=r.text}catch(err){out.textContent=err.message}t.disabled=false;break}

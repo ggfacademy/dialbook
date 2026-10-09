@@ -252,6 +252,8 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 
 ### Old data as a contact list, and "Do not contact"
+**Personal calls.** The phone app only logs calls with numbers that are leads. If **Settings → “When an unknown number calls… add it as a new lead”** is on, run `supabase/personal-calls.sql` once: unknown callers saved in the telecaller's phone contacts are then skipped, and an auto-added “New caller” lead can be removed with **This is a personal number** (its calls are never logged again). Turn the setting off to never add unknown callers.
+
 **Rejecting or removing team members, and resetting passwords.** Run `supabase/team.sql` once (run it again if you ran an older copy). Admins can set a new password for anyone in **Team → Edit → Set a new password**. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
 .github/workflows/backup.yml         nightly backup to Dropbox (.github/backup.sh; setup page web/backup-setup.html)
 
@@ -291,6 +293,7 @@ supabase/functions/ai-webhook/index.ts  receives AI call results from Bolna
 supabase/search.sql                  lets the Leads search find courses (tags), notes and sources
 supabase/contacts.sql                contact lists (old data) and do-not-contact blocking
 supabase/team.sql                    Reject/Remove in Team also deletes the login, so the email can sign up again
+supabase/personal-calls.sql          keeps telecallers' personal calls out of the CRM
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
