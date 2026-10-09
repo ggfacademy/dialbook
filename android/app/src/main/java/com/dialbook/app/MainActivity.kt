@@ -218,23 +218,40 @@ class MainActivity : BaseActivity() {
             }
             body.add(text("Calls with leads", 17f, FG, true), 18)
         }
-        body.add(text("Calls with leads that still need an outcome.", 14f, MUTED))
+        body.add(text("Calls with leads that still need an outcome. Tap one to log it. Callbacks you set appear in My leads (Follow-up / Overdue).", 14f, MUTED))
         val list = column(0); body.add(list, 10)
         list.add(text("Loading…", 14f, MUTED))
-        val since = Fmt.iso(System.currentTimeMillis() - 3 * 86_400_000L)
-        val path = "/rest/v1/calls?select=id,started_at,duration,direction,lead_id,lead:leads(name,phone)" +
-            "&agent_id=eq.${p.userId}&outcome=is.null&started_at=gte.$since&order=started_at.desc&limit=50"
-        io({ JSONArray(Api.get(this, path)) }, { arr ->
+        io({
+            try { JSONArray(Api.rpc(this, "calls_to_log", JSONObject().put("p_days", 3))) }
+            catch (e: ApiError) {
+                if (e.code != 404) throw e
+                // Database not updated yet: older list (names only for your own leads)
+                val since = Fmt.iso(System.currentTimeMillis() - 3 * 86_400_000L)
+                val old = JSONArray(Api.get(this, "/rest/v1/calls?select=id,started_at,duration,direction,lead_id,lead:leads(name,phone)" +
+                    "&agent_id=eq.${p.userId}&outcome=is.null&started_at=gte.$since&order=started_at.desc&limit=50"))
+                for (i in 0 until old.length()) {
+                    val o = old.getJSONObject(i); val l = o.optJSONObject("lead")
+                    o.put("lead_name", l?.optString("name") ?: ""); o.put("lead_phone", l?.optString("phone") ?: "")
+                }
+                old
+            }
+        }, { arr ->
             list.removeAllViews()
             if (arr.length() == 0) { list.add(text("All caught up.", 15f, MUTED)); return@io }
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                val lead = o.optJSONObject("lead") ?: JSONObject()
+                val name = o.optString("lead_name").let { if (it.isEmpty() || it == "null") "Lead" else it }
+                val phone = o.optString("lead_phone").let { if (it == "null") "" else it }
                 val k = card()
-                k.add(text(lead.optString("name").ifEmpty { "Lead" }, 17f, FG, true))
+                val r1 = row(); val info = column(0)
+                info.add(text(name, 17f, FG, true))
+                if (phone.isNotEmpty()) info.add(text(phone, 14f, MUTED))
                 val d = o.optLong("duration")
-                k.add(text("${o.optString("direction").replaceFirstChar { it.uppercase() }} · ${if (d > 0) Fmt.dur(d) else "not connected"} · ${Fmt.when_(Fmt.parse(o.optString("started_at")))}", 14f, MUTED), 2)
-                val callId = o.getString("id"); val name = lead.optString("name"); val leadId = o.optString("lead_id"); val dir = o.optString("direction")
+                info.add(text("${o.optString("direction").replaceFirstChar { it.uppercase() }} · ${if (d > 0) Fmt.dur(d) else "not connected"} · ${Fmt.when_(Fmt.parse(o.optString("started_at")))}", 14f, MUTED), 2)
+                r1.add(info, 0, 1f)
+                if (phone.isNotEmpty()) r1.add(button("Call", CALL) { startCall(phone) }, 8)
+                k.add(r1)
+                val callId = o.getString("id"); val leadId = o.optString("lead_id"); val dir = o.optString("direction")
                 k.setOnClickListener {
                     startActivity(Intent(this, OutcomeActivity::class.java).putExtra("call_id", callId).putExtra("lead_name", name)
                         .putExtra("lead_id", leadId).putExtra("seconds", d).putExtra("direction", dir))
