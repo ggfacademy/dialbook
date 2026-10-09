@@ -252,6 +252,8 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 
 ### Old data as a contact list, and "Do not contact"
+**Transferring leads.** Run `supabase/transfer.sql` once. On any lead (website or phone app) a telecaller can press **Transfer to a colleague**, pick who, and give a reason (e.g. “Telugu lead”). The lead moves to that person, shows up in their list right away, and every transfer is listed for admins in **Reports → Lead transfers** (with CSV).
+
 **Personal calls.** Run `supabase/personal-calls.sql` once and have telecallers install the latest phone app. Only calls with numbers that are leads are saved and recorded. After a call with a number that is not in the CRM, the app asks **Add as lead** (the lead, this call and its recording are saved, and all later calls) or **Personal call, don't save** (nothing is saved, and it won't ask again for that number). Old “New caller” leads from personal calls can be removed with **This is a personal number** on the lead.
 
 **Rejecting or removing team members, and resetting passwords.** Run `supabase/team.sql` once (run it again if you ran an older copy). Admins can set a new password for anyone in **Team → Edit → Set a new password**. After that, **Reject** / **Remove** in Team deletes the person's login too, so their email can sign up again, and anyone signed in without a team row shows up again under **Waiting for approval**.
@@ -294,6 +296,7 @@ supabase/search.sql                  lets the Leads search find courses (tags), 
 supabase/contacts.sql                contact lists (old data) and do-not-contact blocking
 supabase/team.sql                    Reject/Remove in Team also deletes the login, so the email can sign up again
 supabase/personal-calls.sql          keeps telecallers' personal calls out of the CRM
+supabase/transfer.sql                lets telecallers pass a lead to a colleague, with a reason
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking

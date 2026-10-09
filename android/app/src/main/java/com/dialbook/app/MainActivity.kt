@@ -131,6 +131,7 @@ class MainActivity : BaseActivity() {
         val c = page()
         val top = row()
         top.add(text("Hi, ${p.name.ifEmpty { "there" }}", 22f, FG, true), 0, 1f)
+        top.add(button("Full CRM", ACCENT, false) { openWeb() }.apply { textSize = 14f }, 8)
         c.add(top, 8)
         val tabs = row()
         listOf("leads" to "My leads", "log" to "To log", "status" to "Status").forEachIndexed { i, (k, label) ->

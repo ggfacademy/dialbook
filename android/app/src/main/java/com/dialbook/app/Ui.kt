@@ -24,6 +24,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** The full CRM website. */
+const val WEB_URL = "https://ggfacademy.github.io/dialbook/"
+
 /** Shared look and helpers for every screen. Views are built in code to keep the app small. */
 open class BaseActivity : Activity() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -133,6 +136,11 @@ open class BaseActivity : Activity() {
         val uri = Uri.parse("tel:" + Fmt.e164(phone))
         val intent = if (has(android.Manifest.permission.CALL_PHONE)) Intent(Intent.ACTION_CALL, uri) else Intent(Intent.ACTION_DIAL, uri)
         try { startActivity(intent) } catch (e: Exception) { startActivity(Intent(Intent.ACTION_DIAL, uri)) }
+    }
+
+    /** Opens the full CRM website (WhatsApp inbox with templates, follow-ups, reports…) in the browser. */
+    fun openWeb(hash: String = "") {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + (if (hash.isNotEmpty()) "#$hash" else "")))) } catch (e: Exception) { toast("No browser found") }
     }
 
     fun openWhatsApp(phone: String) {
