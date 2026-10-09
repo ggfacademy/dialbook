@@ -197,6 +197,7 @@ class UnknownCallActivity : BaseActivity() {
                 }
                 o
             }, { o ->
+                Prefs(this).removeUnknown(externalId, digits)
                 Notify.cancelUnknown(this, externalId)
                 toast("Added as a lead. Its calls are saved from now on.")
                 if (direction != "missed") {
@@ -209,6 +210,7 @@ class UnknownCallActivity : BaseActivity() {
         }, 12)
         c.add(button("Personal call, don't save", ACCENT, false) {
             Prefs(this).addPersonal(digits)
+            Prefs(this).removeUnknown(externalId, digits)
             Notify.cancelUnknown(this, externalId)
             toast("Not saved. You won't be asked about this number again.")
             finish()
