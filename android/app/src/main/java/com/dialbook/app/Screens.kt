@@ -57,13 +57,14 @@ class LeadActivity : BaseActivity() {
             who.add(wc, 0, 1f)
             hb.add(who)
 
-            val tiles = row()
+            val tiles = row().apply { gravity = android.view.Gravity.FILL_VERTICAL }
             tiles.add(tile(R.drawable.ic_call, "Call", android.graphics.Color.WHITE, CALL) { startCall(phone) }, 0, 1f)
-            tiles.add(tile(R.drawable.ic_chat, "My WhatsApp", CALL, CALL_SOFT) { openWhatsApp(phone) }, 8, 1f)
+            tiles.add(tile(R.drawable.ic_chat, "WhatsApp", CALL, CALL_SOFT) { openWhatsApp(phone) }, 8, 1f)
             tiles.add(tile(R.drawable.ic_chat, "Company WA", ACCENT, ACCENT_SOFT) { openWeb("wa:$leadId") }, 8, 1f)
             tiles.add(tile(R.drawable.ic_transfer, "Transfer", NAVY, android.graphics.Color.parseColor("#E6EAF4")) { transfer(name) }, 8, 1f)
             box.add(tiles)
-            box.add(text("My WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
+            box.add(text("WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
+            box.add(button("💬  Share in team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 10)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
             if (fu > 0) {
                 val late = fu < System.currentTimeMillis()

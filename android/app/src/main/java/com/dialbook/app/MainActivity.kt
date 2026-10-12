@@ -127,6 +127,7 @@ class MainActivity : BaseActivity() {
 
     /* ---------------- home ---------------- */
     private var filter = "all"
+    private var chatUnread = 0
 
     private fun home() {
         val p = Prefs(this)
@@ -150,14 +151,19 @@ class MainActivity : BaseActivity() {
 
         val unknown = try { JSONArray(p.unknownCalls).length() } catch (e: Exception) { 0 }
         val nav = bottomNav(listOf(Triple("leads", "My leads", R.drawable.ic_people), Triple("fu", "Follow-ups", R.drawable.ic_clock),
-            Triple("log", "To log", R.drawable.ic_tolog), Triple("status", "Status", R.drawable.ic_status)), tab, mapOf("log" to unknown)) { tab = it; home() }
+            Triple("log", "To log", R.drawable.ic_tolog), Triple("chat", "Chat", R.drawable.ic_chat), Triple("status", "Status", R.drawable.ic_status)),
+            tab, mapOf("log" to unknown, "chat" to chatUnread)) { tab = it; home() }
         val body = shell(h, nav)
         when (tab) {
             "leads" -> leadsTab(body)
             "fu" -> followUpsTab(body)
             "log" -> logTab(body)
+            "chat" -> chatTab(body)
             else -> statusTab(body)
         }
+        if (tab != "chat") io({ Api.rpc(this, "team_unread", JSONObject()).trim().toIntOrNull() ?: 0 }, { n ->
+            if (n != chatUnread) { chatUnread = n; home() }
+        }, { })
         SyncWorker.runSoon(this, 0)
         io({ Api.profile(this) }, { prof -> if (prof == null) pendingScreen() }, { e ->
             if (e is ApiError && e.code == 401) route()
@@ -302,6 +308,46 @@ class MainActivity : BaseActivity() {
         }, { e -> list.removeAllViews(); list.add(text(e.message ?: "Could not load follow-ups", 15f, DANGER)) })
     }
 
+    /** Team chat: everyone, then each colleague, newest conversation first. */
+    private fun chatTab(body: LinearLayout) {
+        val me = Prefs(this).userId
+        body.add(section("Team chat"))
+        val list = column(0); body.add(list, 8)
+        list.add(text("Loading…", 14f, MUTED))
+        io({ Pair(TeamChat.people(this), JSONArray(Api.rpc(this, "team_inbox", JSONObject()))) }, { (names, inbox) ->
+            list.removeAllViews()
+            val by = (0 until inbox.length()).associate { inbox.getJSONObject(it).let { o -> o.optString("channel") to o } }
+            val rows = listOf("team" to "Everyone") + names.filterKeys { it != me }.map { (id, n) -> TeamChat.dm(me, id) to n }
+                .sortedWith(compareByDescending<Pair<String, String>> { Fmt.parse(by[it.first]?.optString("last_at")) }.thenBy { it.second })
+            var total = 0
+            rows.forEachIndexed { i, (ch, name) ->
+                val o = by[ch]
+                val k = card(); val r = row()
+                r.addView(if (ch == "team") avatar("Team", 44, NAVY) else avatar(name))
+                val info = column(0).apply { setPadding(dp(12), 0, dp(8), 0) }
+                val last = o?.optString("last_body")?.let { if (it == "null") "" else it } ?: ""
+                info.add(text(name, 16f, FG, true))
+                info.add(text(when {
+                    last.isNotEmpty() -> (if (o?.optString("last_sender") == me) "You: " else "") + last
+                    ch == "team" -> "Messages for the whole team"
+                    else -> "Tap to chat"
+                }, 14f, MUTED).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, 2)
+                r.add(info, 0, 1f)
+                val at = Fmt.parse(o?.optString("last_at"))
+                val side = column(0).apply { gravity = android.view.Gravity.END }
+                if (at > 0) side.add(text(Fmt.when_(at).substringAfter(", "), 12f, MUTED))
+                val n = o?.optInt("unread") ?: 0
+                total += n
+                if (n > 0) side.add(pill(n.toString(), android.graphics.Color.WHITE, android.graphics.Color.parseColor("#3A7BD5")), 4, 0f, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+                r.addView(side)
+                k.add(r)
+                k.setOnClickListener { startActivity(Intent(this, ChatActivity::class.java).putExtra("channel", ch).putExtra("title", name)) }
+                list.add(k, if (i == 0) 0 else 8)
+            }
+            chatUnread = total
+        }, { e -> list.removeAllViews(); list.add(text(if (e is ApiError && e.code == 404) "Team chat is not switched on yet. Ask your admin to run supabase/team-chat.sql." else (e.message ?: "Could not load chats"), 15f, DANGER)) })
+    }
+
     private fun pendingScreen() {
         val c = page()
         c.add(heading("Waiting for approval"), 24)
@@ -314,15 +360,19 @@ class MainActivity : BaseActivity() {
         val p = Prefs(this)
         val unknown = try { JSONArray(p.unknownCalls) } catch (e: Exception) { JSONArray() }
         if (unknown.length() > 0) {
-            body.add(text("New numbers", 17f, FG, true))
-            body.add(text("Not in the CRM. Tap one: add as lead, or mark as personal (nothing is saved).", 14f, MUTED), 2)
+            body.add(section("New numbers · ${unknown.length()}"))
+            body.add(text("Not in the CRM. Tap one: add as lead, or mark as personal (nothing is saved).", 13f, MUTED), 4)
             for (i in unknown.length() - 1 downTo 0) {
                 val o = unknown.getJSONObject(i)
-                val k = card()
-                k.add(text(o.optString("number"), 17f, FG, true))
+                val k = card(); val r = row()
+                r.addView(avatar("?", 44, WARN))
+                val info = column(0).apply { setPadding(dp(12), 0, 0, 0) }
+                info.add(text(o.optString("number"), 17f, FG, true))
                 val d = o.optLong("seconds"); val dir = o.optString("direction")
                 val what = when { dir == "missed" -> "Missed call"; d > 0 -> "${dir.replaceFirstChar { it.uppercase() }} · ${Fmt.dur(d)}"; else -> "${dir.replaceFirstChar { it.uppercase() }} · not connected" }
-                k.add(text("$what · ${Fmt.when_(o.optLong("start"))}", 14f, MUTED), 2)
+                info.add(text("$what · ${Fmt.when_(o.optLong("start"))}", 14f, MUTED), 2)
+                info.add(text("Tap to decide", 13f, ACCENT, true), 4)
+                r.add(info, 0, 1f); k.add(r)
                 k.setOnClickListener {
                     startActivity(Intent(this, UnknownCallActivity::class.java).putExtra("number", o.optString("number"))
                         .putExtra("direction", dir).putExtra("start", o.optLong("start")).putExtra("seconds", d)
@@ -330,9 +380,9 @@ class MainActivity : BaseActivity() {
                 }
                 body.add(k, 8)
             }
-            body.add(text("Calls with leads", 17f, FG, true), 18)
         }
-        body.add(text("Calls with leads that still need an outcome. Tap one to log it. Callbacks you set appear in My leads (Follow-up / Overdue).", 14f, MUTED))
+        body.add(section("Calls to log"), if (unknown.length() > 0) 20 else 0)
+        body.add(text("Calls with leads that still need an outcome. Tap one to log it.", 13f, MUTED), 4)
         val list = column(0); body.add(list, 10)
         list.add(text("Loading…", 14f, MUTED))
         io({
@@ -351,19 +401,21 @@ class MainActivity : BaseActivity() {
             }
         }, { arr ->
             list.removeAllViews()
-            if (arr.length() == 0) { list.add(text("All caught up.", 15f, MUTED)); return@io }
+            if (arr.length() == 0) { list.add(emptyState("All caught up.")); return@io }
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
                 val name = o.optString("lead_name").let { if (it.isEmpty() || it == "null") "Lead" else it }
                 val phone = o.optString("lead_phone").let { if (it == "null") "" else it }
                 val k = card()
-                val r1 = row(); val info = column(0)
+                val r1 = row(); val info = column(0).apply { setPadding(dp(12), 0, dp(8), 0) }
+                r1.addView(avatar(name))
                 info.add(text(name, 17f, FG, true))
-                if (phone.isNotEmpty()) info.add(text(phone, 14f, MUTED))
+                if (phone.isNotEmpty()) info.add(text(phone, 14f, MUTED), 2)
                 val d = o.optLong("duration")
-                info.add(text("${o.optString("direction").replaceFirstChar { it.uppercase() }} · ${if (d > 0) Fmt.dur(d) else "not connected"} · ${Fmt.when_(Fmt.parse(o.optString("started_at")))}", 14f, MUTED), 2)
+                info.add(text("${o.optString("direction").replaceFirstChar { it.uppercase() }} · ${if (d > 0) Fmt.dur(d) else "not connected"} · ${Fmt.when_(Fmt.parse(o.optString("started_at")))}", 13f, MUTED), 2)
+                info.add(pill("Add outcome", ACCENT, ACCENT_SOFT), 6, 0f, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
                 r1.add(info, 0, 1f)
-                if (phone.isNotEmpty()) r1.add(button("Call", CALL) { startCall(phone) }, 8)
+                if (phone.isNotEmpty()) r1.addView(callButton(phone))
                 k.add(r1)
                 val callId = o.getString("id"); val leadId = o.optString("lead_id"); val dir = o.optString("direction")
                 k.setOnClickListener {

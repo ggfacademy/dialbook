@@ -156,7 +156,7 @@ open class BaseActivity : Activity() {
     /** Square action tile with an icon above its label (lead screen actions). */
     fun tile(res: Int, label: String, fg: Int, bg: Int, onClick: () -> Unit): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-        background = rounded(bg, 0, 16); setPadding(dp(6), dp(12), dp(6), dp(10))
+        background = rounded(bg, 0, 16); setPadding(dp(6), dp(12), dp(6), dp(10)); minimumHeight = dp(80)
         addView(icon(res, fg, 24))
         addView(text(label, 12f, fg, true).apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) })
         isClickable = true; setOnClickListener { onClick() }

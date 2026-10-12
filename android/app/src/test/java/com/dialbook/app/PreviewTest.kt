@@ -58,7 +58,15 @@ class PreviewTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.path ?: ""
                 val body = when {
-                    path.startsWith("/rest/v1/profiles") -> """[{"id":"u1","name":"Priya Dharshini","active":true,"role":"telecaller","languages":["Tamil"]}]"""
+                    path.startsWith("/rest/v1/profiles") -> """[{"id":"u1","name":"Priya Dharshini","active":true,"role":"telecaller","languages":["Tamil"]},
+                        {"id":"u2","name":"Sathish Damodaran","active":true,"role":"admin"},{"id":"u3","name":"Kavya Reddy","active":true,"role":"telecaller"},{"id":"u4","name":"Arun Prakash","active":true,"role":"manager"}]"""
+                    path.startsWith("/rest/v1/rpc/team_unread") -> "3"
+                    path.startsWith("/rest/v1/rpc/team_inbox") -> """[{"channel":"team","last_at":"${at(-0.7)}","last_body":"Good morning team! Call every new Facebook lead within 15 minutes.","last_sender":"u2","unread":2},
+                        {"channel":"dm:u1:u2","last_at":"${at(-0.3)}","last_body":"Priya, please send the payment QR to Karthik today.","last_sender":"u2","unread":1}]"""
+                    path.startsWith("/rest/v1/team_messages") -> """[{"id":"m4","channel":"team","sender_id":"u1","body":"Will call him at 4 pm","created_at":"${at(-0.2)}"},
+                        {"id":"m3","channel":"team","sender_id":"u3","body":"This lead wants the Hyderabad batch, I speak Telugu, I will take it.","created_at":"${at(-0.5)}","lead":{"id":"l4","name":"Sravani K","phone":"+91 98100 12345"}},
+                        {"id":"m2","channel":"team","sender_id":"u3","body":"Noted sir 👍","created_at":"${at(-2.9)}"},
+                        {"id":"m1","channel":"team","sender_id":"u2","body":"Good morning team! Today's focus: call every new Facebook lead within 15 minutes. Target 60 calls each.","created_at":"${at(-3.0)}"}]"""
                     path.startsWith("/rest/v1/rpc/today_progress") -> """[{"agent":"u1","name":"Priya","calls":37,"connected":15,"converted":1,"talk":1800,"due":4,"target":{"calls":60,"connected":20,"converted":1}}]"""
                     path.startsWith("/rest/v1/rpc/calls_to_log") -> """[{"id":"k1","started_at":"${at(-0.3)}","duration":184,"direction":"outgoing","lead_id":"l1","lead_name":"Karthik Raja","lead_phone":"+91 97890 44556"},
                         {"id":"k2","started_at":"${at(-1.2)}","duration":0,"direction":"outgoing","lead_id":"l2","lead_name":"Madhavan R","lead_phone":"+91 98401 23456"}]"""
@@ -115,6 +123,7 @@ class PreviewTest {
         shot(main, "1-my-leads")
         clickText(main.window.decorView, "Follow-ups"); shot(main, "2-follow-ups")
         clickText(main.window.decorView, "To log"); shot(main, "3-to-log")
+        clickText(main.window.decorView, "Chat"); shot(main, "7-chat")
         val app = ApplicationProvider.getApplicationContext<Application>()
         val lead = Robolectric.buildActivity(LeadActivity::class.java, Intent(app, LeadActivity::class.java).putExtra("lead_id", "l1")).setup().get()
         shot(lead, "4-lead")
@@ -124,5 +133,7 @@ class PreviewTest {
         val un = Robolectric.buildActivity(UnknownCallActivity::class.java, Intent(app, UnknownCallActivity::class.java)
             .putExtra("number", "+91 90031 22334").putExtra("external_id", "x1").putExtra("direction", "incoming").putExtra("start", now - 1_800_000).putExtra("seconds", 95L)).setup().get()
         shot(un, "6-new-number")
+        val chat = Robolectric.buildActivity(ChatActivity::class.java, Intent(app, ChatActivity::class.java).putExtra("channel", "team").putExtra("title", "Everyone")).setup().get()
+        shot(chat, "8-chat-thread")
     }
 }
