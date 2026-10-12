@@ -38,6 +38,7 @@ class LeadActivity : BaseActivity() {
             val dispos = Api.loadDispositions(this)
             Triple(l, calls, dispos)
         }, { (arr, calls, dispos) ->
+            val settings = try { JSONObject(Prefs(this).settingsJson) } catch (e: Exception) { JSONObject() }
             box.removeAllViews()
             if (arr.length() == 0) { box.add(text("This lead is not assigned to you any more.", 15f, MUTED)); return@io }
             val l = arr.getJSONObject(0)
@@ -61,6 +62,8 @@ class LeadActivity : BaseActivity() {
             if (l.optString("note").isNotEmpty()) {
                 val k = card(); k.add(text("Notes", 13f, MUTED, true)); k.add(text(l.optString("note"), 15f), 4); box.add(k, 12)
             }
+            val scriptBox = column(0); box.add(scriptBox, 12)
+            loadScript(scriptBox, l, settings)
             box.add(text("Recent calls", 17f, FG, true), 18)
             if (calls.length() == 0) box.add(text("No calls yet.", 14f, MUTED), 6)
             for (i in 0 until calls.length()) {
@@ -84,6 +87,49 @@ class LeadActivity : BaseActivity() {
             }
         }, { e -> box.removeAllViews(); box.add(text(e.message ?: "Could not load this lead", 15f, DANGER)) })
     }
+}
+
+/** The best call script for this lead (Settings → Call scripts, then the program's own script). Tap to open or close it. */
+private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: JSONObject) {
+    val campId = l.optString("campaign_id").let { if (it == "null") "" else it }
+    io({
+        if (campId.isEmpty()) JSONArray() else JSONArray(Api.get(this, "/rest/v1/campaigns?select=name,script&id=eq.$campId"))
+    }, { arr ->
+        val camp = if (arr.length() > 0) arr.getJSONObject(0) else JSONObject()
+        val lang = l.optString("language").lowercase()
+        var best: JSONObject? = null; var bs = -1
+        val list = settings.optJSONArray("scripts") ?: JSONArray()
+        for (i in 0 until list.length()) {
+            val x = list.getJSONObject(i)
+            if (x.optString("body").isBlank()) continue
+            val xc = x.optString("campaign_id"); val xl = x.optString("language").lowercase()
+            if (xc.isNotEmpty() && xc != campId) continue
+            if (xl.isNotEmpty() && xl != lang) continue
+            val sc = (if (xc.isNotEmpty()) 4 else 0) + (if (xl.isNotEmpty()) 2 else 0)
+            if (sc > bs) { bs = sc; best = x }
+        }
+        val campScript = camp.optString("script").let { if (it == "null") "" else it }
+        val (title, body) = when {
+            best != null && bs >= 4 -> best!!.optString("name").ifEmpty { "Call script" } to best!!.optString("body")
+            campScript.isNotBlank() -> camp.optString("name") to campScript
+            best != null -> best!!.optString("name").ifEmpty { "Call script" } to best!!.optString("body")
+            else -> return@io
+        }
+        val first = l.optString("name").trim().split(" ").firstOrNull()?.ifEmpty { null } ?: "there"
+        val filled = body.replace("{first_name}", first).replace("{name}", first)
+            .replace("{program}", camp.optString("name")).replace("{city}", l.optString("city"))
+            .replace("{agent}", Prefs(this).name).replace("{company}", settings.optString("company"))
+        val k = card()
+        k.add(text("▸ Call script · $title", 15f, ACCENT, true))
+        val tv = text(filled, 15f, FG).apply { visibility = android.view.View.GONE }
+        k.add(tv, 6)
+        k.setOnClickListener {
+            val open = tv.visibility != android.view.View.VISIBLE
+            tv.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            (k.getChildAt(0) as TextView).text = (if (open) "▾" else "▸") + " Call script · $title"
+        }
+        box.add(k)
+    }, { /* no script */ })
 }
 
 /** Pass this lead to a colleague, with a reason (e.g. "Telugu lead"). */
@@ -124,6 +170,9 @@ class OutcomeActivity : BaseActivity() {
     private var followUp: Long = 0
     private var fuLabel: TextView? = null
     private val dispoViews = mutableListOf<Pair<String, TextView>>()
+    private var lostReason = ""
+    private var lostBox: LinearLayout? = null
+    private val reasonViews = mutableListOf<Pair<String, TextView>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -137,6 +186,8 @@ class OutcomeActivity : BaseActivity() {
 
         val list = column(0); c.add(list, 14)
         list.add(text("Loading outcomes…", 14f, MUTED))
+        lostBox = column(0).apply { visibility = android.view.View.GONE }
+        c.add(lostBox!!, 14)
 
         c.add(text("Next follow-up", 15f, FG, true), 18)
         val (hs, chips) = chipRow()
@@ -149,9 +200,18 @@ class OutcomeActivity : BaseActivity() {
         c.add(notes, 16)
         val save = button("Save outcome") {
             val d = picked ?: run { toast("Pick an outcome first"); return@button }
+            val askReason = needsReason(d)
+            if (askReason && lostReason.isEmpty()) { toast("Pick why the lead is lost"); return@button }
             val args = JSONObject().put("p_call", callId).put("p_outcome", d.getString("id")).put("p_note", notes.text.toString().trim())
                 .put("p_follow_up", if (followUp > 0) Fmt.iso(followUp) else JSONObject.NULL)
-            io({ Api.rpc(this, "set_call_outcome", args) }, {
+            val leadId = intent.getStringExtra("lead_id") ?: ""
+            io({
+                Api.rpc(this, "set_call_outcome", args)
+                if (askReason && leadId.isNotEmpty()) {
+                    try { Api.rpc(this, "set_lost_reason", JSONObject().put("p_lead", leadId).put("p_reason", lostReason)) }
+                    catch (e: ApiError) { if (e.code != 404) throw e }   // database not updated yet
+                }
+            }, {
                 Notify.cancel(this, callId); toast("Saved"); finish()
             })
         }
@@ -173,8 +233,39 @@ class OutcomeActivity : BaseActivity() {
         })
     }
 
+    private fun needsReason(d: JSONObject) = d.optString("stage") == "lost" && d.optString("id") != "dnd" && !d.optString("name").contains("wrong", true)
+
+    /** "Not interested" and other outcomes that close the lead: ask why (Settings → Lost reasons). */
+    private fun showReasons(show: Boolean) {
+        val box = lostBox ?: return
+        box.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
+        if (!show) { lostReason = ""; return }
+        if (box.childCount > 0) return
+        val s = try { JSONObject(Prefs(this).settingsJson) } catch (e: Exception) { JSONObject() }
+        val arr = s.optJSONArray("lostReasons")
+        val reasons = if (arr != null && arr.length() > 0) (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+            else listOf("Fees too high", "Not interested now", "Joined another institute", "Venue too far", "Dates or timing not suitable", "Other")
+        box.add(text("Why is the lead lost?", 15f, FG, true))
+        reasonViews.clear()
+        reasons.forEachIndexed { i, r ->
+            val v = chip(r, false) {
+                lostReason = r
+                for ((name, tv) in reasonViews) {
+                    val sel = name == r
+                    tv.setTextColor(if (sel) ACCENT else FG)
+                    tv.background = if (sel) rounded(ACCENT_SOFT, ACCENT, 20) else rounded(SURFACE, LINE, 20)
+                }
+            }
+            v.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            v.setPadding(dp(16), dp(10), dp(16), dp(10))
+            box.add(v, if (i == 0) 8 else 6)
+            reasonViews.add(r to v)
+        }
+    }
+
     private fun pick(d: JSONObject) {
         picked = d
+        showReasons(needsReason(d))
         for ((id, v) in dispoViews) {
             val sel = id == d.getString("id")
             v.setTextColor(if (sel) ACCENT else FG)

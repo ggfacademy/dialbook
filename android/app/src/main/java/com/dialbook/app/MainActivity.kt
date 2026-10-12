@@ -133,6 +133,8 @@ class MainActivity : BaseActivity() {
         top.add(text("Hi, ${p.name.ifEmpty { "there" }}", 22f, FG, true), 0, 1f)
         top.add(button("Full CRM", ACCENT, false) { openWeb() }.apply { textSize = 14f }, 8)
         c.add(top, 8)
+        val target = column(0); c.add(target, 8)
+        loadTarget(target)
         val tabs = row()
         listOf("leads" to "My leads", "log" to "To log", "status" to "Status").forEachIndexed { i, (k, label) ->
             tabs.add(chip(label, tab == k) { tab = k; home() }, if (i == 0) 0 else 8)
@@ -149,6 +151,40 @@ class MainActivity : BaseActivity() {
         io({ Api.profile(this) }, { prof -> if (prof == null) pendingScreen() }, { e ->
             if (e is ApiError && e.code == 401) route()
         })
+    }
+
+    /** Today's calls, connected calls and conversions against the targets set in Settings → Daily targets. */
+    private fun loadTarget(box: LinearLayout) {
+        io({ JSONArray(Api.rpc(this, "today_progress", JSONObject().put("p_tz", "Asia/Kolkata").put("p_all", false))) }, { arr ->
+            box.removeAllViews()
+            if (arr.length() == 0) return@io
+            val r = arr.getJSONObject(0); val t = r.optJSONObject("target") ?: JSONObject()
+            val items = listOf(Triple("Calls", "calls", "calls"), Triple("Connected", "connected", "connected"), Triple("Conversions", "converted", "converted"))
+                .filter { t.optInt(it.third) > 0 }
+            if (items.isEmpty()) return@io
+            val k = card()
+            k.add(text("Today's target", 15f, FG, true))
+            val r1 = row()
+            items.forEachIndexed { i, (label, key, tk) ->
+                val v = r.optInt(key); val g = t.optInt(tk)
+                val col = column(0)
+                col.add(text(label, 12f, MUTED))
+                col.add(text("$v / $g", 18f, if (v >= g) CALL else FG, true))
+                val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = g; progress = minOf(v, g)
+                    progressTintList = android.content.res.ColorStateList.valueOf(if (v >= g) CALL else ACCENT)
+                }
+                col.add(bar, 2)
+                r1.add(col, if (i == 0) 0 else 12, 1f)
+            }
+            k.add(r1, 6)
+            val left = t.optInt("calls") - r.optInt("calls")
+            val due = r.optInt("due")
+            val note = listOfNotNull(if (t.optInt("calls") > 0) (if (left > 0) "$left more calls to go" else "Calls target reached 🎉") else null,
+                if (due > 0) "$due follow-ups due today" else null).joinToString(" · ")
+            if (note.isNotEmpty()) k.add(text(note, 13f, MUTED), 4)
+            box.add(k)
+        }, { /* database not updated yet, or offline: no target card */ })
     }
 
     private fun pendingScreen() {

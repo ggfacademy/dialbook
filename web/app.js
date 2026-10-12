@@ -60,7 +60,9 @@ const DEF={company:'Dialbook',
   templates:[{id:'t1',name:'Intro after call',channel:'whatsapp',body:'Hi {name}, this is {agent} from {company}. Thanks for your time on the call. Sharing the details we discussed.'}],
   autoCreateIncoming:true,ai:{agentId:'',fromNumber:'',startHour:10,endHour:19,maxBatch:50,agents:{}},
   languages:['English','Hindi','Tamil','Telugu','Kannada','Malayalam','Marathi','Bengali','Gujarati','Punjabi','Odia'],
-  assignment:{enabled:false,fallback:'all',rules:[{id:'r1',language:'',source:'',campaign:'',mode:'speakers',agents:[]}]}};
+  assignment:{enabled:false,fallback:'all',rules:[{id:'r1',language:'',source:'',campaign:'',mode:'speakers',agents:[]}]},
+  lostReasons:['Fees too high','Not interested now','Joined another institute','Venue too far','Dates or timing not suitable','Language problem','Wanted only information','Not reachable after many calls','Wrong number','Other'],
+  targets:{calls:0,connected:0,converted:0,agents:{}},scripts:[]};
 const langOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+(S.cfg.languages||[]).map(l=>opt(l,l,sel)).join('')+(sel&&!(S.cfg.languages||[]).includes(sel)?opt(sel,sel,sel):'');
 
 /* ---------- state ---------- */
@@ -143,7 +145,18 @@ const endToday=()=>sod(now())+DAY;
 
 /* ---------- data operations ---------- */
 async function addActivity(leadId,kind,text='',data={}){return R(sb.from('activities').insert({lead_id:leadId,actor_id:S.me.id,kind,text,data}))}
-async function changeStage(l,to){if(!l||l.stage===to)return;await R(sb.from('leads').update({stage:to}).eq('id',l.id));await addActivity(l.id,'stage','',{from:l.stage,to})}
+async function changeStage(l,to){if(!l||l.stage===to)return;const d={stage:to};
+  if(to==='lost'&&S.hasLost){const r=await askLost(1);if(r===null)return false;d.lost_reason=r}
+  await R(sb.from('leads').update(d).eq('id',l.id));await addActivity(l.id,'stage',d.lost_reason?'Reason: '+d.lost_reason:'',{from:l.stage,to,reason:d.lost_reason||undefined})}
+/* Lost reason: resolves with the reason, or null if the person closed the box */
+function askLost(n){return new Promise(res=>{if(S.lostRes)S.lostRes(null);
+  const rs=(S.cfg.lostReasons||[]).filter(Boolean);
+  modal(`<h2>Why was ${n>1?`this group of ${n} leads`:'this lead'} lost?</h2><p class="small muted" style="margin-top:-6px">Pick the main reason. Reports → Lost reasons shows them, so you can see what to fix (fees, venue, dates…).</p>
+  <div class="dispo-grid">${rs.map(r=>`<button type="button" class="dispo" data-act="lostPick" data-v="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+  <label class="field" style="margin-top:12px"><span>Or type the reason</span><input class="input" id="lostOther" placeholder="e.g. Wants online classes"></label>
+  <div class="row" style="margin-top:12px"><button class="btn primary" data-act="lostPick" data-v="">Save reason</button><button class="btn" data-act="closeMd">Cancel</button></div>`);
+  S.lostRes=res})}
+const lostDispo=id=>{const d=dispo(id);return !!S.hasLost&&!!d&&d.stage==='lost'&&id!=='dnd'&&!/wrong/i.test(d.name)};
 async function assignLeads(ids,to){if(!ids.length)return;for(const c of chunk(ids,200)){await R(sb.from('leads').update({assigned_to:to||null}).in('id',c));await R(sb.from('activities').insert(c.map(id=>({lead_id:id,actor_id:S.me.id,kind:'assign',data:{to:to||''}}))))}}
 async function roundRobin(ids,agentIds){if(!agentIds.length)return toast('Pick at least one person');for(let k=0;k<agentIds.length;k++)await assignLeads(ids.filter((_,i)=>i%agentIds.length===k),agentIds[k]);toast(`${ids.length} leads shared between ${agentIds.length} people`)}
 async function logManualCall(leadId,{outcome,secs,note,fu}){
@@ -154,6 +167,19 @@ async function updateBadge(){try{const s=await rpc('lead_summary',{p_agent:isMgr
 /* ---------- views ---------- */
 const V={};
 
+/* Today's targets: one person's progress, or the team's for managers */
+function targetsCard(rows,agent){
+  const has=r=>r.target&&(r.target.calls||r.target.connected||r.target.converted);
+  const bar=(v,g)=>{const p=g?Math.min(100,Math.round(v/g*100)):0;return `<div class="tgt"><div class="tgt-bar"><i style="width:${p}%;background:${p>=100?'var(--call)':p>=50?'var(--accent)':'var(--warn)'}"></i></div><span class="num small">${v}${g?' / '+g:''}</span></div>`};
+  if(agent){const r=rows.find(x=>x.agent===agent);if(!r||!has(r))return '';
+    const it=(lbl,v,g)=>g?`<div style="flex:1;min-width:150px"><div class="small muted">${lbl}</div>${bar(v,g)}</div>`:'';
+    const left=Math.max(0,(r.target.calls||0)-r.calls);
+    return `<div class="card" style="margin-bottom:16px"><div class="row"><h2 style="margin:0">Today's target${agent!==S.me.id?' · '+esc(r.name):''}</h2><span class="spacer"></span><span class="small muted">${left?`${left} more calls to go`:r.target.calls?'Calls target reached 🎉':''}${r.due?` · ${r.due} follow-ups due today`:''}</span></div>
+      <div class="row" style="gap:18px;margin-top:10px;flex-wrap:wrap">${it('Calls',r.calls,r.target.calls)}${it('Connected',r.connected,r.target.connected)}${it('Conversions',r.converted,r.target.converted)}</div></div>`}
+  const list=rows.filter(has);if(!list.length)return '';
+  return `<div class="card" style="margin-bottom:16px"><h2>Today's targets</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th>Calls</th><th>Connected</th><th>Conversions</th><th class="r hide-sm">Follow-ups due</th></tr></thead><tbody>
+    ${list.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${bar(r.calls,r.target.calls)}</td><td>${bar(r.connected,r.target.connected)}</td><td>${bar(r.converted,r.target.converted)}</td><td class="r num hide-sm">${r.due}</td></tr>`).join('')}</tbody></table></div></div>`}
+
 /* HOME */
 V.home={mount(){
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -162,14 +188,15 @@ V.home={mount(){
 },async load(){
   const rv=S.rv;const to=endToday(),from=S.range==='0'?sod(now()):sod(now())-(+S.range-1)*DAY;
   const agent=isMgr()?(S.hAgent||null):S.me.id;
-  const [st,ls,fu,inl]=await Promise.all([
+  const [st,ls,fu,inl,tp]=await Promise.all([
     rpc('dashboard_stats',{p_from:iso(from),p_to:iso(to),p_agent:agent,p_campaign:null,p_tz:TZ}),
     rpc('lead_summary',{p_agent:agent,p_campaign:null,p_tz:TZ}),
     (()=>{let q=sb.from('leads').select('*').not('stage','in','(won,lost)').not('next_follow_up_at','is',null).lt('next_follow_up_at',iso(now()+7*DAY)).order('next_follow_up_at').limit(6);if(agent)q=q.eq('assigned_to',agent);return R(q)})(),
     // new leads that arrived in the period (the contact list of imported old data is not counted)
-    fetchAll(()=>{let q=sb.from('leads').select('source').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q})]);
+    fetchAll(()=>{let q=sb.from('leads').select('source').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q}),
+    sb.rpc('today_progress',{p_tz:TZ,p_all:isMgr()}).then(r=>r.data||[],()=>[])]);
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
-  const t=st.totals||{};let html='';
+  const t=st.totals||{};let html=targetsCard(tp,agent);
   {const by={};for(const l of inl){const k=(l.source||'').trim()||'Source not set';by[k]=(by[k]||0)+1}
    const col=k=>/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
    const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v,color:col(label)}));
@@ -420,12 +447,14 @@ V.reports={mount(){const r=S.rep;
   <div class="card" style="margin-bottom:16px"><h2>Conversions by month</h2><p class="small muted">A conversion is a lead moved to “Won” (by a call outcome such as Converted / Sale, or by hand), credited to the person who moved it. Conversion % = converted leads ÷ different leads that person called. Value is the leads' deal value.</p>${convTable(cv.month,'Month')}</div>
   <div class="card" style="margin-bottom:16px"><h2>Conversions by program</h2><p class="small muted">Program is the lead's campaign. Create one campaign per program in Campaigns and put leads in it.</p>${convTable(cv.prog,'Program')}</div>
   <div class="card" style="margin-bottom:16px" id="rSpeed"><h2>Speed to lead</h2><p class="small muted">Loading…</p></div>
+  <div class="card" style="margin-bottom:16px" id="rLost"><h2>Lost reasons</h2><p class="small muted">Loading…</p></div>
   ${isMgr()?'<div class="card" style="margin-bottom:16px" id="rTransfers"><h2>Lead transfers</h2><p class="small muted">Loading…</p></div>':''}
   <div class="card" style="margin-bottom:16px"><h2>Working time</h2><p class="small muted">Per caller per day, from their phone-app and logged calls (all campaigns). Idle time is the time between the end of one call and the start of the next; a gap of 15 minutes or more counts as a break.</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Caller</th><th class="r">First call</th><th class="r">Last call ended</th><th class="r">Calls</th><th class="r">Talk time</th><th class="r">Idle time</th><th class="r">Idle %</th><th class="r hide-sm">Longest gap</th><th class="r hide-sm">Breaks</th></tr></thead><tbody>
   ${work.slice(0,150).map(d=>`<tr><td class="small">${esc(fmtD(d.day))}</td><td><b>${esc(nameOf(d.agent))}</b></td><td class="r num">${esc(fmtTm(d.first))}</td><td class="r num">${esc(fmtTm(d.last))}</td><td class="r num">${d.calls}</td><td class="r num">${dur(d.talk)}</td><td class="r num">${dur(d.idle)}</td><td class="r num">${pct(d.span?d.idle/d.span:0)}</td><td class="r num hide-sm">${dur(d.longest)}</td><td class="r num hide-sm">${d.breaks}</td></tr>`).join('')||'<tr><td colspan="10" class="muted">No calls in this range.</td></tr>'}</tbody></table></div>${work.length>150?'<p class="small muted">Showing the latest 150 rows. Download the Working time CSV for all of them.</p>':''}</div>
   <div class="card" style="margin-bottom:16px"><h2>Call outcomes</h2><div class="tbl-wrap"><table><thead><tr><th>Outcome</th><th class="r">Calls</th><th class="r">Share</th></tr></thead><tbody>${[...S.cfg.dispositions,{id:'_none',name:'Outcome not logged yet'}].map(d=>{const n=st.outcomes?.[d.id]||0;return `<tr><td>${esc(d.name)}</td><td class="r num">${n}</td><td class="r num">${t.n?pct(n/t.n):'0%'}</td></tr>`}).join('')}</tbody></table></div></div>
   <div class="card"><h2>Call log</h2><div class="tbl-wrap"><table><thead><tr><th>When</th><th>Lead</th><th class="hide-sm">Caller</th><th>Outcome</th><th class="r">Duration</th><th class="hide-sm">Recording</th></tr></thead><tbody>${cl.data.map(c=>`<tr class="click" data-act="lead" data-id="${c.lead_id}"><td class="small">${esc(fmtDT(c.started_at))}<div>${srcBadge(c.source)}</div></td><td><b>${esc(c.lead?.name||'')}</b><div class="lead-phone">${esc(c.lead?.phone||'')}</div></td><td class="hide-sm">${esc(callerOf(c))}</td><td class="small">${esc(dispo(c.outcome)?.name||(c.outcome?c.outcome:'Not logged'))}${c.note?`<div class="muted">${esc(c.note.slice(0,70))}</div>`:''}</td><td class="r num">${dur(c.duration)}</td><td class="hide-sm small">${c.recording_path||c.recording_url?'Yes':'<span class="muted">—</span>'}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No calls in this range.</td></tr>'}</tbody></table></div>${cl.data.length>=200?'<p class="small muted">Showing the latest 200 calls. Download the CSV for all of them.</p>':''}</div>`;
   loadSpeed(from,to,isMgr()?(r.agent||null):S.me.id).catch(e=>{const b=$('#rSpeed');if(b)b.innerHTML='<h2>Speed to lead</h2><p class="small muted">'+(/speed_to_lead|function/i.test(e.message)?'Run supabase/conversion.sql in Supabase to see this report.':esc(e.message))+'</p>'});
+  loadLost(from,to,isMgr()?(r.agent||null):S.me.id,r.camp||null).catch(e=>{const b=$('#rLost');if(b)b.innerHTML='<h2>Lost reasons</h2><p class="small muted">'+(/lost_reasons|function/i.test(e.message)?'Run supabase/sales-tools.sql in Supabase to see this report.':esc(e.message))+'</p>'});
   if(isMgr())loadTransfers(from,to).catch(e=>{const b=$('#rTransfers');if(b)b.innerHTML='<h2>Lead transfers</h2><p class="small muted">'+esc(e.message)+'</p>'});
 }};
 async function loadSpeed(from,to,agent){
@@ -437,6 +466,15 @@ async function loadSpeed(from,to,agent){
   <div class="tbl-wrap"><table><thead><tr><th>Caller</th><th class="r">New leads</th><th class="r">Called</th><th class="r">Median time to first call</th><th class="r">Within 15 min</th><th class="r">Within 1 hour</th><th class="r">Not called yet</th></tr></thead><tbody>
   ${rows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="r num">${x.leads}</td><td class="r num">${x.called}</td><td class="r num">${mins(x.median_min)}</td><td class="r num">${pct(x.leads?x.within_15/x.leads:0)}</td><td class="r num">${pct(x.leads?x.within_60/x.leads:0)}</td><td class="r num ${x.uncalled_1h?'prio-hot':''}">${x.uncalled}${x.uncalled_1h?` (${x.uncalled_1h} over 1 h)`:''}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">No new enquiries in this period.</td></tr>'}</tbody></table></div>
   ${tot.leads?`<p class="small muted" style="margin-top:6px">Team: ${pct(tot.w15/tot.leads)} of ${tot.leads} new leads called within 15 minutes.</p>`:''}`;
+}
+async function loadLost(from,to,agent,campId){
+  const d=await rpc('lost_reasons',{p_from:iso(from),p_to:iso(to),p_agent:agent,p_campaign:campId&&campId!=='_none'?campId:null});const b=$('#rLost');if(!b)return;
+  const colors=['var(--s7)','var(--warn)','var(--s5)','var(--s4)','var(--s6)','var(--s8)','var(--s2)','var(--s1)'];
+  const top=(rows,key)=>{const g={};for(const x of rows){const k=x[key]||'';(g[k]=g[k]||{n:0,r:[]}).n+=x.n;g[k].r.push(x)}return Object.entries(g).sort((a,b)=>b[1].n-a[1].n).map(([k,v])=>({k,n:v.n,r:v.r.sort((a,b)=>b.n-a.n)}))};
+  const tbl=(rows,key,lbl,name)=>`<div class="tbl-wrap"><table><thead><tr><th>${lbl}</th><th class="r">Lost</th><th>Main reasons</th></tr></thead><tbody>${top(rows,key).map(g=>`<tr><td><b>${esc(name(g.k))}</b></td><td class="r num">${g.n}</td><td class="small">${g.r.slice(0,3).map(x=>`${esc(x.reason)} (${x.n})`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>`;
+  b.innerHTML=`<h2>Lost reasons</h2><p class="small muted">Leads marked Lost in this period and why. If one reason leads (fees, venue, dates), fix that in the offer or the script.</p>
+  ${d.total?`<div class="grid2" style="align-items:start"><div>${hbars(d.reasons.map((x,i)=>({label:x.reason,v:x.n,color:colors[i%colors.length]})))}<p class="small muted">${d.total} leads lost</p></div>
+  <div>${tbl(d.by_campaign,'campaign','Program',k=>camp(k)?.name||'No program')}</div></div>${isMgr()&&!agent?`<h3 style="margin-top:14px">By caller</h3>${tbl(d.by_agent,'agent','Caller',k=>k?nameOf(k):'Unassigned')}`:''}`:'<p class="muted small">No leads were lost in this period.</p>'}`;
 }
 async function loadTransfers(from,to){
   const {data,error}=await sb.from('activities').select('created_at,actor_id,data,lead:leads(name,phone)').eq('kind','assign').eq('data->>transfer','true')
@@ -478,7 +516,7 @@ V.settings={live:false,mount(){
     <div class="row" style="margin-bottom:10px"><a class="btn primary" href="download/dialbook.apk">${ic('down')}Download Android app</a><a class="btn" href="training/" target="_blank" rel="noopener">Telecaller training (video)</a><button class="btn" data-act="copy" data-v="${esc(connCode())}">${ic('copy')}Copy connection code</button></div>
     <p class="small">Connection code (paste it into the app the first time it opens):</p><div class="code-box">${esc(connCode())}</div></div>`;
   if(!isAdmin())return head('Settings','')+`<div style="display:flex;flex-direction:column;gap:16px"><div id="waSet">${loadingHTML}</div>${phone}<div class="empty"><h3>Only admins can change settings</h3></div></div>`;
-  if(!S.sd)S.sd=clone(S.cfg);const d=S.sd;d.autoMsg=d.autoMsg||{missed:'',stages:{}};d.autoMsg.stages=d.autoMsg.stages||{};d.ai=d.ai||clone(DEF.ai);d.ai.agents=d.ai.agents||{};d.languages=d.languages||clone(DEF.languages);d.assignment=d.assignment||clone(DEF.assignment);d.assignment.rules=d.assignment.rules||[];d.nurture=d.nurture||{startHour:9,endHour:20};
+  if(!S.sd)S.sd=clone(S.cfg);const d=S.sd;d.autoMsg=d.autoMsg||{missed:'',stages:{}};d.autoMsg.stages=d.autoMsg.stages||{};d.ai=d.ai||clone(DEF.ai);d.ai.agents=d.ai.agents||{};d.languages=d.languages||clone(DEF.languages);d.assignment=d.assignment||clone(DEF.assignment);d.assignment.rules=d.assignment.rules||[];d.nurture=d.nurture||{startHour:9,endHour:20};d.scripts=d.scripts||[];d.lostReasons=d.lostReasons||clone(DEF.lostReasons);d.targets=d.targets||{calls:0,connected:0,converted:0};d.targets.agents=d.targets.agents||{};agents().forEach(m=>{d.targets.agents[m.id]=d.targets.agents[m.id]||{}});
   const stOpts=sel=>opt('','No stage change',sel)+d.stages.map(s=>opt(s.id,'→ '+s.name,sel)).join('');
   return head('Settings','Shape the CRM around how your team sells.',`<button class="btn primary" data-act="saveSet" ${S.sdirty?'':'disabled'}>Save changes</button>`)+`<div style="display:flex;flex-direction:column;gap:16px">
   <div class="card"><h2>Business</h2><label class="field" style="max-width:420px"><span>Company name (used in messages and by the AI agent)</span><input class="input" data-sp="company" value="${esc(d.company)}"></label>
@@ -500,6 +538,14 @@ V.settings={live:false,mount(){
   <button class="btn sm" data-act="setAdd" data-v="dispositions">${ic('plus')}Add outcome</button></div>
   <div class="card"><h2>Lead stages</h2>${d.stages.map((x,i)=>`<div class="row" style="margin-bottom:8px"><input class="input" style="max-width:320px" data-sp="stages.${i}.name" value="${esc(x.name)}" aria-label="Stage name">${['won','lost','new'].includes(x.id)?'<span class="small muted">fixed</span>':`<button class="btn sm ghost" data-act="setUp" data-v="${i}" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="setDel" data-v="stages.${i}" aria-label="Remove">${ic('x')}</button>`}</div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="stages">${ic('plus')}Add stage</button></div>
+  <div class="card"><h2>Lost reasons</h2><p class="small muted" style="margin-top:-6px">When a lead is marked Lost, the caller picks one of these. Reports → Lost reasons shows which come up most.</p><label class="field" style="max-width:420px"><span>One per line</span><textarea class="input" rows="8" data-sp="lostReasonsText">${esc(d.lostReasons.join('\n'))}</textarea></label></div>
+  <div class="card"><h2>Daily targets</h2><p class="small muted" style="margin-top:-6px">Each telecaller sees today's progress on the dashboard and in the phone app. Leave a box empty (or 0) for no target. A person's own numbers replace the team numbers.</p>
+  <div class="tbl-wrap"><table><thead><tr><th>Who</th><th class="r">Calls a day</th><th class="r">Connected calls</th><th class="r">Conversions</th></tr></thead><tbody>
+  <tr><td><b>Whole team (default)</b></td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.${k}" value="${esc(d.targets[k]||'')}" aria-label="Team ${k}"></td>`).join('')}</tr>
+  ${agents().filter(m=>m.role==='telecaller').map(m=>`<tr><td>${esc(m.name)}</td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.agents.${m.id}.${k}" value="${esc(d.targets.agents[m.id]?.[k]||'')}" placeholder="${esc(d.targets[k]||'')}" aria-label="${esc(m.name)} ${k}"></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
+  <div class="card"><h2>Call scripts</h2><p class="small muted" style="margin-top:-6px">What to say on the call, shown in Calling mode, on the lead and in the phone app. The best match is used: program and language, then program, then the script under Campaigns → Edit, then language only, then a general one. Use {first_name}, {program}, {city}, {agent} and {company}.</p>
+  ${d.scripts.map((x,i)=>`<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:6px"><div class="row"><input class="input" style="max-width:240px" data-sp="scripts.${i}.name" value="${esc(x.name)}" aria-label="Script name" placeholder="Name, e.g. GAC Telugu"><select class="input" style="width:auto" data-sp="scripts.${i}.campaign_id" aria-label="Program">${opt('','Any program',x.campaign_id)}${S.campaigns.map(c=>opt(c.id,c.name,x.campaign_id)).join('')}</select><select class="input" style="width:auto" data-sp="scripts.${i}.language" aria-label="Language">${opt('','Any language',x.language)}${d.languages.map(g=>opt(g,g,x.language)).join('')}</select><button class="btn sm ghost" data-act="setDel" data-v="scripts.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="8" data-sp="scripts.${i}.body" aria-label="Script" placeholder="Opening: Hello {first_name}, I am {agent} from {company}…&#10;Questions to ask…&#10;If they say the fee is high: …">${esc(x.body||'')}</textarea></div>`).join('')}
+  <button class="btn sm" data-act="setAdd" data-v="scripts">${ic('plus')}Add script</button></div>
   <div class="card"><h2>Languages</h2><label class="field" style="max-width:420px"><span>Languages your team works in, one per line</span><textarea class="input" rows="6" data-sp="languagesText">${esc(d.languages.join('\n'))}</textarea></label><p class="small muted">Save to update the language lists everywhere.</p></div>
   <div class="card"><h2>Source names</h2><label class="field" style="max-width:420px"><span>One per line (used in lists and filters)</span><textarea class="input" rows="6" data-sp="sourcesText">${esc(d.sources.join('\n'))}</textarea></label></div>
   <div class="card"><h2>Quick messages (WhatsApp app and SMS)</h2><p class="small muted" style="margin-top:-6px">Ready-made texts that open in the phone's WhatsApp or SMS app. Use {name}, {agent}, {company} and {phone}. Approved WhatsApp API templates are managed under WhatsApp above.</p>
@@ -510,7 +556,7 @@ V.settings={live:false,mount(){
 V.settings.load=async()=>{waSettings();if(isAdmin()){lsSettings();nuSettings()}};
 /* ---------- modal & drawer ---------- */
 function modal(html){$('#md').innerHTML=`<div class="overlay modal-ov" data-act="closeMd"></div><div class="modal" role="dialog" aria-modal="true"><button class="btn sm ghost x" data-act="closeMd" aria-label="Close">${ic('x')}</button>${html}</div>`;setTimeout(()=>$('#md .modal input:not([type=checkbox]),#md .modal select')?.focus(),30)}
-function closeModal(){$('#md').innerHTML=''}
+function closeModal(){$('#md').innerHTML='';if(S.lostRes){const f=S.lostRes;S.lostRes=null;f(null)}}
 function fuTime(v){const d=new Date();const at11=n=>{d.setDate(d.getDate()+n);d.setHours(11,0,0,0);return d.getTime()};return v==='1h'?now()+36e5:v==='3h'?now()+3*36e5:v==='tmr'?at11(1):v==='2d'?at11(2):v==='7d'?at11(7):null}
 function outcomeForm(p,noTimer){return `<div class="field"><span>Call outcome</span><div class="dispo-grid">${S.cfg.dispositions.map(d=>`<button type="button" class="dispo" data-act="pick" data-p="${p}" data-v="${d.id}" aria-pressed="false">${esc(d.name)}<small>${d.connected?'Connected':'Not connected'}${d.stage?' · to '+esc(stage(d.stage)?.name||''):''}</small></button>`).join('')}</div></div>
 <div class="grid2" style="margin-top:12px">${noTimer?'':`<div class="field"><span>Call duration (mm:ss)</span><div class="row"><input class="input mono" id="${p}Dur" value="00:00" style="width:90px" aria-label="Call duration"><button type="button" class="btn sm" data-act="timer" data-p="${p}" id="${p}TBtn">Start timer</button></div></div>`}
@@ -523,7 +569,7 @@ function readOutcome(p){const fv=$('#'+p+'Fu').value;return{outcome:S.pick[p],se
 
 function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
   $('#dw').innerHTML=`<div class="overlay" data-act="closeDw"></div><div class="drawer" role="dialog" aria-modal="true" aria-label="Lead details">
-    <button class="btn sm ghost x" data-act="closeDw" aria-label="Close">${ic('x')}</button><div id="dwHead">${loadingHTML}</div>
+    <button class="btn sm ghost x" data-act="closeDw" aria-label="Close">${ic('x')}</button><div id="dwHead">${loadingHTML}</div><div id="dwScript"></div>
     <div class="card" style="margin-top:14px"><h2>Log a call</h2><p class="small muted" style="margin-top:-6px">Calls made with the phone app are logged on their own. Use this for calls from other phones.</p>${outcomeForm('dw')}<div class="row" style="margin-top:12px"><button class="btn primary" data-act="saveCall" data-p="dw">Save call</button></div></div>
     <div class="card" style="margin-top:14px"><h2>Details</h2><div id="dwInfo"></div></div>
     <div id="dwNu"></div>
@@ -540,10 +586,11 @@ async function loadDrawer(){
   if(lr.error)throw lr.error;const l=lr.data;if(!l){closeDrawer();toast('This lead is not available to you.');return}
   S.lead=l;nuLeadBox(l).catch(()=>{});
   const aiBtn=aiReady()&&(isMgr()||l.assigned_to===S.me.id)&&!l.dnd?`<button class="btn" data-act="aiOne">${ic('spark')}AI call</button>`:'';
-  $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div></div>
+  $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div>${l.stage==='lost'&&l.lost_reason?`<div class="small muted" style="margin-top:6px">Lost: ${esc(l.lost_reason)}</div>`:''}</div>
     <div class="dial-phone" style="margin-top:12px;font-size:1.3rem">${esc(l.phone)}</div>
     <div class="row" style="margin-top:10px"><a class="btn call" href="tel:${esc(normPhone(l.phone))}" data-act="dial" data-p="dw">${ic('phone')}Call</a><button class="btn" data-act="wa">${ic('msg')}WhatsApp / SMS</button><button class="btn" data-act="copy" data-v="${esc(l.phone)}">${ic('copy')}Copy</button><button class="btn" data-act="editLead">${ic('edit')}Edit</button>${aiBtn}</div>`;
   if(l.source==='Incoming call')$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
+  {const sc=scriptFor(l),b=$('#dwScript');if(b)b.innerHTML=sc?`<details class="card" style="margin-top:14px" ${S.scriptOpen?'open':''} data-act="scriptTog"><summary><b>Call script</b> <span class="small muted">· ${esc(sc.title)}</span></summary><div class="script" style="margin-top:8px">${esc(fillTpl(sc.body,l))}</div></details>`:''}
   const f=(k,v)=>`<div><div class="small muted">${k}</div><div>${v||'<span class="muted">—</span>'}</div></div>`;
   $('#dwInfo').innerHTML=`<div class="grid2">
     <label class="field"><span>Stage</span><select class="input" data-lset="stage">${stageOpts(l.stage)}</select></label>
@@ -599,12 +646,19 @@ function leadModal(id){
     try{
       const {data:dups}=await R(sb.from('leads').select('id,name,assigned_to').eq('phone_key',pkey(d.phone)).neq('id',id||'00000000-0000-0000-0000-000000000000').limit(1));
       if(dups.length&&!btn.dataset.force){$('#fMsg').textContent=`${dups[0].name||'A lead'} already has this number (${nameOf(dups[0].assigned_to)}). Press save again to add it anyway.`;btn.dataset.force='1';return}
-      if(id){const o=S.lead;await R(sb.from('leads').update(d).eq('id',id));if(o.stage!==d.stage)await addActivity(id,'stage','',{from:o.stage,to:d.stage});if(isMgr()&&(o.assigned_to||null)!==(d.assigned_to||null))await addActivity(id,'assign','',{to:d.assigned_to||''});closeModal();toast('Lead updated');loadDrawer()}
+      if(id){const o=S.lead;await R(sb.from('leads').update(d).eq('id',id));if(o.stage!==d.stage)await addActivity(id,'stage','',{from:o.stage,to:d.stage});if(d.stage==='lost'&&o.stage!=='lost'&&S.hasLost){closeModal();const r=await askLost(1);if(r)await rpc('set_lost_reason',{p_lead:id,p_reason:r})}if(isMgr()&&(o.assigned_to||null)!==(d.assigned_to||null))await addActivity(id,'assign','',{to:d.assigned_to||''});closeModal();toast('Lead updated');loadDrawer()}
       else{d.created_by=S.me.id;const {data}=await R(sb.from('leads').insert(d).select('id').single());await addActivity(data.id,'created',d.source);closeModal();toast('Lead added');openLead(data.id);if(S.view==='leads')V.leads.load()}
     }catch(err){fail(err)}
   };
 }
-function fillTpl(b,l){return String(b).replace(/\{name\}/g,(l.name||'').split(' ')[0]||'there').replace(/\{agent\}/g,S.me.name||'our team').replace(/\{company\}/g,S.cfg.company||'').replace(/\{phone\}/g,l.phone||'')}
+/* The best call script for a lead: program + language, program, the program's own script (Campaigns), language, general */
+function scriptFor(l){const c=camp(l.campaign_id),lang=(l.language||'').toLowerCase();let best=null,bs=-1;
+  for(const x of S.cfg.scripts||[]){if(!(x.body||'').trim())continue;if(x.campaign_id&&x.campaign_id!==l.campaign_id)continue;if(x.language&&x.language.toLowerCase()!==lang)continue;
+    const sc=(x.campaign_id?4:0)+(x.language?2:0);if(sc>bs){bs=sc;best=x}}
+  if(best&&bs>=4)return{title:best.name||'Call script',body:best.body};
+  if(c&&(c.script||'').trim())return{title:c.name,body:c.script};
+  return best?{title:best.name||'Call script',body:best.body}:null}
+function fillTpl(b,l){return String(b).replace(/\{first_name\}/g,(l.name||'').split(' ')[0]||'there').replace(/\{program\}/g,camp(l.campaign_id)?.name||'').replace(/\{city\}/g,l.city||'').replace(/\{name\}/g,(l.name||'').split(' ')[0]||'there').replace(/\{agent\}/g,S.me.name||'our team').replace(/\{company\}/g,S.cfg.company||'').replace(/\{phone\}/g,l.phone||'')}
 function msgModal(){
   const l=S.lead;if(!l)return;const ph=normPhone(l.phone);
   modal(`<h2>Message ${esc(l.name)}</h2><p class="muted small">Opens WhatsApp or your SMS app with the message filled in.</p><div class="list" style="margin-top:12px">
@@ -653,15 +707,16 @@ V.dialer={live:false,mount(){
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">${outcomeForm('dc')}
     <div class="row" style="margin-top:14px"><button class="btn primary lg" data-act="saveCall" data-p="dc">Save and next lead</button><button class="btn" data-act="lead" data-id="${l.id}">Full details</button></div></div>
   <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
-    <div class="card"><h2>Call script${c?' · '+esc(c.name):''}</h2><div class="script">${c&&c.script?esc(fillTpl(c.script,l)):'No script for this campaign yet. Add one under Campaigns → Edit.'}</div></div>
+    ${(()=>{const sc=scriptFor(l);return `<div class="card"><h2>Call script${sc?' · '+esc(sc.title):''}</h2><div class="script">${sc?esc(fillTpl(sc.body,l)):'No script for this lead yet. Add one in Settings → Call scripts (by program and language), or under Campaigns → Edit.'}</div></div>`})()}
     ${l.note?`<div class="card"><h2>About this lead</h2><p style="white-space:pre-wrap;margin:0">${esc(l.note)}</p></div>`:''}
     <div class="card"><h2>Recent calls</h2>${cr.data.length?cr.data.map(x=>`<div class="small" style="margin-bottom:8px"><b>${esc(dispo(x.outcome)?.name||'Outcome not logged')}</b> · ${dur(x.duration)} ${srcBadge(x.source)}<div class="muted">${esc(callerOf(x))} · ${esc(fmtDT(x.started_at))}</div>${x.note?`<div>${esc(x.note)}</div>`:''}</div>`).join(''):'<p class="muted small">No calls yet.</p>'}</div></div></div>`;
 }};
 async function saveCall(p){
   const leadId=p==='dc'?S.dialLead?.id:S.openLead;if(!leadId)return;
   const o=readOutcome(p);if(!o.outcome)return toast('Pick a call outcome first');
+  let why=null;if(lostDispo(o.outcome)){why=await askLost(1);if(why===null)return}
   tStop(p);
-  try{await logManualCall(leadId,o)}catch(e){return fail(e)}
+  try{await logManualCall(leadId,o);if(why&&S.hasLost)await rpc('set_lost_reason',{p_lead:leadId,p_reason:why})}catch(e){return fail(e)}
   toast('Call saved'+(o.fu?' · follow-up '+fmtDT(o.fu):''));
   if(p==='dc'){const D=S.dialer;D.saved++;if(dispo(o.outcome)?.connected)D.conn++;D.i++;S.pick.dc=null;render()}
   else{S.pick.dw=null;$$('#dw .dispo').forEach(b=>b.setAttribute('aria-pressed','false'));$('#dwDur').value='00:00';$('#dwNote').value='';$('#dwFu').value='';loadDrawer()}
@@ -786,6 +841,7 @@ async function loadBase(){
   if(S.hasContacts===undefined){const {error}=await sb.from('leads').select('contact_only').limit(1);S.hasContacts=!error}
   if(S.hasTagsText===undefined){const {error}=await sb.from('leads').select('tags_text').limit(1);S.hasTagsText=!error}
   if(S.hasEnq===undefined){const {error}=await sb.from('leads').select('last_enquiry_at').limit(1);S.hasEnq=!error}
+  if(S.hasLost===undefined){const {error}=await sb.from('leads').select('lost_reason').limit(1);S.hasLost=!error}
 }
 
 /* ---------- sign in ---------- */
@@ -859,6 +915,7 @@ document.addEventListener('click',async e=>{
     case'lead':openLead(id);break;
     case'closeDw':closeDrawer();break;
     case'closeMd':closeModal();break;
+    case'scriptTog':setTimeout(()=>{S.scriptOpen=!!t.open},0);break;
     case'import':importModal();break;
     case'impPaste':{const r=parseCSV($('#impPaste').value);if(r.length<2)return toast('Paste a header row and at least one lead');mapStep(r);break}
     case'impRun':runImport(t);break;
@@ -886,7 +943,9 @@ document.addEventListener('click',async e=>{
     case'fuq':$('#'+p+'Fu').value=v==='none'?'':toLocalInput(fuTime(v));break;
     case'saveCall':saveCall(p);break;
     case'logPending':S.pick.pm=null;pendingModal(id);break;
-    case'savePending':{const o=readOutcome('pm');if(!o.outcome)return toast('Pick a call outcome first');await rpc('set_call_outcome',{p_call:id,p_outcome:o.outcome,p_note:o.note,p_follow_up:o.fu?iso(o.fu):null});closeModal();toast('Outcome saved');loadDrawer();break}
+    case'savePending':{const o=readOutcome('pm');if(!o.outcome)return toast('Pick a call outcome first');let why=null;if(lostDispo(o.outcome)){why=await askLost(1);if(why===null)return toast('Not saved: pick a reason, or a different outcome')}
+      await rpc('set_call_outcome',{p_call:id,p_outcome:o.outcome,p_note:o.note,p_follow_up:o.fu?iso(o.fu):null});if(why&&S.hasLost&&S.lead)await rpc('set_lost_reason',{p_lead:S.lead.id,p_reason:why});closeModal();toast('Outcome saved');loadDrawer();break}
+    case'lostPick':{const r=v||($('#lostOther')?.value||'').trim();if(!r)return toast('Pick or type a reason');const f=S.lostRes;S.lostRes=null;closeModal();if(f)f(r);break}
     case'playRec':{const {data,error}=await sb.storage.from('recordings').createSignedUrl(v,3600);if(error)throw error;const box=t.parentElement;box.innerHTML=`<audio controls autoplay src="${esc(data.signedUrl)}"></audio>`;break}
     case'addNote':{const tx=$('#dwNoteAdd').value.trim();if(!tx||!S.openLead)return;await addActivity(S.openLead,'note',tx);$('#dwNoteAdd').value='';loadDrawer();break}
     case'expTransfers':saveCSV(`lead-transfers-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['Date & time','Lead','Phone','From','To','By','Reason'],...(S.repTransfers||[]).map(a=>[new Date(a.created_at).toLocaleString('en-IN'),a.lead?.name||'',a.lead?.phone||'',nameOf(a.data.from),nameOf(a.data.to),nameOf(a.actor_id),a.data.note||''])]);break;
@@ -927,8 +986,10 @@ document.addEventListener('click',async e=>{
     case'dStart':{t.disabled=true;const d=S.dialSetup;let q=queueQuery('id');q=d.order==='new'?q.order('created_at',{ascending:false}):d.order==='hot'?(d.queue==='fresh'?q.order('priority_rank').order('created_at',{ascending:false}):q.order('priority_rank').order('next_follow_up_at',{nullsFirst:false})):d.queue==='due'?q.order('next_follow_up_at'):q.order('created_at');const {data}=await R(q.limit(500));startDialer(data.map(x=>x.id));break}
     case'dSkip':tStop('dc');S.dialer.skipped++;S.dialer.i++;S.pick.dc=null;render();break;
     case'dEnd':tStop('dc');S.dialer=null;render();break;
-    case'saveSet':{const d=clone(S.sd);delete d.languagesText;delete d.sourcesText;d.sources=d.sources.filter(Boolean);d.languages=(d.languages||[]).filter(Boolean);(d.assignment?.rules||[]).forEach(r=>{if(r.mode!=='people')r.agents=[]});['startHour','endHour','maxBatch'].forEach(k=>d.ai[k]=+d.ai[k]||DEF.ai[k]);await R(sb.from('settings').update({data:d,updated_at:iso(now())}).eq('id',1));S.sdirty=false;S.sd=null;await loadBase();toast('Settings saved');render();break}
-    case'setAdd':{const d=S.sd;if(v==='dispositions')d.dispositions.push({id:gid('d'),name:'New outcome',connected:true,stage:'',fu:false});if(v==='stages')d.stages.splice(d.stages.length-2,0,{id:gid('s'),name:'New stage'});if(v==='templates')d.templates.push({id:gid('t'),name:'New template',channel:'whatsapp',body:'Hi {name}, '});S.sdirty=true;render();break}
+    case'saveSet':{const d=clone(S.sd);delete d.languagesText;delete d.sourcesText;delete d.lostReasonsText;
+      if(d.targets){const num=x=>{const n=Math.round(+x);return n>0?n:''};const T=d.targets;['calls','connected','converted'].forEach(k=>T[k]=num(T[k]));for(const [uid,o] of Object.entries(T.agents||{})){['calls','connected','converted'].forEach(k=>{o[k]=num(o[k]);if(o[k]==='')delete o[k]});if(!Object.keys(o).length)delete T.agents[uid]}}
+      d.scripts=(d.scripts||[]).filter(x=>(x.body||'').trim());d.sources=d.sources.filter(Boolean);d.languages=(d.languages||[]).filter(Boolean);(d.assignment?.rules||[]).forEach(r=>{if(r.mode!=='people')r.agents=[]});['startHour','endHour','maxBatch'].forEach(k=>d.ai[k]=+d.ai[k]||DEF.ai[k]);await R(sb.from('settings').update({data:d,updated_at:iso(now())}).eq('id',1));S.sdirty=false;S.sd=null;await loadBase();toast('Settings saved');render();break}
+    case'setAdd':{const d=S.sd;if(v==='dispositions')d.dispositions.push({id:gid('d'),name:'New outcome',connected:true,stage:'',fu:false});if(v==='stages')d.stages.splice(d.stages.length-2,0,{id:gid('s'),name:'New stage'});if(v==='templates')d.templates.push({id:gid('t'),name:'New template',channel:'whatsapp',body:'Hi {name}, '});if(v==='scripts')d.scripts.push({id:gid('sc'),name:'',campaign_id:'',language:'',body:''});S.sdirty=true;render();break}
     case'setDel':{const[k,i]=v.split('.');if(k==='stages'){const sid=S.sd.stages[+i].id;const {count}=await R(sb.from('leads').select('id',{count:'exact',head:true}).eq('stage',sid));if(count)return toast(`${count} leads are in this stage. Move them first.`)}S.sd[k].splice(+i,1);S.sdirty=true;render();break}
     case'setUp':{const i=+v;const s=S.sd.stages;if(i>1&&!['won','lost'].includes(s[i-1].id)){[s[i-1],s[i]]=[s[i],s[i-1]];S.sdirty=true;render()}break}
   }}catch(err){fail(err);if(t.disabled)t.disabled=false}
@@ -937,7 +998,7 @@ let qT;
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='lq'){S.lf.q=t.value;S.page=0;clearTimeout(qT);qT=setTimeout(()=>V.leads.load().catch(fail),350)}
-  else if(t.dataset.sp&&t.type!=='checkbox'&&t.tagName!=='SELECT'){if(t.dataset.sp==='sourcesText')S.sd.sources=t.value.split('\n').map(s=>s.trim());else if(t.dataset.sp==='languagesText')S.sd.languages=t.value.split('\n').map(s=>s.trim()).filter(Boolean);else if(t.dataset.sp.startsWith('ai.agents.')){S.sd.ai.agents[t.dataset.sp.slice(10)]=t.value.trim()}else setPath(S.sd,t.dataset.sp,t.value);if(!S.sdirty){S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false}}
+  else if(t.dataset.sp&&t.type!=='checkbox'&&t.tagName!=='SELECT'){if(t.dataset.sp==='sourcesText')S.sd.sources=t.value.split('\n').map(s=>s.trim());else if(t.dataset.sp==='languagesText')S.sd.languages=t.value.split('\n').map(s=>s.trim()).filter(Boolean);else if(t.dataset.sp==='lostReasonsText')S.sd.lostReasons=t.value.split('\n').map(s=>s.trim()).filter(Boolean);else if(t.dataset.sp.startsWith('ai.agents.')){S.sd.ai.agents[t.dataset.sp.slice(10)]=t.value.trim()}else setPath(S.sd,t.dataset.sp,t.value);if(!S.sdirty){S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false}}
 });
 document.addEventListener('change',async e=>{
   const t=e.target,id=t.id;
@@ -948,7 +1009,8 @@ document.addEventListener('change',async e=>{
   if(t.classList.contains('selOne')){t.checked?S.sel.add(t.dataset.id):S.sel.delete(t.dataset.id);return V.leads.load()}
   if(id==='bk-agent'||id==='bk-stage'||id==='bk-camp'){const v=t.value;if(!v)return;const ids=[...S.sel];t.disabled=true;
     if(id==='bk-agent'){if(v==='_rr'){let ag=agents().filter(m=>m.role==='telecaller').map(m=>m.id);if(!ag.length)ag=agents().map(m=>m.id);await roundRobin(ids,ag)}else{await assignLeads(ids,v==='_none'?null:v);toast(`${ids.length} leads assigned`)}}
-    if(id==='bk-stage'){for(const c of chunk(ids,200)){await R(sb.from('leads').update({stage:v}).in('id',c));await R(sb.from('activities').insert(c.map(x=>({lead_id:x,actor_id:S.me.id,kind:'stage',data:{to:v}}))))}toast(`${ids.length} leads moved`)}
+    if(id==='bk-stage'){const d={stage:v};if(v==='lost'&&S.hasLost){const r=await askLost(ids.length);if(r===null){t.disabled=false;t.value='';return}d.lost_reason=r}
+      for(const c of chunk(ids,200)){await R(sb.from('leads').update(d).in('id',c));await R(sb.from('activities').insert(c.map(x=>({lead_id:x,actor_id:S.me.id,kind:'stage',data:{to:v}}))))}toast(`${ids.length} leads moved`)}
     if(id==='bk-camp'){for(const c of chunk(ids,200))await R(sb.from('leads').update({campaign_id:v==='_none'?null:v}).in('id',c));toast(`${ids.length} leads updated`)}
     S.sel.clear();return V.leads.load()}
   if(id==='fuAgent'){S.fuAgent=t.value;return V.followups.load()}
@@ -963,7 +1025,7 @@ document.addEventListener('change',async e=>{
   if(id==='dsW'){S.dialSetup.who=t.value;return V.dialer.load()}
   if(id==='dsO'){S.dialSetup.order=t.value;return}
   if(t.dataset.lset){const l=S.lead;if(!l)return;const k=t.dataset.lset;const v=t.type==='checkbox'?t.checked:(t.value||null);
-    if(k==='stage')await changeStage(l,v);else if(k==='assigned_to'){await assignLeads([l.id],v)}else await R(sb.from('leads').update({[k]:(k==='priority'||k==='language')?(v||''):v}).eq('id',l.id));
+    if(k==='stage'){if(await changeStage(l,v)===false)return loadDrawer()}else if(k==='assigned_to'){await assignLeads([l.id],v)}else await R(sb.from('leads').update({[k]:(k==='priority'||k==='language')?(v||''):v}).eq('id',l.id));
     toast('Saved');return loadDrawer()}
   if(t.dataset.sp){const v=t.type==='checkbox'?t.checked:t.value;setPath(S.sd,t.dataset.sp,v);S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false}
   }catch(err){fail(err)}
@@ -973,7 +1035,7 @@ let dragId=null;
 document.addEventListener('dragstart',e=>{const c=e.target.closest&&e.target.closest('.kcard');if(!c)return;dragId=c.dataset.id;try{e.dataTransfer.setData('text/plain',dragId);e.dataTransfer.effectAllowed='move'}catch(_){}});
 document.addEventListener('dragover',e=>{const c=e.target.closest&&e.target.closest('.col');if(!c||!dragId)return;e.preventDefault();$$('.col.over').forEach(x=>x!==c&&x.classList.remove('over'));c.classList.add('over')});
 document.addEventListener('drop',async e=>{const c=e.target.closest&&e.target.closest('.col');$$('.col.over').forEach(x=>x.classList.remove('over'));if(!c||!dragId)return;e.preventDefault();const lid=dragId;dragId=null;
-  try{const {data:l}=await R(sb.from('leads').select('id,stage,name').eq('id',lid).single());if(l.stage!==c.dataset.stage){await changeStage(l,c.dataset.stage);toast(`${l.name} moved to ${stage(c.dataset.stage)?.name}`);V.pipeline.load()}}catch(err){fail(err)}});
+  try{const {data:l}=await R(sb.from('leads').select('id,stage,name').eq('id',lid).single());if(l.stage!==c.dataset.stage){if(await changeStage(l,c.dataset.stage)===false)return;toast(`${l.name} moved to ${stage(c.dataset.stage)?.name}`);V.pipeline.load()}}catch(err){fail(err)}});
 document.addEventListener('dragend',()=>{dragId=null;$$('.col.over').forEach(x=>x.classList.remove('over'))});
 
 
@@ -1179,12 +1241,13 @@ async function nuSettings(){
   await nuLoad();if(!S.wa.loaded)await loadWa();if(!$('#nuSet'))return;
   if(S.nu.missing){box.innerHTML=`<div class="card"><h2>Nurture sequences</h2><p class="muted">Not installed yet. Run <b>supabase/nurture.sql</b> in the Supabase SQL editor and redeploy the <b>whatsapp</b> function.</p></div>`;return}
   const counts={};await Promise.all(S.nu.seqs.map(async q=>{const [a,d]=await Promise.all([sb.from('nurture_enrollments').select('id',{count:'exact',head:true}).eq('sequence_id',q.id).eq('status','active'),sb.from('nurture_enrollments').select('id',{count:'exact',head:true}).eq('sequence_id',q.id).neq('status','active')]);counts[q.id]={active:a.count||0,ended:d.count||0}}));
-  S.nu.counts=counts;if(!$('#nuSet'))return;const d=S.sd;
+  S.nu.counts=counts;const wait={};try{const {data}=await sb.rpc('contact_batch_waiting');for(const w of data||[])wait[w.sequence_id]=w}catch(e){}S.nu.wait=wait;if(!$('#nuSet'))return;const d=S.sd;
   box.innerHTML=`<div class="card"><h2>Nurture sequences</h2><p class="small muted" style="margin-top:-6px">Automatic WhatsApp follow-ups: each step sends an approved template a set number of days after the lead joins. A lead's sequence stops when they reply, are converted or lost, or are marked do not call. Use ${esc(NU_VARS)} in template values.</p>
     <div class="list">${S.nu.seqs.map(q=>{const c=counts[q.id]||{};const steps=(q.steps||[]);return `<div class="li" style="align-items:flex-start"><div class="grow"><b>${esc(q.name)}</b> ${q.active?'<span class="pill" style="color:var(--call)"><span class="dot"></span><span style="color:var(--fg)">On</span></span>':'<span class="pill" style="color:var(--muted)"><span class="dot"></span><span style="color:var(--fg)">Off</span></span>'}
       <div class="small muted">${esc(q.campaign_id?(camp(q.campaign_id)?.name||'Program'):'Any program')} · ${esc(q.language||'Any language')} · ${esc(q.cities||'Any city')} · ${q.auto_enroll?'new leads join automatically':'manual only'} · ${c.active||0} in progress, ${c.ended||0} finished or stopped</div>
-      <div class="small" style="margin-top:4px">${steps.map((x,i)=>`Day ${esc(x.day)}: ${esc(nuTplName(x.template_id)||'— pick a template —')}`).join(' → ')||'<span class="muted">No steps</span>'}</div></div>
-      <button class="btn sm" data-act="nuEdit" data-id="${q.id}">${ic('edit')}Edit</button><button class="btn sm" data-act="nuExisting" data-id="${q.id}">Add existing leads</button></div>`}).join('')||'<p class="muted small">No sequences yet.</p>'}</div>
+      <div class="small" style="margin-top:4px">${steps.map((x,i)=>`Day ${esc(x.day)}: ${esc(nuTplName(x.template_id)||'— pick a template —')}`).join(' → ')||'<span class="muted">No steps</span>'}</div>
+      ${wait[q.id]?`<div class="small" style="margin-top:4px;color:var(--accent)">Contact list: ${wait[q.id].waiting} numbers waiting, next batch ${esc(fmtDT(wait[q.id].next_at))} <button class="btn sm ghost" data-act="nuCBCancel" data-id="${q.id}">Cancel waiting</button></div>`:''}</div>
+      <div class="row" style="gap:6px;justify-content:flex-end"><button class="btn sm" data-act="nuEdit" data-id="${q.id}">${ic('edit')}Edit</button><button class="btn sm" data-act="nuExisting" data-id="${q.id}">Add existing leads</button>${S.hasContacts?`<button class="btn sm" data-act="nuContacts" data-id="${q.id}">Send to contact list</button>`:''}</div></div>`}).join('')||'<p class="muted small">No sequences yet.</p>'}</div>
     <div class="row" style="margin-top:12px"><button class="btn sm" data-act="nuEdit">${ic('plus')}New sequence</button><button class="btn sm" data-act="nuRun">Send due messages now</button><span id="nuMsg" class="small muted"></span></div>
     <div class="grid2" style="margin-top:12px;max-width:520px"><label class="field"><span>Send between (hour, IST)</span><input class="input" type="number" min="0" max="23" data-sp="nurture.startHour" value="${esc(d?.nurture?.startHour??9)}"></label><label class="field"><span>and (hour, IST)</span><input class="input" type="number" min="1" max="24" data-sp="nurture.endHour" value="${esc(d?.nurture?.endHour??20)}"></label></div>
     <p class="small muted">Messages due outside these hours wait for the next window. Save changes at the top after editing the hours.</p>
@@ -1228,6 +1291,21 @@ function nuModal(){const q=S.nu.edit;const accs=nuAccounts();if(!q.account_id&&a
   $('#nuAcc')?.addEventListener('change',()=>{nuReadForm();nuModal()});
   $$('.nuTpl').forEach(x=>x.addEventListener('change',()=>{nuReadForm();nuModal()}));
 }
+/* Send a sequence to the contact list (old data), a batch a day */
+function nuContactsModal(id){const q=S.nu.seqs.find(x=>x.id===id);if(!q)return;if(!q.active)return toast('Switch the sequence on first (Edit → Sequence is on).');
+  S.nu.cb=id;
+  modal(`<h2>Send “${esc(q.name)}” to the contact list</h2><p class="small muted" style="margin-top:-6px">For the old data kept for messages. The numbers are sent in daily batches from the sequence's WhatsApp number, between ${esc(S.cfg.nurture?.startHour??9)}:00 and ${esc(S.cfg.nurture?.endHour??20)}:00. Anyone who replies comes into the Pipeline with their history, for a call.</p>
+  <div class="grid2"><label class="field"><span>Program of the contacts</span><select class="input" id="cbCamp">${campOpts(q.campaign_id||'','Any program')}</select></label>
+  <label class="field"><span>Language</span><select class="input" id="cbLang">${langOpts(q.language||'','Any language')}</select></label>
+  <label class="field"><span>City contains</span><input class="input" id="cbCity" placeholder="e.g. Hyderabad (blank = any)"></label>
+  <label class="field"><span>Tag</span><input class="input" id="cbTag" placeholder="blank = any"></label>
+  <label class="field"><span>Numbers per day</span><input class="input" type="number" id="cbPer" min="10" max="5000" value="200"></label>
+  <label class="field"><span>Most numbers in total</span><input class="input" type="number" id="cbMax" min="0" placeholder="blank = all that match"></label></div>
+  <p class="small muted">Start small (100–250 a day). A new WhatsApp number can message about 250 new people a day; if many people block or report the messages, Meta lowers your limit. Send only to people who gave you their number.</p>
+  <div id="cbMsg" class="small" style="margin:8px 0"></div>
+  <div class="row"><button class="btn" data-act="nuCBPrev">Count numbers</button><button class="btn primary" id="cbGo" data-act="nuCBGo" disabled>Start sending</button><button class="btn ghost" data-act="closeMd">Cancel</button></div>`)}
+function nuCBRead(){const per=Math.round(+$('#cbPer').value||0);if(per<10)return toast('Numbers per day: at least 10'),null;
+  return {seq:S.nu.cb,camp:$('#cbCamp').value||null,lang:$('#cbLang').value||'',city:$('#cbCity').value.trim(),tag:$('#cbTag').value.trim(),per,limit:Math.max(0,Math.round(+$('#cbMax').value||0))}}
 async function nuLeadBox(l){
   const box=$('#dwNu');if(!box)return;
   const {data,error}=await sb.from('nurture_enrollments').select('*, seq:nurture_sequences(name,steps)').eq('lead_id',l.id).order('enrolled_at',{ascending:false}).limit(5);
@@ -1256,6 +1334,13 @@ document.addEventListener('click',async e=>{
     case'nuExisting':{const q=S.nu.seqs.find(x=>x.id===id);if(!q?.active)return toast('Switch the sequence on first (Edit → Sequence is on).');
       const days=prompt(`Add open ${q.language?q.language+' ':''}leads${q.campaign_id?' of '+(camp(q.campaign_id)?.name||'this program'):''} that joined in the last how many days?`,'30');if(days===null)break;
       const n=await rpc('nurture_enroll_existing',{p_seq:id,p_days:Math.max(1,+days||30)});toast(`${n||0} leads added to “${q.name}”`);nuSettings();break}
+    case'nuContacts':nuContactsModal(id);break;
+    case'nuCBPrev':case'nuCBGo':{const f=nuCBRead();if(!f)break;t.disabled=true;try{
+      if(a==='nuCBPrev'){const n=await rpc('contact_batch_preview',{p_seq:f.seq,p_campaign:f.camp,p_language:f.lang,p_city:f.city,p_tag:f.tag});const tot=f.limit?Math.min(n,f.limit):n;
+        $('#cbMsg').innerHTML=n?`<b>${n}</b> contact-list numbers match.${f.limit&&n>f.limit?` The first ${f.limit} will be sent.`:''} At ${f.per} a day this takes <b>${Math.ceil(tot/f.per)} day${Math.ceil(tot/f.per)>1?'s':''}</b>.`:'No contact-list numbers match (numbers already in a running sequence, or that already got this one, are left out).';$('#cbGo').disabled=!n}
+      else{const r=await rpc('contact_batch_send',{p_seq:f.seq,p_campaign:f.camp,p_language:f.lang,p_city:f.city,p_tag:f.tag,p_per_day:f.per,p_limit:f.limit});closeModal();toast(`${r.added} numbers queued: ${r.per_day} a day for ${r.days} day${r.days>1?'s':''}`);nuSettings()}
+    }catch(e){fail(/contact_batch/.test(e.message)?{message:'Run supabase/sales-tools.sql in Supabase first.'}:e)}finally{t.disabled=false}break}
+    case'nuCBCancel':arm(t,async()=>{const n=await rpc('contact_batch_cancel',{p_seq:id});toast(`${n} waiting numbers removed`);nuSettings()},'Click again to cancel');break;
     case'nuRun':{t.disabled=true;$('#nuMsg').textContent='Sending…';try{const r=await waFn({action:'nurture_run'});$('#nuMsg').textContent=r.skipped||`${r.sent||0} sent, ${r.failed||0} failed, ${r.stopped||0} stopped, ${r.done||0} finished`}finally{t.disabled=false}nuSettings();break}
     case'nuStopLead':await R(sb.from('nurture_enrollments').update({status:'stopped',stop_reason:`Stopped by ${S.me.name}`}).eq('id',id));toast('Stopped');if(S.lead)nuLeadBox(S.lead);break;
     case'nuStartLead':{const q=S.nu.seqs.find(x=>x.id===$('#nuPick').value);if(!q||!S.lead)break;const first=+(q.steps?.[0]?.day||0);
