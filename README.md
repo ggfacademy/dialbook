@@ -301,6 +301,7 @@ supabase/enquiry-date.sql            "enquired" date per lead (also set when som
 supabase/merge-duplicates.sql        merges leads duplicated by importing a file twice (keeps the oldest, with its history)
 supabase/pipeline-contacts.sql       keeps the contact list out of Pipeline counts; moves untouched old imports to the contact list
 supabase/conversion.sql              hot leads from form answers, new enquiries due at once, 2-minute WhatsApp nurture, speed-to-lead report
+supabase/auto-messages.sql           automatic WhatsApp after a not-connected call and on stage changes (e.g. Payment pending)
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
