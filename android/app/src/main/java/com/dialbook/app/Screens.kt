@@ -120,8 +120,8 @@ private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: 
             .replace("{program}", camp.optString("name")).replace("{city}", l.optString("city"))
             .replace("{agent}", Prefs(this).name).replace("{company}", settings.optString("company"))
         val k = card()
-        k.add(text("▸ Call script · $title", 15f, ACCENT, true))
-        val tv = text(filled, 15f, FG).apply { visibility = android.view.View.GONE }
+        k.add(text("▸ Call script · $title", 15f, BaseActivity.ACCENT, true))
+        val tv = text(filled, 15f, BaseActivity.FG).apply { visibility = android.view.View.GONE }
         k.add(tv, 6)
         k.setOnClickListener {
             val open = tv.visibility != android.view.View.VISIBLE
