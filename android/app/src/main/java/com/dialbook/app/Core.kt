@@ -73,6 +73,7 @@ class Prefs(ctx: Context) {
     var recordingsEnabled: Boolean get() = p.getBoolean("recOn", true); set(v) = p.edit().putBoolean("recOn", v).apply()
     var extraFolder: String get() = p.getString("folder", "") ?: ""; set(v) = p.edit().putString("folder", v).apply()
     var dispositions: String get() = p.getString("dispos", "") ?: ""; set(v) = p.edit().putString("dispos", v).apply()
+    var settingsJson: String get() = p.getString("settings", "{}") ?: "{}"; set(v) = p.edit().putString("settings", v).apply()
     var pendingRecs: String get() = p.getString("pendingRecs", "[]") ?: "[]"; set(v) = p.edit().putString("pendingRecs", v).apply()
     /** Numbers the telecaller marked "Personal call" (last 10 digits). Kept only on this phone. */
     var personal: Set<String> get() = p.getStringSet("personal", emptySet()) ?: emptySet(); set(v) = p.edit().putStringSet("personal", v).apply()
@@ -225,14 +226,22 @@ object Api {
 
     fun loadDispositions(ctx: Context): JSONArray {
         val p = Prefs(ctx)
+        loadSettings(ctx)
+        return try { JSONArray(p.dispositions) } catch (e: Exception) { JSONArray() }
+    }
+
+    /** The CRM's settings (outcomes, lost reasons, call scripts, company name); the last copy is kept for offline use. */
+    fun loadSettings(ctx: Context): JSONObject {
+        val p = Prefs(ctx)
         try {
             val arr = JSONArray(get(ctx, "/rest/v1/settings?select=data&id=eq.1"))
             if (arr.length() > 0) {
-                val d = arr.getJSONObject(0).getJSONObject("data").optJSONArray("dispositions")
-                if (d != null) p.dispositions = d.toString()
+                val data = arr.getJSONObject(0).getJSONObject("data")
+                data.optJSONArray("dispositions")?.let { p.dispositions = it.toString() }
+                p.settingsJson = data.toString()
             }
         } catch (e: Exception) { /* use cached copy */ }
-        return try { JSONArray(p.dispositions) } catch (e: Exception) { JSONArray() }
+        return try { JSONObject(p.settingsJson) } catch (e: Exception) { JSONObject() }
     }
 }
 

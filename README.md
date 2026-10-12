@@ -263,6 +263,16 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 
 **Do not contact.** On a lead, tick **Do not contact**, or pick the call outcome **Asked not to be contacted**. The lead is then left out of calling lists, the phone app, AI calls, nurture and WhatsApp sending, also if they enquire again. Untick it only if the customer agrees to be contacted again.
 
+### Lost reasons, daily targets, call scripts and contact-list batches
+
+Run `supabase/sales-tools.sql` once in the SQL Editor, then redeploy the **leadsources** edge function.
+
+- **Lost reasons**: when a lead is marked Lost (stage, Pipeline, bulk, or an outcome like "Not interested"), the caller picks why. Edit the list in **Settings → Lost reasons**; see **Reports → Lost reasons**.
+- **Daily targets**: **Settings → Daily targets** (team default and per telecaller). Progress shows on the dashboard and in the phone app.
+- **Call scripts**: **Settings → Call scripts**, by program and language. Shown in Calling mode, on the lead and in the phone app.
+- **Contact list in batches**: **Settings → Nurture sequences → Send to contact list** sends a sequence to the old data, a set number a day.
+- **Facebook**: leads are also pulled every 15 minutes, in case Meta's instant delivery misses one.
+
 ## Backups (daily, to Dropbox)
 
 Every night at 2:00 am India time, GitHub copies the CRM data into your Dropbox folder `/CRM` (on the PC: `F:\Dropbox\CRM`) as `dialbook-YYYY-MM-DD.zip`. Each zip has the main tables as CSV files for Excel (`csv/leads.csv`…), a full copy for restoring (`database.sql`, `logins.sql`) and a README. The last 30 days are kept. Call recordings are not included.
@@ -302,6 +312,7 @@ supabase/merge-duplicates.sql        merges leads duplicated by importing a file
 supabase/pipeline-contacts.sql       keeps the contact list out of Pipeline counts; moves untouched old imports to the contact list
 supabase/conversion.sql              hot leads from form answers, new enquiries due at once, 2-minute WhatsApp nurture, speed-to-lead report
 supabase/auto-messages.sql           automatic WhatsApp after a not-connected call and on stage changes (e.g. Payment pending)
+supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking

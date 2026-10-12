@@ -1,4 +1,5 @@
-// Dialbook Pro – "leadsources" edge function (keep "Verify JWT" ON). Admins only.
+// Dialbook Pro – "leadsources" edge function ("Verify JWT" OFF: it checks the sign-in itself). Admins only,
+// except the 15-minute Facebook check, which the scheduler calls with its password (x-cron-token).
 // Actions:
 //   status                         → Facebook setup state and webhook addresses
 //   fb_setup    { app_secret?, user_token?, api_version? }
@@ -71,9 +72,68 @@ function mapAnswers(pairs: Array<[string, string]>) {
   return m;
 }
 
+/* Pull the leads a Facebook Page received in the last `days` days. Leads already in the CRM are skipped. */
+async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
+  const { data: s } = await admin.from("lead_source_secrets").select("data").eq("source_id", src.id).maybeSingle();
+  const token = s?.data?.page_token || "";
+  const since = Math.floor(Date.now() / 1000) - Math.min(90, Math.max(1, days || 7)) * 86400;
+  const forms = (await graph(`${src.config.page_id}/leadgen_forms?fields=id,name&limit=200`, token, ver)).data || [];
+  const counts: Obj = { created: 0, existing: 0, duplicate: 0, skipped: 0 };
+  const cfg = src.config || {};
+  for (const f of forms) {
+    const filtering = encodeURIComponent(JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]));
+    let next: string | null = `https://graph.facebook.com/${ver}/${f.id}/leads?fields=id,created_time,field_data,ad_name,campaign_name,platform&limit=100&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
+    while (next) {
+      const r: Response = await fetch(next);
+      const j = await r.json();
+      if (!r.ok) throw new UserError(`${f.name}: ${j?.error?.message || "could not read leads"}`);
+      for (const lead of j.data || []) {
+        const m = mapAnswers((lead.field_data || []).map((x: Obj) => [x.name, (x.values || []).join(", ")]));
+        const fc = cfg.forms?.[f.id] || {};
+        const { data: res, error } = await admin.rpc("ingest_lead", { p: {
+          name: m.name, phone: m.phone, email: m.email, city: m.city,
+          language: m.language || fc.language || cfg.default_language || "",
+          source: src.name, source_id: src.id, ref: `fb:${lead.id}`, campaign_id: fc.campaign_id || cfg.campaign_id || null,
+          tags: [f.name, lead.platform === "ig" ? "Instagram" : ""].filter(Boolean),
+          note: [lead.campaign_name ? `Ad campaign: ${lead.campaign_name}` : "", m.note].filter(Boolean).join("\n"),
+          extra: { ...m.extra, form: f.name, ad: lead.ad_name, campaign: lead.campaign_name } } });
+        if (error) throw new Error(error.message);
+        counts[res?.status || "skipped"] = (counts[res?.status || "skipped"] || 0) + 1;
+      }
+      next = j?.paging?.next || null;
+    }
+  }
+  return counts;
+}
+
+/* Every 15 minutes (pg_cron, see supabase/sales-tools.sql): check each active Facebook Page for missed leads. */
+async function cronFetch(): Promise<Obj> {
+  const fb = await fbConfig();
+  const ver = fb.api_version || "v23.0";
+  const { data: srcs } = await admin.from("lead_sources").select("*").eq("kind", "facebook").eq("active", true);
+  const out: Obj = { pages: 0, created: 0, existing: 0, failed: 0 };
+  for (const src of srcs || []) {
+    out.pages++;
+    try {
+      const c = await fetchSource(src, 2, ver);
+      out.created += c.created || 0; out.existing += c.existing || 0;
+    } catch (e) {
+      out.failed++;
+      await admin.from("lead_sources").update({ last_error: `Automatic check: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) }).eq("id", src.id);
+    }
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
+    const cronToken = req.headers.get("x-cron-token") || "";
+    if (cronToken) {
+      const { data } = await admin.from("integration_secrets").select("value").eq("key", "nurture_cron").maybeSingle();
+      if (!data?.value?.token || data.value.token !== cronToken) return json({ error: "Not allowed" }, 401);
+      return json(await cronFetch());
+    }
     const userClient = createClient(SB_URL, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "Please sign in again." }, 401);
@@ -147,36 +207,7 @@ Deno.serve(async (req) => {
 
       case "fb_fetch": {
         const { data: src } = await admin.from("lead_sources").select("*").eq("id", b.source_id).single();
-        const { data: s } = await admin.from("lead_source_secrets").select("data").eq("source_id", src.id).maybeSingle();
-        const token = s?.data?.page_token || "";
-        const since = Math.floor(Date.now() / 1000) - Math.min(90, Math.max(1, Number(b.days) || 7)) * 86400;
-        const forms = (await graph(`${src.config.page_id}/leadgen_forms?fields=id,name&limit=200`, token, ver)).data || [];
-        const counts: Obj = { created: 0, existing: 0, duplicate: 0, skipped: 0 };
-        const cfg = src.config || {};
-        for (const f of forms) {
-          const filtering = encodeURIComponent(JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]));
-          let next: string | null = `https://graph.facebook.com/${ver}/${f.id}/leads?fields=id,created_time,field_data,ad_name,campaign_name,platform&limit=100&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
-          while (next) {
-            const r: Response = await fetch(next);
-            const j = await r.json();
-            if (!r.ok) throw new UserError(`${f.name}: ${j?.error?.message || "could not read leads"}`);
-            for (const lead of j.data || []) {
-              const m = mapAnswers((lead.field_data || []).map((x: Obj) => [x.name, (x.values || []).join(", ")]));
-              const fc = cfg.forms?.[f.id] || {};
-              const { data: res, error } = await admin.rpc("ingest_lead", { p: {
-                name: m.name, phone: m.phone, email: m.email, city: m.city,
-                language: m.language || fc.language || cfg.default_language || "",
-                source: src.name, source_id: src.id, ref: `fb:${lead.id}`, campaign_id: fc.campaign_id || cfg.campaign_id || null,
-                tags: [f.name, lead.platform === "ig" ? "Instagram" : ""].filter(Boolean),
-                note: [lead.campaign_name ? `Ad campaign: ${lead.campaign_name}` : "", m.note].filter(Boolean).join("\n"),
-                extra: { ...m.extra, form: f.name, ad: lead.ad_name, campaign: lead.campaign_name } } });
-              if (error) throw new Error(error.message);
-              counts[res?.status || "skipped"] = (counts[res?.status || "skipped"] || 0) + 1;
-            }
-            next = j?.paging?.next || null;
-          }
-        }
-        return json(counts);
+        return json(await fetchSource(src, Number(b.days) || 7, ver));
       }
 
       case "source_save": {
