@@ -6,6 +6,7 @@
 -- sequence (make it with "New lead joins automatically" OFF, so only these events use it). The messages
 -- go out within about 2 minutes, in sending hours, from the sequence's WhatsApp number.
 -- A lead gets the same automatic message at most once in 2 days.
+-- Stage messages can be set per program (campaign), e.g. a different payment QR for each city.
 -- Moving a lead to a stage that has a message also puts a call in the owner's follow-ups for tomorrow 11 am.
 
 create or replace function public.auto_msg_enroll(p_lead uuid, p_seq uuid, p_gap interval default interval '2 days')
@@ -61,7 +62,9 @@ declare cfg jsonb; seq uuid; tmr timestamptz;
 begin
   if new.stage is not distinct from old.stage then return new; end if;
   select data into cfg from public.settings where id = 1;
-  seq := nullif(cfg->'autoMsg'->'stages'->>new.stage, '')::uuid;
+  -- the program's own message for this stage (e.g. its payment QR) first, then the general one
+  seq := coalesce(nullif(cfg->'autoMsg'->'campStages'->(new.campaign_id::text)->>new.stage, '')::uuid,
+                  nullif(cfg->'autoMsg'->'stages'->>new.stage, '')::uuid);
   if seq is null then return new; end if;
   perform public.auto_msg_enroll(new.id, seq, interval '1 day');
   -- remind the owner to follow up tomorrow at 11 am (India time) if nothing earlier is planned
