@@ -69,7 +69,7 @@ const langOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+(S.cfg.languages||[]).m
 const CFG=window.DIALBOOK_CONFIG||{};
 let sb=null;
 const S={me:null,team:[],campaigns:[],cfg:clone(DEF),view:'home',
-  lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},sel:new Set(),page:0,PS:50,
+  lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},sel:new Set(),page:0,PS:(()=>{try{const v=+localStorage.getItem('dialbook.ps');return [50,100,250,500,1000].includes(v)?v:100}catch(e){return 100}})(),
   range:'7',hAgent:'',pf:{camp:'',agent:''},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
   fuAgent:'',openLead:null,dialer:null,dialSetup:{camp:'',queue:'fresh',order:'hot',who:'me'},
   pick:{},tm:{},rv:0,badge:0,sd:null,sdirty:false,ai:{camp:'',queue:'fresh',n:10}};
@@ -310,7 +310,7 @@ V.leads={mount(){const f=S.lf;
    <td class="st-td">${stagePill(l.stage)}</td>${isMgr()?`<td class="hide-sm">${esc(nameOf(l.assigned_to))}</td>`:''}<td class="hide-sm camp-td">${esc(camp(l.campaign_id)?.name||'—')}</td>
    <td class="small hide-sm">${l.last_call_at?`${esc(dispo(l.last_outcome)?.name||l.last_outcome||'Outcome not logged')}<div class="muted">${rel(l.last_call_at)}</div>`:'<span class="muted">Not called</span>'}</td>
    <td class="small fu-td ${fu&&fu<now()&&isOpen(l)?'prio-hot':''}">${fu&&isOpen(l)?`<span class="sm-only">Follow-up </span>${esc(fmtDT(fu))}`:'<span class="muted hide-sm">—</span>'}</td><td class="r num hide-sm hide-md">${l.call_count||0}</td><td class="r acts-td"><div class="row-acts">${l.dnd?'':`<a class="btn call" href="tel:${esc(normPhone(l.phone))}" title="Call ${esc(l.name)}" aria-label="Call ${esc(l.name)}">${ic('phone')}</a><button class="btn wa" data-act="waOpen" data-id="${l.id}" title="Company WhatsApp" aria-label="WhatsApp ${esc(l.name)}">${ic('msg')}</button>`}</div></td></tr>`}).join('')}
-  </tbody></table></div><div class="pager"><button class="btn sm" data-act="pg" data-v="-1" ${S.page?'':'disabled'}>Previous</button><span class="small muted">Page ${S.page+1} of ${pages} · ${count} leads</span><button class="btn sm" data-act="pg" data-v="1" ${S.page+1<pages?'':'disabled'}>Next</button></div>`;
+  </tbody></table></div><div class="pager"><button class="btn sm" data-act="pg" data-v="-1" ${S.page?'':'disabled'}>Previous</button><span class="small muted">Page ${S.page+1} of ${pages} · showing ${count?from+1:0}–${Math.min(count,from+S.PS)} of ${count} leads</span><button class="btn sm" data-act="pg" data-v="1" ${S.page+1<pages?'':'disabled'}>Next</button><span class="spacer"></span><label class="row small" style="gap:6px"><span class="muted">Rows per page</span><select class="input" id="lPS" style="width:auto">${[50,100,250,500,1000].map(n=>opt(n,n,S.PS)).join('')}</select></label></div>`;
   vb.innerHTML=html;
 }};
 
@@ -1117,6 +1117,7 @@ document.addEventListener('change',async e=>{
   if(id==='pfAgent'){S.pf.agent=t.value;return V.pipeline.load()}
   if(id==='rFrom'||id==='rTo'){if(!t.value)return;S.rep[id==='rFrom'?'from':'to']=new Date(t.value+'T00:00').getTime();if(S.rep.to<S.rep.from)S.rep.to=S.rep.from;S.rep.preset='';$$('[data-act=rRange]').forEach(x=>x.setAttribute('aria-pressed','false'));return V.reports.load()}
   if(id==='rAgent'){S.rep.agent=t.value;return V.reports.load()}
+  if(id==='lPS'){S.PS=+t.value||100;try{localStorage.setItem('dialbook.ps',String(S.PS))}catch(e){}S.page=0;return V.leads.load()}
   if(id==='rPreset'&&t.value){const d=new Date(),y=d.getFullYear(),m=d.getMonth(),k=t.value;const start=k==='y0'?new Date(y,0,1):new Date(y,m-(k==='m1'?1:k==='m3'?2:k==='m6'?5:0),1);const end=k==='m1'?new Date(y,m,0):d;
     S.rep.from=sod(start.getTime());S.rep.to=sod(end.getTime());if($('#rFrom'))$('#rFrom').value=toDateInput(S.rep.from);if($('#rTo'))$('#rTo').value=toDateInput(S.rep.to);return V.reports.load()}
   if(id==='rCamp'){S.rep.camp=t.value;return V.reports.load()}
