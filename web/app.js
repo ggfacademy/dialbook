@@ -124,12 +124,12 @@ function barChart(b){
   let g='';for(let k=0;k<=tk;k++){const v=mx*k/tk,y=T+ih-ih*k/tk;g+=`<line x1="${L}" x2="${W-R_}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y+3}" text-anchor="end">${Math.round(v)}</text>`}
   const every=Math.ceil(b.length/12);
   b.forEach((x,i)=>{const X=L+i*bw+gap/2,w=bw-gap,ha=ih*x.a/mx,hb=ih*x.b/mx,y0=T+ih;
-    g+=`<rect x="${X}" y="${y0-ha}" width="${w}" height="${ha}" fill="var(--call)" rx="2"><title>${esc(x.label)}: ${x.a} connected</title></rect><rect x="${X}" y="${y0-ha-hb}" width="${w}" height="${hb}" fill="var(--warn)" opacity=".75" rx="2"><title>${esc(x.label)}: ${x.b} not connected</title></rect>`;
+    const dl=`style="animation-delay:${Math.min(i*45,700)}ms"`;g+=`<rect class="gb" ${dl} x="${X}" y="${y0-ha}" width="${w}" height="${ha}" fill="var(--call)" rx="2"><title>${esc(x.label)}: ${x.a} connected</title></rect><rect class="gb" ${dl} x="${X}" y="${y0-ha-hb}" width="${w}" height="${hb}" fill="var(--warn)" opacity=".75" rx="2"><title>${esc(x.label)}: ${x.b} not connected</title></rect>`;
     if(i%every===0)g+=`<text x="${X+w/2}" y="${H-6}" text-anchor="middle">${esc(x.label)}</text>`});
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Calls over time">${g}</svg><div class="legend"><span><i style="background:var(--call)"></i>Connected</span><span><i style="background:var(--warn);opacity:.75"></i>Not connected</span></div></div>`;
 }
 function hbars(rows){const mx=Math.max(1,...rows.map(r=>r.v));
-  return rows.map(r=>`<div class="hbar"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.label)}">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}</span></div>`).join('')||'<p class="muted small">No data yet.</p>'}
+  return rows.map((r,i)=>`<div class="hbar" style="--d:${Math.min(i*60,600)}ms"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.label)}">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}</span></div>`).join('')||'<p class="muted small">No data yet.</p>'}
 function buckets(st,from,to){
   if(to-from<=DAY){const out=[];for(let h=8;h<=21;h++){const v=st.by_hour?.[h]||{a:0,b:0};out.push({label:(h%12||12)+(h<12?'a':'p'),a:v.a,b:v.b})}
     Object.entries(st.by_hour||{}).forEach(([h,v])=>{h=+h;if(h<8){out[0].a+=v.a;out[0].b+=v.b}if(h>21){out[13].a+=v.a;out[13].b+=v.b}});return out}
@@ -187,10 +187,14 @@ function targetsCard(rows,agent){
 function heroRings(rows,agent,ls){const b=$('#hRings');if(!b)return;
   const pick=agent?rows.filter(r=>r.agent===agent):rows;const sum=k=>pick.reduce((a,r)=>a+(+r[k]||0),0),goal=k=>pick.reduce((a,r)=>a+(+(r.target||{})[k]||0),0);
   const C=2*Math.PI*36;
-  const ring=(lbl,v,g,col)=>{const p=g?Math.min(1,v/g):(v?1:0);return `<div class="ring"><svg viewBox="0 0 84 84" aria-hidden="true"><circle class="t" cx="42" cy="42" r="36"/><circle class="v" cx="42" cy="42" r="36" stroke="${g&&v>=g?'#3fcf80':col}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C*(1-p)).toFixed(1)}"/></svg><div class="n">${v}${g?`<small>of ${g}</small>`:''}</div><span class="lbl">${lbl}</span></div>`};
+  const ring=(lbl,v,g,col)=>{const p=g?Math.min(1,v/g):(v?1:0);return `<div class="ring"><div class="ring-box"><svg viewBox="0 0 84 84" aria-hidden="true"><circle class="t" cx="42" cy="42" r="36"/><circle class="v" cx="42" cy="42" r="36" stroke="${g&&v>=g?'#3fcf80':col}" stroke-dasharray="${C.toFixed(1)}" style="--c:${C.toFixed(1)};stroke-dashoffset:${(C*(1-p)).toFixed(1)}"/></svg><div class="n"><span data-count="${v}">${v}</span>${g?`<small>of ${g}</small>`:''}</div></div><span class="lbl">${lbl}</span></div>`};
   const due=(ls.overdue||0)+(ls.today||0);
   b.innerHTML=(pick.length?ring('Calls today',sum('calls'),goal('calls'),'#f2c14e')+ring('Connected',sum('connected'),goal('connected'),'#6aa6ff')+ring('Converted',sum('converted'),goal('converted'),'#3fcf80'):'')+
-    `<div class="hero-stats"><div><b>${due}</b><span>Follow-ups due</span></div><div><b>${ls.fresh||0}</b><span>Never called</span></div></div>`}
+    `<div class="hero-stats"><div><b data-count="${due}">${due}</b><span>Follow-ups due</span></div><div><b data-count="${ls.fresh||0}">${ls.fresh||0}</b><span>Never called</span></div></div>`;countUp(b)}
+/* Numbers count up from 0 when a card appears */
+function countUp(root){if(matchMedia('(prefers-reduced-motion: reduce)').matches||!$('#main.anim'))return;
+  (root||document).querySelectorAll('[data-count]').forEach(el=>{const end=+el.dataset.count||0;if(end<2)return;const t0=performance.now(),D=900;
+    const step=t=>{const k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(end*e);if(k<1)requestAnimationFrame(step)};el.textContent='0';requestAnimationFrame(step)})}
 
 /* HOME */
 V.home={mount(){
@@ -216,19 +220,19 @@ V.home={mount(){
    const col=k=>/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
    const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v,color:col(label)}));
    const per=S.range==='0'?'today':`in the last ${S.range} days`;
-   html+=`<div class="card" style="margin-bottom:16px"><div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px">${inl.length}</div><div class="small muted">${per}${agent?' · assigned to '+esc(nameOf(agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
+   html+=`<div class="card" style="margin-bottom:16px"><div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${inl.length}">${inl.length}</div><div class="small muted">${per}${agent?' · assigned to '+esc(nameOf(agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
      <div class="hbar-wide" style="flex:1;min-width:260px"><div class="small muted" style="margin-bottom:6px">By source</div>${rows.length?hbars(rows):'<p class="muted small">No new leads in this period.</p>'}</div></div></div>`}
   if(!ls.total&&isMgr())html+=`<div class="card" style="margin-bottom:16px"><h2>Get your calling team started</h2><div class="grid3">
     <div><b>1. Invite your team</b><p class="muted small">Send them this website's link. They create an account and you approve them in Team.</p><button class="btn" data-act="nav" data-v="team">${ic('team')}Open Team</button></div>
     <div><b>2. Import leads</b><p class="muted small">Upload an Excel or CSV file and share the leads out to callers automatically.</p><button class="btn primary" data-act="import">${ic('up')}Import leads</button></div>
     <div><b>3. Install the phone app</b><p class="muted small">It logs every call and uploads recordings on its own. Get the connection code in Settings.</p><button class="btn" data-act="nav" data-v="settings">${ic('phone')}Phone app setup</button></div></div></div>`;
   html+=`<div class="kpis">
-    <div class="kpi"><div class="lbl">Calls</div><div class="val">${t.n||0}</div><div class="sub">${t.auto||0} auto-logged · ${t.ai||0} by AI</div></div>
-    <div class="kpi"><div class="lbl">Connected</div><div class="val">${t.conn||0}</div><div class="sub">${pct(t.n?t.conn/t.n:0)} connect rate</div></div>
+    <div class="kpi"><div class="lbl">Calls</div><div class="val" data-count="${t.n||0}">${t.n||0}</div><div class="sub">${t.auto||0} auto-logged · ${t.ai||0} by AI</div></div>
+    <div class="kpi"><div class="lbl">Connected</div><div class="val" data-count="${t.conn||0}">${t.conn||0}</div><div class="sub">${pct(t.n?t.conn/t.n:0)} connect rate</div></div>
     <div class="kpi"><div class="lbl">Talk time</div><div class="val">${dur(t.talk).replace(/ \d+s$/,'')}</div><div class="sub">avg ${dur(t.conn?t.talk/t.conn:0)} per call</div></div>
-    <div class="kpi"><div class="lbl">Interested</div><div class="val">${t.intr||0}</div><div class="sub">${t.recorded||0} calls recorded</div></div>
-    <div class="kpi"><div class="lbl">Converted</div><div class="val">${t.conv||0}</div><div class="sub">${t.conn?pct(t.conv/t.conn):'0%'} of connected</div></div>
-    <div class="kpi ${ls.overdue?'alert':''}"><div class="lbl">Follow-ups due</div><div class="val">${(ls.overdue||0)+(ls.today||0)}</div><div class="sub">${ls.overdue||0} overdue</div></div></div>`;
+    <div class="kpi"><div class="lbl">Interested</div><div class="val" data-count="${t.intr||0}">${t.intr||0}</div><div class="sub">${t.recorded||0} calls recorded</div></div>
+    <div class="kpi"><div class="lbl">Converted</div><div class="val" data-count="${t.conv||0}">${t.conv||0}</div><div class="sub">${t.conn?pct(t.conv/t.conn):'0%'} of connected</div></div>
+    <div class="kpi ${ls.overdue?'alert':''}"><div class="lbl">Follow-ups due</div><div class="val" data-count="${(ls.overdue||0)+(ls.today||0)}">${(ls.overdue||0)+(ls.today||0)}</div><div class="sub">${ls.overdue||0} overdue</div></div></div>`;
   const drows=[...S.cfg.dispositions.map(d=>({label:d.name,v:st.outcomes?.[d.id]||0,color:d.connected?'var(--call)':'var(--warn)'})),{label:'Outcome not logged yet',v:st.outcomes?._none||0,color:'var(--muted)'}].filter(r=>r.v).sort((a,b)=>b.v-a.v);
   const srows=S.cfg.stages.map(s=>({label:s.name,v:ls.stages?.[s.id]?.n||0,color:stageColor(s.id)}));
   html+=`<div class="dash-grid"><div class="card"><h2>${S.range==='0'?'Calls by hour':'Calls per day'}</h2>${barChart(buckets(st,from,to))}</div>
@@ -239,7 +243,7 @@ V.home={mount(){
     const rows=[...agents().map(m=>({name:m.name,sub:m.role,s:st.by_agent?.[m.id]||{}})),...(st.by_agent?.ai?[{name:'AI agent',sub:'voice AI',s:st.by_agent.ai}]:[])].sort((a,b)=>(b.s.n||0)-(a.s.n||0));
     html+=`<div class="card wide"><h2>Team leaderboard</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th class="r">Calls</th><th class="r">Connected</th><th class="r hide-sm">Connect %</th><th class="r">Talk time</th><th class="r hide-sm">Interested</th><th class="r">Converted</th></tr></thead><tbody>${rows.map(({name,sub,s})=>`<tr><td><b>${esc(name)}</b> <span class="small muted">${esc(sub)}</span></td><td class="r num">${s.n||0}</td><td class="r num">${s.conn||0}</td><td class="r num hide-sm">${pct(s.n?s.conn/s.n:0)}</td><td class="r num">${dur(s.talk)}</td><td class="r num hide-sm">${s.intr||0}</td><td class="r num">${s.conv||0}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
-  vb.innerHTML=html+'</div>';
+  vb.innerHTML=html+'</div>';countUp(vb);
 }};
 function fuList(list,compact){
   if(!list||!list.length)return '<p class="muted small">Nothing scheduled.</p>';
@@ -907,7 +911,7 @@ function renderNav(){
   $('#tabNav').innerHTML=TABS.map(v=>{const[,l,i]=NAV.find(n=>n[0]===v);return `<button data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${v==='dialer'?'Call':v==='followups'?'Follow-ups':l}</span>${badge(v)}</button>`}).join('')+`<button data-act="moreNav"${TABS.includes(S.view)?'':' aria-current="page"'}>${ic('more')}<span>More</span>${S.tcUnread?`<span class="badge" style="background:var(--s2)">${S.tcUnread>99?'99+':S.tcUnread}</span>`:''}</button>`;
   $('#brandName').textContent=S.cfg.company||'Dialbook';$('#meName').innerHTML=S.me?`${avatar(S.me.name,'sm')}<span>${esc(S.me.name||'')}</span>`:'';$('#meRole').textContent=role()[0].toUpperCase()+role().slice(1);
 }
-function render(){const v=V[S.view]||V.home;S.rv++;$('#main').innerHTML=v.mount();renderNav();if(v.load)v.load().catch(fail)}
+let animT;function render(){const v=V[S.view]||V.home;S.rv++;const mn=$('#main');mn.classList.add('anim');clearTimeout(animT);animT=setTimeout(()=>mn.classList.remove('anim'),3500);mn.innerHTML=v.mount();renderNav();if(v.load)v.load().catch(fail)}
 function go(v){if(v!=='settings'){S.sd=null;S.sdirty=false}if(v!=='leads')S.sel.clear();S.view=v;render();window.scrollTo(0,0);try{history.replaceState(null,'','#'+v)}catch(e){}}
 let liveT;
 function onLive(){clearTimeout(liveT);liveT=setTimeout(()=>{const v=V[S.view];if(v&&v.live!==false&&v.load&&!$('#md').innerHTML)v.load().catch(()=>{});if(S.openLead)loadDrawer().catch(()=>{});updateBadge();waBadge()},1500)}
