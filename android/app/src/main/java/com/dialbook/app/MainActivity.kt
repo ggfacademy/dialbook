@@ -166,7 +166,7 @@ class MainActivity : BaseActivity() {
         body.add(sr)
         val list = column(0); body.add(list, 10)
         list.add(text("Loading…", 14f, MUTED))
-        var path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count" +
+        var path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count,priority" +
             "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&dnd=eq.false&order=next_follow_up_at.asc.nullslast,created_at.asc&limit=200"
         if (query.isNotEmpty()) {
             val q = Uri.encode(query.replace(Regex("[,()*]"), " "))
@@ -181,7 +181,7 @@ class MainActivity : BaseActivity() {
                 val k = card()
                 val r1 = row()
                 val info = column(0)
-                info.add(text(l.optString("name").ifEmpty { "Unnamed" }, 17f, FG, true))
+                info.add(text((if (l.optString("priority") == "hot") "🔥 " else "") + l.optString("name").ifEmpty { "Unnamed" }, 17f, FG, true))
                 info.add(text(l.optString("phone") + (if (l.optString("city").isNotEmpty()) " · " + l.optString("city") else ""), 14f, MUTED))
                 val fu = Fmt.parse(l.optString("next_follow_up_at"))
                 if (fu > 0) info.add(text((if (fu < now) "Overdue · " else "Follow-up · ") + Fmt.when_(fu), 14f, if (fu < now) DANGER else ACCENT), 2)
