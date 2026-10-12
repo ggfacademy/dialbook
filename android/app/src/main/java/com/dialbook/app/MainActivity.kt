@@ -126,24 +126,35 @@ class MainActivity : BaseActivity() {
     }
 
     /* ---------------- home ---------------- */
+    private var filter = "all"
+
     private fun home() {
         val p = Prefs(this)
-        val c = page()
+        val h = header()
         val top = row()
-        top.add(text("Hi, ${p.name.ifEmpty { "there" }}", 22f, FG, true), 0, 1f)
-        top.add(button("Full CRM", ACCENT, false) { openWeb() }.apply { textSize = 14f }, 8)
-        c.add(top, 8)
-        val target = column(0); c.add(target, 8)
-        loadTarget(target)
-        val tabs = row()
-        listOf("leads" to "My leads", "log" to "To log", "status" to "Status").forEachIndexed { i, (k, label) ->
-            tabs.add(chip(label, tab == k) { tab = k; home() }, if (i == 0) 0 else 8)
+        top.addView(avatar(p.name, 44, GOLD))
+        val who = column(0).apply { setPadding(dp(12), 0, 0, 0) }
+        who.add(text("Hi, ${p.name.trim().split(" ").firstOrNull()?.ifEmpty { null } ?: "there"}", 20f, android.graphics.Color.WHITE, true))
+        who.add(text(java.text.SimpleDateFormat("EEEE, d MMMM", java.util.Locale("en", "IN")).format(java.util.Date()), 13f, ON_NAVY))
+        top.add(who, 0, 1f)
+        val web = row().apply {
+            background = rounded(android.graphics.Color.argb(26, 255, 255, 255), GOLD, 20); setPadding(dp(12), dp(8), dp(12), dp(8))
+            addView(icon(R.drawable.ic_web, GOLD_HI, 16))
+            addView(text("Full CRM", 13f, GOLD_HI, true).apply { setPadding(dp(6), 0, 0, 0) })
+            isClickable = true; setOnClickListener { openWeb() }
         }
-        c.add(tabs, 12)
-        val body = column(0)
-        c.add(body, 12)
+        top.add(web, 8)
+        h.add(top)
+        val target = column(0); h.add(target, 0)
+        loadTarget(target)
+
+        val unknown = try { JSONArray(p.unknownCalls).length() } catch (e: Exception) { 0 }
+        val nav = bottomNav(listOf(Triple("leads", "My leads", R.drawable.ic_people), Triple("fu", "Follow-ups", R.drawable.ic_clock),
+            Triple("log", "To log", R.drawable.ic_tolog), Triple("status", "Status", R.drawable.ic_status)), tab, mapOf("log" to unknown)) { tab = it; home() }
+        val body = shell(h, nav)
         when (tab) {
             "leads" -> leadsTab(body)
+            "fu" -> followUpsTab(body)
             "log" -> logTab(body)
             else -> statusTab(body)
         }
@@ -159,32 +170,136 @@ class MainActivity : BaseActivity() {
             box.removeAllViews()
             if (arr.length() == 0) return@io
             val r = arr.getJSONObject(0); val t = r.optJSONObject("target") ?: JSONObject()
-            val items = listOf(Triple("Calls", "calls", "calls"), Triple("Connected", "connected", "connected"), Triple("Conversions", "converted", "converted"))
+            val items = listOf(Triple("Calls today", "calls", "calls"), Triple("Connected", "connected", "connected"), Triple("Converted", "converted", "converted"))
                 .filter { t.optInt(it.third) > 0 }
             if (items.isEmpty()) return@io
-            val k = card()
-            k.add(text("Today's target", 15f, FG, true))
-            val r1 = row()
+            val r1 = row().apply { background = rounded(android.graphics.Color.argb(22, 255, 255, 255), 0, 16); setPadding(dp(14), dp(12), dp(14), dp(12)) }
             items.forEachIndexed { i, (label, key, tk) ->
                 val v = r.optInt(key); val g = t.optInt(tk)
                 val col = column(0)
-                col.add(text(label, 12f, MUTED))
-                col.add(text("$v / $g", 18f, if (v >= g) CALL else FG, true))
+                val num = row()
+                num.addView(text("$v", 22f, android.graphics.Color.WHITE, true))
+                num.addView(text(" / $g", 13f, ON_NAVY))
+                col.add(num)
+                col.add(text(label, 11f, ON_NAVY), 0)
                 val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = g; progress = minOf(v, g)
-                    progressTintList = android.content.res.ColorStateList.valueOf(if (v >= g) CALL else ACCENT)
+                    progressTintList = android.content.res.ColorStateList.valueOf(if (v >= g) android.graphics.Color.parseColor("#3FCF80") else GOLD_HI)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.argb(60, 255, 255, 255))
                 }
-                col.add(bar, 2)
-                r1.add(col, if (i == 0) 0 else 12, 1f)
+                col.add(bar, 4)
+                r1.add(col, if (i == 0) 0 else 14, 1f)
             }
-            k.add(r1, 6)
+            box.add(r1, 14)
             val left = t.optInt("calls") - r.optInt("calls")
             val due = r.optInt("due")
             val note = listOfNotNull(if (t.optInt("calls") > 0) (if (left > 0) "$left more calls to go" else "Calls target reached 🎉") else null,
                 if (due > 0) "$due follow-ups due today" else null).joinToString(" · ")
-            if (note.isNotEmpty()) k.add(text(note, 13f, MUTED), 4)
-            box.add(k)
+            if (note.isNotEmpty()) box.add(text(note, 13f, ON_NAVY), 8)
         }, { /* database not updated yet, or offline: no target card */ })
+    }
+
+    /** One lead as a card: initials, name, number, what is next, and a Call button. */
+    private fun leadCard(l: JSONObject): LinearLayout {
+        val now = System.currentTimeMillis()
+        val k = card()
+        val r1 = row()
+        r1.addView(avatar(l.optString("name").ifEmpty { "?" }))
+        val info = column(0).apply { setPadding(dp(12), 0, dp(8), 0) }
+        info.add(text((if (l.optString("priority") == "hot") "🔥 " else "") + l.optString("name").ifEmpty { "Unnamed" }, 17f, FG, true))
+        val city = l.optString("city").let { if (it == "null") "" else it }
+        info.add(text(l.optString("phone") + (if (city.isNotEmpty()) " · $city" else ""), 14f, MUTED), 2)
+        val fu = Fmt.parse(l.optString("next_follow_up_at"))
+        val st = row()
+        st.addView(pill(l.optString("stage").replace('_', ' ').replaceFirstChar { it.uppercase() }, FG, BG))
+        when {
+            fu in 1L until now -> st.add(text("Overdue · " + Fmt.when_(fu), 13f, DANGER, true), 8)
+            fu > 0 -> st.add(text(Fmt.when_(fu), 13f, ACCENT, true), 8)
+            l.optInt("call_count") == 0 -> st.add(text("Not called yet", 13f, CALL, true), 8)
+        }
+        info.add(st, 6)
+        r1.add(info, 0, 1f)
+        r1.addView(callButton(l.optString("phone")))
+        k.add(r1)
+        val id = l.getString("id")
+        k.setOnClickListener { startActivity(Intent(this, LeadActivity::class.java).putExtra("lead_id", id)) }
+        return k
+    }
+
+    private fun endOfToday(): Long = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 23); set(java.util.Calendar.MINUTE, 59); set(java.util.Calendar.SECOND, 59)
+    }.timeInMillis
+
+    private fun leadsTab(body: LinearLayout) {
+        val p = Prefs(this)
+        val sr = row().apply { background = rounded(SURFACE, LINE, 14); setPadding(dp(12), dp(2), dp(4), dp(2)) }
+        sr.addView(icon(R.drawable.ic_search, MUTED, 20))
+        val search = input("Search name or number").apply { setText(query); background = null; imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
+        search.setOnEditorActionListener { _, _, _ -> query = search.text.toString().trim(); home(); true }
+        sr.add(search, 0, 1f)
+        sr.add(chip("Search", false) { query = search.text.toString().trim(); home() }, 4)
+        body.add(sr)
+        val (hs, chips) = chipRow()
+        listOf("all" to "All", "hot" to "🔥 Hot", "new" to "New", "overdue" to "Overdue", "today" to "Due today").forEachIndexed { i, (k, label) ->
+            chips.add(chip(label, filter == k) { filter = k; home() }, if (i == 0) 0 else 8)
+        }
+        body.add(hs, 12)
+        val list = column(0); body.add(list, 12)
+        list.add(text("Loading…", 14f, MUTED))
+        var path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count,priority" +
+            "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&dnd=eq.false&order=next_follow_up_at.asc.nullslast,created_at.asc&limit=200"
+        when (filter) {
+            "hot" -> path += "&priority=eq.hot"
+            "new" -> path += "&call_count=eq.0"
+            "overdue" -> path += "&next_follow_up_at=lt.${Uri.encode(Fmt.iso(System.currentTimeMillis()))}"
+            "today" -> path += "&next_follow_up_at=lt.${Uri.encode(Fmt.iso(endOfToday()))}"
+        }
+        if (query.isNotEmpty()) {
+            val q = Uri.encode(query.replace(Regex("[,()*]"), " "))
+            path += "&or=(name.ilike.*$q*,phone.ilike.*$q*,city.ilike.*$q*)"
+        }
+        io({ JSONArray(Api.get(this, path)) }, { arr ->
+            list.removeAllViews()
+            if (arr.length() == 0) {
+                list.add(emptyState(if (query.isEmpty() && filter == "all") "No open leads assigned to you yet." else "No leads match."))
+                return@io
+            }
+            list.add(section("${arr.length()} lead${if (arr.length() == 1) "" else "s"}"))
+            for (i in 0 until arr.length()) list.add(leadCard(arr.getJSONObject(i)), if (i == 0) 8 else 10)
+        }, { e -> list.removeAllViews(); list.add(text(e.message ?: "Could not load leads", 15f, DANGER)) })
+    }
+
+    private fun emptyState(msg: String): LinearLayout = card().apply {
+        gravity = android.view.Gravity.CENTER; setPadding(dp(16), dp(28), dp(16), dp(28))
+        add(text("✓", 28f, CALL, true).apply { gravity = android.view.Gravity.CENTER })
+        add(text(msg, 15f, MUTED).apply { gravity = android.view.Gravity.CENTER }, 6)
+    }
+
+    private fun followUpsTab(body: LinearLayout) {
+        val p = Prefs(this)
+        val list = column(0); body.add(list)
+        list.add(text("Loading…", 14f, MUTED))
+        val path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count,priority" +
+            "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&dnd=eq.false&next_follow_up_at=lt.${Uri.encode(Fmt.iso(endOfToday()))}" +
+            "&order=next_follow_up_at.asc&limit=200"
+        io({ JSONArray(Api.get(this, path)) }, { arr ->
+            list.removeAllViews()
+            if (arr.length() == 0) { list.add(emptyState("No follow-ups due today. 🎉")); return@io }
+            val now = System.currentTimeMillis()
+            val all = (0 until arr.length()).map { arr.getJSONObject(it) }
+            val over = all.filter { Fmt.parse(it.optString("next_follow_up_at")) < now }
+            val later = all - over.toSet()
+            var top = 0
+            if (over.isNotEmpty()) {
+                list.add(text("Overdue · ${over.size}", 15f, DANGER, true))
+                over.forEach { list.add(leadCard(it), 8) }
+                top = 18
+            }
+            if (later.isNotEmpty()) {
+                list.add(text("Later today · ${later.size}", 15f, ACCENT, true), top)
+                later.forEach { list.add(leadCard(it), 8) }
+            }
+        }, { e -> list.removeAllViews(); list.add(text(e.message ?: "Could not load follow-ups", 15f, DANGER)) })
     }
 
     private fun pendingScreen() {
@@ -193,44 +308,6 @@ class MainActivity : BaseActivity() {
         c.add(text("Your admin has not approved your account yet, or it was switched off. Ask them to check Team on the Dialbook website.", 15f, MUTED))
         c.add(button("Check again") { route() }, 16)
         c.add(button("Sign out", ACCENT, false) { Prefs(this).logout(); route() }, 10)
-    }
-
-    private fun leadsTab(body: LinearLayout) {
-        val p = Prefs(this)
-        val search = input("Search name or number").apply { setText(query) }
-        val sr = row(); sr.add(search, 0, 1f); sr.add(button("Search", ACCENT, false) { query = search.text.toString().trim(); home() }, 8)
-        body.add(sr)
-        val list = column(0); body.add(list, 10)
-        list.add(text("Loading…", 14f, MUTED))
-        var path = "/rest/v1/leads?select=id,name,phone,city,stage,next_follow_up_at,last_outcome,call_count,priority" +
-            "&assigned_to=eq.${p.userId}&stage=not.in.(won,lost)&dnd=eq.false&order=next_follow_up_at.asc.nullslast,created_at.asc&limit=200"
-        if (query.isNotEmpty()) {
-            val q = Uri.encode(query.replace(Regex("[,()*]"), " "))
-            path += "&or=(name.ilike.*$q*,phone.ilike.*$q*,city.ilike.*$q*)"
-        }
-        io({ JSONArray(Api.get(this, path)) }, { arr ->
-            list.removeAllViews()
-            if (arr.length() == 0) { list.add(text(if (query.isEmpty()) "No open leads assigned to you yet." else "No leads match.", 15f, MUTED)); return@io }
-            val now = System.currentTimeMillis()
-            for (i in 0 until arr.length()) {
-                val l = arr.getJSONObject(i)
-                val k = card()
-                val r1 = row()
-                val info = column(0)
-                info.add(text((if (l.optString("priority") == "hot") "🔥 " else "") + l.optString("name").ifEmpty { "Unnamed" }, 17f, FG, true))
-                info.add(text(l.optString("phone") + (if (l.optString("city").isNotEmpty()) " · " + l.optString("city") else ""), 14f, MUTED))
-                val fu = Fmt.parse(l.optString("next_follow_up_at"))
-                if (fu > 0) info.add(text((if (fu < now) "Overdue · " else "Follow-up · ") + Fmt.when_(fu), 14f, if (fu < now) DANGER else ACCENT), 2)
-                else if (l.optInt("call_count") == 0) info.add(text("New · not called yet", 14f, CALL), 2)
-                r1.add(info, 0, 1f)
-                val phone = l.optString("phone")
-                r1.add(button("Call", CALL) { startCall(phone) }, 8)
-                k.add(r1)
-                val id = l.getString("id")
-                k.setOnClickListener { startActivity(Intent(this, LeadActivity::class.java).putExtra("lead_id", id)) }
-                list.add(k, 10)
-            }
-        }, { e -> list.removeAllViews(); list.add(text(e.message ?: "Could not load leads", 15f, DANGER)) })
     }
 
     private fun logTab(body: LinearLayout) {

@@ -28,9 +28,11 @@ class LeadActivity : BaseActivity() {
     fun transfer(name: String) = transferImpl(leadId, name)
 
     private fun load() {
-        val c = page()
-        c.add(button("‹ Back", ACCENT, false) { finish() }.apply { textSize = 14f })
-        val box = column(0); c.add(box, 12)
+        val h = header()
+        h.add(headerTop("Lead") { finish() })
+        val hb = column(0); h.add(hb, 12)
+        val c = shell(h)
+        val box = column(0); c.add(box)
         box.add(text("Loading…", 14f, MUTED))
         io({
             val l = JSONArray(Api.get(this, "/rest/v1/leads?select=*&id=eq.$leadId"))
@@ -44,27 +46,42 @@ class LeadActivity : BaseActivity() {
             val l = arr.getJSONObject(0)
             val name = l.optString("name").ifEmpty { "Unnamed" }
             val phone = l.optString("phone")
-            box.add(heading(name))
-            box.add(text(phone, 20f, FG), 0)
-            box.add(text(l.optString("stage").replace('_', ' ').replaceFirstChar { it.uppercase() } +
-                (if (l.optString("city").isNotEmpty()) " · " + l.optString("city") else ""), 14f, MUTED), 4)
-            val btns = row()
-            btns.add(button("Call", CALL) { startCall(phone) }, 0, 1f)
-            btns.add(button("WhatsApp", ACCENT, false) { openWhatsApp(phone) }, 8, 1f)
-            box.add(btns, 14)
-            val btns2 = row()
-            btns2.add(button("Company WhatsApp", CALL, false) { openWeb("wa:$leadId") }, 0, 1f)
-            btns2.add(button("Transfer", ACCENT, false) { transfer(name) }, 8, 1f)
-            box.add(btns2, 8)
-            box.add(text("WhatsApp = your own WhatsApp. Company WhatsApp = templates from the company number, saved in the CRM.", 12f, MUTED), 4)
+            val city = l.optString("city").let { if (it == "null") "" else it }
+            hb.removeAllViews()
+            val who = row()
+            who.addView(avatar(name, 56, GOLD))
+            val wc = column(0).apply { setPadding(dp(14), 0, 0, 0) }
+            wc.add(text((if (l.optString("priority") == "hot") "🔥 " else "") + name, 22f, android.graphics.Color.WHITE, true))
+            wc.add(text(phone + (if (city.isNotEmpty()) " · $city" else ""), 15f, ON_NAVY), 2)
+            wc.add(pill(l.optString("stage").replace('_', ' ').replaceFirstChar { it.uppercase() }, NAVY, GOLD_HI), 8, 0f, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            who.add(wc, 0, 1f)
+            hb.add(who)
+
+            val tiles = row()
+            tiles.add(tile(R.drawable.ic_call, "Call", android.graphics.Color.WHITE, CALL) { startCall(phone) }, 0, 1f)
+            tiles.add(tile(R.drawable.ic_chat, "My WhatsApp", CALL, CALL_SOFT) { openWhatsApp(phone) }, 8, 1f)
+            tiles.add(tile(R.drawable.ic_chat, "Company WA", ACCENT, ACCENT_SOFT) { openWeb("wa:$leadId") }, 8, 1f)
+            tiles.add(tile(R.drawable.ic_transfer, "Transfer", NAVY, android.graphics.Color.parseColor("#E6EAF4")) { transfer(name) }, 8, 1f)
+            box.add(tiles)
+            box.add(text("My WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
-            if (fu > 0) box.add(text("Next follow-up: " + Fmt.when_(fu), 15f, if (fu < System.currentTimeMillis()) DANGER else ACCENT, true), 14)
+            if (fu > 0) {
+                val late = fu < System.currentTimeMillis()
+                val k = card(); val r = row()
+                r.addView(icon(R.drawable.ic_clock, if (late) DANGER else ACCENT, 22))
+                r.add(column(0).apply {
+                    setPadding(dp(12), 0, 0, 0)
+                    add(text(if (late) "Follow-up overdue" else "Next follow-up", 12f, MUTED, true))
+                    add(text(Fmt.when_(fu), 16f, if (late) DANGER else FG, true), 2)
+                }, 0, 1f)
+                k.add(r); box.add(k, 14)
+            }
             if (l.optString("note").isNotEmpty()) {
-                val k = card(); k.add(text("Notes", 13f, MUTED, true)); k.add(text(l.optString("note"), 15f), 4); box.add(k, 12)
+                val k = card(); k.add(section("Notes")); k.add(text(l.optString("note"), 15f), 6); box.add(k, 12)
             }
             val scriptBox = column(0); box.add(scriptBox, 12)
             loadScript(scriptBox, l, settings)
-            box.add(text("Recent calls", 17f, FG, true), 18)
+            box.add(section("Recent calls"), 20)
             if (calls.length() == 0) box.add(text("No calls yet.", 14f, MUTED), 6)
             for (i in 0 until calls.length()) {
                 val o = calls.getJSONObject(i)
@@ -179,26 +196,34 @@ class OutcomeActivity : BaseActivity() {
         val callId = intent.getStringExtra("call_id") ?: run { finish(); return }
         val leadName = intent.getStringExtra("lead_name") ?: "Lead"
         val seconds = intent.getLongExtra("seconds", 0)
-        val c = page()
-        c.add(heading("How did the call go?"), 8)
-        c.add(text(leadName, 18f, FG, true))
-        c.add(text(if (seconds > 0) "Talked for ${Fmt.dur(seconds)}" else "The call did not connect", 14f, MUTED), 2)
+        val h = header()
+        h.add(headerTop("How did the call go?") { finish() })
+        val hr = row()
+        hr.addView(avatar(leadName, 48, GOLD))
+        hr.add(column(0).apply {
+            setPadding(dp(12), 0, 0, 0)
+            add(text(leadName, 19f, android.graphics.Color.WHITE, true))
+            add(text(if (seconds > 0) "Talked for ${Fmt.dur(seconds)}" else "The call did not connect", 14f, ON_NAVY), 2)
+        }, 0, 1f)
+        h.add(hr, 12)
+        val c = shell(h)
+        c.add(section("Call outcome"))
 
-        val list = column(0); c.add(list, 14)
+        val list = column(0); c.add(list, 8)
         list.add(text("Loading outcomes…", 14f, MUTED))
         lostBox = column(0).apply { visibility = android.view.View.GONE }
         c.add(lostBox!!, 14)
 
-        c.add(text("Next follow-up", 15f, FG, true), 18)
+        c.add(section("Next follow-up"), 20)
         val (hs, chips) = chipRow()
         val options = listOf("1 hr" to 1, "3 hrs" to 3, "Tomorrow 11 AM" to 24, "2 days" to 48, "1 week" to 168, "None" to 0)
-        options.forEachIndexed { i, (label, h) -> chips.add(chip(label, false) { setFollowUp(h) }, if (i == 0) 0 else 8) }
+        options.forEachIndexed { i, (label, hrs) -> chips.add(chip(label, false) { setFollowUp(hrs) }, if (i == 0) 0 else 8) }
         c.add(hs, 8)
         fuLabel = text("No follow-up", 14f, MUTED); c.add(fuLabel!!, 6)
 
         val notes = input("Notes: what did they say?", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES, 3)
         c.add(notes, 16)
-        val save = button("Save outcome") {
+        val save = button("Save outcome", ACCENT) {
             val d = picked ?: run { toast("Pick an outcome first"); return@button }
             val askReason = needsReason(d)
             if (askReason && lostReason.isEmpty()) { toast("Pick why the lead is lost"); return@button }
@@ -220,15 +245,23 @@ class OutcomeActivity : BaseActivity() {
 
         io({ Api.loadDispositions(this) }, { arr ->
             list.removeAllViews(); dispoViews.clear()
+            var r: LinearLayout? = null
             for (i in 0 until arr.length()) {
                 val d = arr.getJSONObject(i)
-                val v = chip(d.optString("name"), false) { pick(d) }
-                v.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
-                v.textSize = 16f
-                v.setPadding(dp(16), dp(12), dp(16), dp(12))
-                list.add(v, if (i == 0) 0 else 8)
+                val dot = if (d.optBoolean("connected")) CALL else WARN
+                val label = android.text.SpannableStringBuilder("●  " + d.optString("name")).apply {
+                    setSpan(android.text.style.ForegroundColorSpan(dot), 0, 1, 0)
+                }
+                val v = text("", 15f, FG, true).apply {
+                    text = label; minHeight = dp(64); gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                    background = rounded(SURFACE, LINE, 14); setPadding(dp(14), dp(12), dp(12), dp(12))
+                    isClickable = true; setOnClickListener { pick(d) }
+                }
+                if (i % 2 == 0) { r = row().apply { gravity = android.view.Gravity.FILL_VERTICAL }; list.add(r!!, if (i == 0) 0 else 8) }
+                r!!.add(v, if (i % 2 == 0) 0 else 8, 1f)
                 dispoViews.add(d.getString("id") to v)
             }
+            if (arr.length() % 2 == 1) r?.add(android.view.View(this), 8, 1f)
             if (arr.length() == 0) list.add(text("Could not load outcomes. Check your internet and reopen this screen.", 14f, DANGER))
         })
     }
@@ -269,7 +302,7 @@ class OutcomeActivity : BaseActivity() {
         for ((id, v) in dispoViews) {
             val sel = id == d.getString("id")
             v.setTextColor(if (sel) ACCENT else FG)
-            v.background = if (sel) rounded(ACCENT_SOFT, ACCENT, 20) else rounded(SURFACE, LINE, 20)
+            v.background = if (sel) rounded(ACCENT_SOFT, ACCENT, 14).apply { setStroke(dp(2), ACCENT) } else rounded(SURFACE, LINE, 14)
         }
         if (d.optBoolean("fu") && followUp == 0L) setFollowUp(if (d.optBoolean("connected")) 24 else 3)
         if (!d.optBoolean("fu")) setFollowUp(0)
@@ -300,11 +333,18 @@ class UnknownCallActivity : BaseActivity() {
         val start = intent.getLongExtra("start", 0)
         val seconds = intent.getLongExtra("seconds", 0)
         val digits = Fmt.digits(number)
-        val c = page()
-        c.add(heading("New number"), 8)
-        c.add(text(number, 22f, FG, true))
+        val h = header()
+        h.add(headerTop("New number") { finish() })
         val what = when { direction == "missed" -> "Missed call"; seconds > 0 -> "Talked for ${Fmt.dur(seconds)}"; else -> "The call did not connect" }
-        c.add(text("$what · ${Fmt.when_(start)}", 14f, MUTED), 2)
+        val hr = row()
+        hr.addView(avatar("?", 48, WARN))
+        hr.add(column(0).apply {
+            setPadding(dp(12), 0, 0, 0)
+            add(text(number, 21f, android.graphics.Color.WHITE, true))
+            add(text("$what · ${Fmt.when_(start)}", 14f, ON_NAVY), 2)
+        }, 0, 1f)
+        h.add(hr, 12)
+        val c = shell(h)
         c.add(text("This number is not in the CRM, so nothing about this call has been saved. Was it a customer enquiry?", 15f), 14)
 
         val name = input("Their name (optional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)

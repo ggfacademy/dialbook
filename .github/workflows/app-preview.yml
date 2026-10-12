@@ -1,0 +1,39 @@
+# Renders the phone app's screens with sample data (no phone needed) and saves them to the
+# "app-previews" branch, so a design change can be checked before it goes live. Run by hand.
+name: App screen previews
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  previews:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Render screens
+        working-directory: android
+        run: gradle testDebugUnitTest --tests 'com.dialbook.app.PreviewTest' --no-daemon --stacktrace
+      - name: Save them to the app-previews branch
+        if: always()
+        run: |
+          ls android/app/build/previews || exit 0
+          SRC="$GITHUB_SHA"
+          mkdir -p /tmp/p && cp android/app/build/previews/*.png /tmp/p/ || true
+          mkdir -p /tmp/p/report && cp -r android/app/build/test-results/testDebugUnitTest/*.xml /tmp/p/report/ 2>/dev/null || true
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan app-previews
+          git rm -rfq . ; rm -rf android web supabase .github README.md CLAUDE.md
+          cp -r /tmp/p/* .
+          echo "Screens from $SRC" > README.md
+          git add -A; git commit -qm "App previews from $SRC"
+          git push -f origin app-previews
