@@ -509,10 +509,10 @@ async function tcBadge(){try{const n=await rpc('team_unread',{});if(n!==S.tcUnre
 function tcLive(ev){const m=ev&&ev.new;if(S.view==='chat'){if(m&&m.channel===S.tc.ch)tcThread();tcLoadInbox().then(tcList).catch(()=>{})}else if(m&&m.sender_id!==S.me.id){tcBadge();if(m.channel==='team'||m.channel.includes(S.me.id))toast(`💬 ${nameOf(m.sender_id)}: ${String(m.body||'').slice(0,60)}`)}}
 async function tcLoadInbox(){const {data,error}=await sb.rpc('team_inbox');if(error)throw error;S.tc.inbox=data||[]}
 V.chat={live:false,mount(){
-  return head('Team chat','Quick messages between telecallers, managers and admins. Share a lead so a colleague can open it in one tap.')+
-  `<div class="wa-wrap ${S.tc.open?'wa-open':''}" id="tcWrap"><div class="wa-list"><div id="tcList" style="overflow:auto;flex:1">${loadingHTML}</div></div>
+  return `<div class="tc-page">`+head('Team chat','Quick messages between telecallers, managers and admins. Share a lead so a colleague can open it in one tap.')+
+  `<div class="wa-wrap tc" id="tcWrap"><div class="wa-list"><div id="tcList" style="overflow:auto;flex:1">${loadingHTML}</div></div>
    <div class="wa-thread"><div class="wa-head" id="tcHead"></div><div class="wa-msgs" id="tcMsgs">${loadingHTML}</div>
-   <div class="wa-comp"><div id="tcShare"></div><form id="tcForm" class="row" style="align-items:flex-end;flex-wrap:nowrap"><textarea class="input" id="tcText" rows="1" placeholder="Type a message" style="min-height:42px;max-height:140px;flex:1"></textarea><button class="btn primary" type="submit">${ic('msg')}Send</button></form></div></div></div>`;
+   <div class="wa-comp"><div id="tcShare"></div><form id="tcForm" class="row" style="align-items:flex-end;flex-wrap:nowrap"><textarea class="input" id="tcText" rows="1" placeholder="Type a message" style="min-height:42px;max-height:140px;flex:1"></textarea><button class="btn primary" type="submit">${ic('msg')}Send</button></form></div></div></div></div>`;
 },async load(){
   try{await tcLoadInbox()}catch(e){const b=$('#tcList');if(b)b.innerHTML=`<div class="empty" style="margin:12px"><h3>Not switched on yet</h3><p>Ask your admin to run <b>supabase/team-chat.sql</b> in Supabase.</p></div>`;const m=$('#tcMsgs');if(m)m.innerHTML='';return}
   if(S.tc.share)$('#tcWrap')?.classList.add('wa-open');
