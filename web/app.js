@@ -111,7 +111,10 @@ async function fn(body){
   if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(_){}throw new Error(m)}
   if(data&&data.error)throw new Error(data.error);return data;
 }
-const loadingHTML='<div class="loading">Loading…</div>';
+const loadingHTML='<div class="skel" aria-label="Loading"><i></i><i></i><i></i><i></i></div>';
+/* Round badge with a person's initials, coloured from their name */
+const avatar=(name,cls='')=>{const n=String(name||'?').trim();const ini=n.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('')||'?';let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))>>>0;
+  return `<span class="av ${cls}" style="background:${['#3a7bd5','#12834a','#946600','#8a4fc4','#0e7c7b','#bd3434','#5b6b8c','#b8860b'][h%8]}" aria-hidden="true">${esc(ini)}</span>`};
 
 /* ---------- charts ---------- */
 function niceMax(v){if(v<=4)return 4;const p=Math.pow(10,Math.floor(Math.log10(v)));const n=v/p;return (n<=2?2:n<=5?5:10)*p}
@@ -180,11 +183,23 @@ function targetsCard(rows,agent){
   return `<div class="card" style="margin-bottom:16px"><h2>Today's targets</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th>Calls</th><th>Connected</th><th>Conversions</th><th class="r hide-sm">Follow-ups due</th></tr></thead><tbody>
     ${list.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${bar(r.calls,r.target.calls)}</td><td>${bar(r.connected,r.target.connected)}</td><td>${bar(r.converted,r.target.converted)}</td><td class="r num hide-sm">${r.due}</td></tr>`).join('')}</tbody></table></div></div>`}
 
+/* The rings in the dashboard banner: today's calls, connected calls and conversions against the target */
+function heroRings(rows,agent,ls){const b=$('#hRings');if(!b)return;
+  const pick=agent?rows.filter(r=>r.agent===agent):rows;const sum=k=>pick.reduce((a,r)=>a+(+r[k]||0),0),goal=k=>pick.reduce((a,r)=>a+(+(r.target||{})[k]||0),0);
+  const C=2*Math.PI*36;
+  const ring=(lbl,v,g,col)=>{const p=g?Math.min(1,v/g):(v?1:0);return `<div class="ring"><svg viewBox="0 0 84 84" aria-hidden="true"><circle class="t" cx="42" cy="42" r="36"/><circle class="v" cx="42" cy="42" r="36" stroke="${g&&v>=g?'#3fcf80':col}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C*(1-p)).toFixed(1)}"/></svg><div class="n">${v}${g?`<small>of ${g}</small>`:''}</div><span class="lbl">${lbl}</span></div>`};
+  const due=(ls.overdue||0)+(ls.today||0);
+  b.innerHTML=(pick.length?ring('Calls today',sum('calls'),goal('calls'),'#f2c14e')+ring('Connected',sum('connected'),goal('connected'),'#6aa6ff')+ring('Converted',sum('converted'),goal('converted'),'#3fcf80'):'')+
+    `<div class="hero-stats"><div><b>${due}</b><span>Follow-ups due</span></div><div><b>${ls.fresh||0}</b><span>Never called</span></div></div>`}
+
 /* HOME */
 V.home={mount(){
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const chips=[['0','Today'],['7','7 days'],['30','30 days']].map(([v,l])=>`<button class="chip-toggle" data-act="range" data-v="${v}" aria-pressed="${S.range===v}">${l}</button>`).join('');
-  return head(`${greet}, ${S.me.name||'there'}`,new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'}),chips+(isMgr()?`<select class="input" id="hAgent" style="width:auto" aria-label="Caller">${agentOpts(S.hAgent,'Whole team')}</select>`:''))+`<div id="vb">${loadingHTML}</div>`;
+  return `<section class="hero"><div class="grow"><h1>${greet}, ${esc((S.me.name||'there').split(' ')[0])}</h1><div class="sub">${esc(new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'}))}</div>
+    <div class="acts"><button class="btn gold lg" data-act="nav" data-v="dialer">${ic('phone')}Start calling</button><button class="btn" data-act="nav" data-v="followups">${ic('clock')}Follow-ups</button><button class="btn hide-sm" data-act="nav" data-v="leads">${ic('leads')}Leads</button></div>
+    <div class="row" style="margin-top:14px">${chips}${isMgr()?`<select class="input" id="hAgent" aria-label="Caller">${agentOpts(S.hAgent,'Whole team')}</select>`:''}</div></div>
+    <div id="hRings" class="rings"></div></section><div id="vb">${loadingHTML}</div>`;
 },async load(){
   const rv=S.rv;const to=endToday(),from=S.range==='0'?sod(now()):sod(now())-(+S.range-1)*DAY;
   const agent=isMgr()?(S.hAgent||null):S.me.id;
@@ -196,7 +211,7 @@ V.home={mount(){
     fetchAll(()=>{let q=sb.from('leads').select('source').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q}),
     sb.rpc('today_progress',{p_tz:TZ,p_all:isMgr()}).then(r=>r.data||[],()=>[])]);
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
-  const t=st.totals||{};let html=targetsCard(tp,agent);
+  const t=st.totals||{};heroRings(tp,agent,ls);let html=agent?'':targetsCard(tp,null);
   {const by={};for(const l of inl){const k=(l.source||'').trim()||'Source not set';by[k]=(by[k]||0)+1}
    const col=k=>/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
    const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v,color:col(label)}));
@@ -228,7 +243,7 @@ V.home={mount(){
 }};
 function fuList(list,compact){
   if(!list||!list.length)return '<p class="muted small">Nothing scheduled.</p>';
-  return `<div class="list">${list.map(l=>{const f=ts(l.next_follow_up_at),late=f<now();return `<div class="li"><div class="grow"><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}</div><div class="lead-phone">${esc(l.phone)}${!compact&&isMgr()?' · '+esc(nameOf(l.assigned_to)):''}</div>${!compact&&l.last_outcome?`<div class="small muted">Last: ${esc(dispo(l.last_outcome)?.name||l.last_outcome)}</div>`:''}</div>
+  return `<div class="list">${list.map(l=>{const f=ts(l.next_follow_up_at),late=f<now();return `<div class="li">${avatar(l.name)}<div class="grow"><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}</div><div class="lead-phone">${esc(l.phone)}${!compact&&isMgr()?' · '+esc(nameOf(l.assigned_to)):''}</div>${!compact&&l.last_outcome?`<div class="small muted">Last: ${esc(dispo(l.last_outcome)?.name||l.last_outcome)}</div>`:''}</div>
     <span class="small ${late?'prio-hot':'muted'}">${late?'Overdue ':''}${esc(fmtDT(f))}</span>
     <a class="btn sm call" href="tel:${esc(normPhone(l.phone))}">${ic('phone')}Call</a><button class="btn sm" data-act="lead" data-id="${l.id}">Open</button></div>`}).join('')}</div>`;
 }
@@ -261,7 +276,7 @@ function leadQuery(select='*',opts){
 }
 V.leads={mount(){const f=S.lf;
   return head('Leads','<span id="lcount">&nbsp;</span>',`<button class="btn" data-act="import">${ic('up')}Import</button><button class="btn" data-act="exportLeads">${ic('down')}Export</button><button class="btn primary" data-act="addLead">${ic('plus')}Add lead</button>`)+
-  `<div class="toolbar"><input class="input" id="lq" type="search" placeholder="Search name, phone, city, course, notes" value="${esc(f.q)}" aria-label="Search leads">
+  `<div class="toolbar flt${S.fltOpen?' open':''}"><input class="input" id="lq" type="search" placeholder="Search name, phone, city, course, notes" value="${esc(f.q)}" aria-label="Search leads"><button class="btn flt-btn" data-act="fltTog" aria-expanded="${!!S.fltOpen}">Filters${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length?` (${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length})`:''}</button>
    <select class="input" id="lf-stage" aria-label="Stage">${stageOpts(f.stage,'All stages')}</select>
    <select class="input" id="lf-camp" aria-label="Campaign">${campOpts(f.camp,'All campaigns')}${opt('_none','No campaign',f.camp)}</select>
    ${isMgr()?`<select class="input" id="lf-agent" aria-label="Assigned to">${agentOpts(f.agent,'Anyone')}${opt('_none','Unassigned',f.agent)}</select>`:''}
@@ -283,14 +298,14 @@ V.leads={mount(){const f=S.lf;
     <select id="bk-stage" aria-label="Move to stage"><option value="">Move to stage…</option>${S.cfg.stages.map(s=>opt(s.id,s.name)).join('')}</select>
     <select id="bk-camp" aria-label="Campaign"><option value="">Add to campaign…</option>${S.campaigns.map(c=>opt(c.id,c.name)).join('')}<option value="_none">Remove campaign</option></select>
     <span class="spacer"></span><button class="btn sm" data-act="bkAuto">Assign by rules</button><button class="btn sm" data-act="bkDial">${ic('phone')}Call these</button>${aiReady()?`<button class="btn sm" data-act="bkAI">${ic('spark')}AI call these</button>`:''}<button class="btn sm danger" data-act="bkDel" style="background:var(--surface)">Delete</button><button class="btn sm ghost" data-act="bkClear" style="color:var(--bg)">Clear</button></div>`;
-  if(!data.length){vb.innerHTML=html+`<div class="empty"><h3>${count===0&&!Object.values(S.lf).some(Boolean)?'No leads yet':'No leads match these filters'}</h3><p>${isMgr()?'Import an Excel or CSV file, or add a lead by hand.':'Your manager has not assigned leads to you yet, or none match.'}</p></div>`;return}
+  if(!data.length){vb.innerHTML=html+`<div class="empty"><div class="em-ic">${ic('leads')}</div><h3>${count===0&&!Object.values(S.lf).some(Boolean)?'No leads yet':'No leads match these filters'}</h3><p>${isMgr()?'Import an Excel or CSV file, or add a lead by hand.':'Your manager has not assigned leads to you yet, or none match.'}</p></div>`;return}
   const all=data.every(l=>S.sel.has(l.id));const pages=Math.ceil(count/S.PS);
-  html+=`<div class="tbl-wrap"><table><thead><tr>${isMgr()?`<th style="width:34px"><input type="checkbox" id="selAll" aria-label="Select all on this page" ${all?'checked':''}></th>`:''}<th>Lead</th><th>Stage</th>${isMgr()?'<th class="hide-sm">Assigned</th>':''}<th class="hide-sm">Campaign</th><th>Last call</th><th>Follow-up</th><th class="r hide-sm">Calls</th></tr></thead><tbody>
-  ${data.map(l=>{const fu=ts(l.next_follow_up_at);return `<tr class="click" data-act="lead" data-id="${l.id}">${isMgr()?`<td><input type="checkbox" class="selOne" data-id="${l.id}" aria-label="Select ${esc(l.name)}" ${S.sel.has(l.id)?'checked':''}></td>`:''}
-   <td><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}${l.language?` <span class="tag">${esc(l.language)}</span>`:''}${l.dnd?' <span class="tag">Do not contact</span>':''}${l.contact_only?' <span class="tag">Contact list</span>':''}</div><div class="lead-phone">${esc(l.phone)}${l.city?' · '+esc(l.city):''}</div>${(l.tags||[]).length?`<div class="row" style="gap:4px;margin-top:3px">${l.tags.slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}</td>
-   <td>${stagePill(l.stage)}</td>${isMgr()?`<td class="hide-sm">${esc(nameOf(l.assigned_to))}</td>`:''}<td class="hide-sm small">${esc(camp(l.campaign_id)?.name||'—')}</td>
-   <td class="small">${l.last_call_at?`${esc(dispo(l.last_outcome)?.name||l.last_outcome||'Outcome not logged')}<div class="muted">${rel(l.last_call_at)}</div>`:'<span class="muted">Not called</span>'}</td>
-   <td class="small ${fu&&fu<now()&&isOpen(l)?'prio-hot':''}">${fu&&isOpen(l)?esc(fmtDT(fu)):'<span class="muted">—</span>'}</td><td class="r num hide-sm">${l.call_count||0}</td></tr>`}).join('')}
+  html+=`<div class="tbl-wrap lt"><table><thead><tr>${isMgr()?`<th style="width:34px" class="sel-td"><input type="checkbox" id="selAll" aria-label="Select all on this page" ${all?'checked':''}></th>`:''}<th>Lead</th><th>Stage</th>${isMgr()?'<th class="hide-sm">Assigned</th>':''}<th class="hide-sm">Campaign</th><th>Last call</th><th>Follow-up</th><th class="r hide-sm hide-md">Calls</th><th class="r"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+  ${data.map(l=>{const fu=ts(l.next_follow_up_at);return `<tr class="click" data-act="lead" data-id="${l.id}">${isMgr()?`<td class="sel-td"><input type="checkbox" class="selOne" data-id="${l.id}" aria-label="Select ${esc(l.name)}" ${S.sel.has(l.id)?'checked':''}></td>`:''}
+   <td class="lead-td"><div class="lead-cell">${avatar(l.name)}<div><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}${l.language?` <span class="tag">${esc(l.language)}</span>`:''}${l.dnd?' <span class="tag">Do not contact</span>':''}${l.contact_only?' <span class="tag">Contact list</span>':''}</div><div class="lead-phone">${esc(l.phone)}${l.city?' · '+esc(l.city):''}</div>${(l.tags||[]).length?`<div class="lead-tags">${l.tags.slice(0,2).map(t=>`<span class="tag" title="${esc(t)}">${esc(t)}</span>`).join('')}</div>`:''}</div></div></td>
+   <td class="st-td">${stagePill(l.stage)}</td>${isMgr()?`<td class="hide-sm">${esc(nameOf(l.assigned_to))}</td>`:''}<td class="hide-sm camp-td">${esc(camp(l.campaign_id)?.name||'—')}</td>
+   <td class="small hide-sm">${l.last_call_at?`${esc(dispo(l.last_outcome)?.name||l.last_outcome||'Outcome not logged')}<div class="muted">${rel(l.last_call_at)}</div>`:'<span class="muted">Not called</span>'}</td>
+   <td class="small fu-td ${fu&&fu<now()&&isOpen(l)?'prio-hot':''}">${fu&&isOpen(l)?`<span class="sm-only">Follow-up </span>${esc(fmtDT(fu))}`:'<span class="muted hide-sm">—</span>'}</td><td class="r num hide-sm hide-md">${l.call_count||0}</td><td class="r acts-td"><div class="row-acts">${l.dnd?'':`<a class="btn call" href="tel:${esc(normPhone(l.phone))}" title="Call ${esc(l.name)}" aria-label="Call ${esc(l.name)}">${ic('phone')}</a><button class="btn wa" data-act="waOpen" data-id="${l.id}" title="Company WhatsApp" aria-label="WhatsApp ${esc(l.name)}">${ic('msg')}</button>`}</div></td></tr>`}).join('')}
   </tbody></table></div><div class="pager"><button class="btn sm" data-act="pg" data-v="-1" ${S.page?'':'disabled'}>Previous</button><span class="small muted">Page ${S.page+1} of ${pages} · ${count} leads</span><button class="btn sm" data-act="pg" data-v="1" ${S.page+1<pages?'':'disabled'}>Next</button></div>`;
   vb.innerHTML=html;
 }};
@@ -518,37 +533,38 @@ V.settings={live:false,mount(){
   if(!isAdmin())return head('Settings','')+`<div style="display:flex;flex-direction:column;gap:16px"><div id="waSet">${loadingHTML}</div>${phone}<div class="empty"><h3>Only admins can change settings</h3></div></div>`;
   if(!S.sd)S.sd=clone(S.cfg);const d=S.sd;d.autoMsg=d.autoMsg||{missed:'',stages:{}};d.autoMsg.stages=d.autoMsg.stages||{};d.ai=d.ai||clone(DEF.ai);d.ai.agents=d.ai.agents||{};d.languages=d.languages||clone(DEF.languages);d.assignment=d.assignment||clone(DEF.assignment);d.assignment.rules=d.assignment.rules||[];d.nurture=d.nurture||{startHour:9,endHour:20};d.scripts=d.scripts||[];d.lostReasons=d.lostReasons||clone(DEF.lostReasons);d.targets=d.targets||{calls:0,connected:0,converted:0};d.targets.agents=d.targets.agents||{};agents().forEach(m=>{d.targets.agents[m.id]=d.targets.agents[m.id]||{}});
   const stOpts=sel=>opt('','No stage change',sel)+d.stages.map(s=>opt(s.id,'→ '+s.name,sel)).join('');
-  return head('Settings','Shape the CRM around how your team sells.',`<button class="btn primary" data-act="saveSet" ${S.sdirty?'':'disabled'}>Save changes</button>`)+`<div style="display:flex;flex-direction:column;gap:16px">
-  <div class="card"><h2>Business</h2><label class="field" style="max-width:420px"><span>Company name (used in messages and by the AI agent)</span><input class="input" data-sp="company" value="${esc(d.company)}"></label>
+  const cur=S.setTab||'biz';const tabs=[['biz','Business','home'],['msg','WhatsApp & messages','msg'],['src','Lead sources','leads'],['calls','Calls & stages','phone'],['team','Targets & scripts','chart'],['ai','AI calling','spark']];
+  return head('Settings','Shape the CRM around how your team sells.',`<button class="btn primary" data-act="saveSet" ${S.sdirty?'':'disabled'}>Save changes</button>`)+`<div class="set-tabs" role="tablist">${tabs.map(([k,l,i])=>`<button role="tab" data-act="setTab" data-v="${k}" aria-selected="${cur===k}">${ic(i)}${l}</button>`).join('')}</div><div class="set-body" data-cur="${cur}" style="display:flex;flex-direction:column;gap:16px">
+  <div class="card" data-tab="biz"><h2>Business</h2><label class="field" style="max-width:420px"><span>Company name (used in messages and by the AI agent)</span><input class="input" data-sp="company" value="${esc(d.company)}"></label>
   <label class="row" style="margin-top:12px"><input type="checkbox" data-sp="autoCreateIncoming" ${d.autoCreateIncoming?'checked':''}> When an unknown number messages the company WhatsApp, add it as a new lead</label>
   <p class="small muted" style="margin:6px 0 0 26px">Phone calls: only calls with leads are saved and recorded. After a call with a number that is not in the CRM, the phone app asks the telecaller “Add as lead” or “Personal call”. Personal calls are never saved.</p></div>
-  <div id="waSet">${loadingHTML}</div>
-  <div id="nuSet">${loadingHTML}</div>
-  ${phone}
-  <div class="card"><h2>AI calling</h2><label class="row" style="margin:-4px 0 10px"><input type="checkbox" data-sp="ai.enabled" ${d.ai.enabled!==false?'checked':''}> <b>AI calling is on</b> <span class="small muted">(untick to stop anyone starting AI calls)</span></label><p class="small muted" style="margin-top:-6px">Uses Bolna voice agents. Create the agent at bolna.ai, then paste its ID here. The API key goes into Supabase secrets, never here.</p>
+  <div id="waSet" data-tab="msg">${loadingHTML}</div>
+  <div id="nuSet" data-tab="msg">${loadingHTML}</div>
+  <div data-tab="biz">${phone}</div>
+  <div class="card" data-tab="ai"><h2>AI calling</h2><label class="row" style="margin:-4px 0 10px"><input type="checkbox" data-sp="ai.enabled" ${d.ai.enabled!==false?'checked':''}> <b>AI calling is on</b> <span class="small muted">(untick to stop anyone starting AI calls)</span></label><p class="small muted" style="margin-top:-6px">Uses Bolna voice agents. Create the agent at bolna.ai, then paste its ID here. The API key goes into Supabase secrets, never here.</p>
   <div class="grid2"><label class="field"><span>Default Bolna agent ID</span><input class="input mono" data-sp="ai.agentId" value="${esc(d.ai.agentId)}"></label><label class="field"><span>Caller ID number (optional)</span><input class="input mono" data-sp="ai.fromNumber" value="${esc(d.ai.fromNumber)}" placeholder="+91…"></label>
   <label class="field"><span>Start calling at (hour, IST)</span><input class="input" type="number" min="0" max="23" data-sp="ai.startHour" value="${esc(d.ai.startHour)}"></label><label class="field"><span>Stop calling at (hour, IST)</span><input class="input" type="number" min="1" max="24" data-sp="ai.endHour" value="${esc(d.ai.endHour)}"></label>
   <label class="field"><span>Most calls per list</span><input class="input" type="number" min="1" max="200" data-sp="ai.maxBatch" value="${esc(d.ai.maxBatch)}"></label></div>
   <h3 style="margin-top:16px">Agent for each language</h3><p class="small muted">Leads are called by the agent for their language (for example a Tamil-speaking agent for Tamil leads). Empty = use the campaign's or the default agent. Ready-made Tamil, Telugu and Kannada prompts are in the ai-agents folder of the package.</p>
   <div class="grid3">${d.languages.map(x=>`<label class="field"><span>${esc(x)}</span><input class="input mono" data-sp="ai.agents.${esc(x)}" value="${esc(d.ai.agents[x]||'')}" placeholder="Bolna agent ID"></label>`).join('')}</div></div>
-  ${assignmentCard(d)}
-  <div id="lsSet">${loadingHTML}</div>
-  <div class="card"><h2>Call outcomes</h2><p class="small muted" style="margin-top:-6px">“Connected” counts toward connect rate. The stage moves the lead automatically. “Ask follow-up” pre-fills a callback time.</p>
+  <div data-tab="src">${assignmentCard(d)}</div>
+  <div id="lsSet" data-tab="src">${loadingHTML}</div>
+  <div class="card" data-tab="calls"><h2>Call outcomes</h2><p class="small muted" style="margin-top:-6px">“Connected” counts toward connect rate. The stage moves the lead automatically. “Ask follow-up” pre-fills a callback time.</p>
   ${d.dispositions.map((x,i)=>`<div class="set-row"><input class="input" data-sp="dispositions.${i}.name" value="${esc(x.name)}" aria-label="Outcome name"><label class="row small"><input type="checkbox" data-sp="dispositions.${i}.connected" ${x.connected?'checked':''}>Connected</label><select class="input" data-sp="dispositions.${i}.stage" aria-label="Moves lead to">${stOpts(x.stage)}</select><label class="row small"><input type="checkbox" data-sp="dispositions.${i}.fu" ${x.fu?'checked':''}>Ask follow-up</label><button class="btn sm ghost" data-act="setDel" data-v="dispositions.${i}" aria-label="Remove">${ic('x')}</button></div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="dispositions">${ic('plus')}Add outcome</button></div>
-  <div class="card"><h2>Lead stages</h2>${d.stages.map((x,i)=>`<div class="row" style="margin-bottom:8px"><input class="input" style="max-width:320px" data-sp="stages.${i}.name" value="${esc(x.name)}" aria-label="Stage name">${['won','lost','new'].includes(x.id)?'<span class="small muted">fixed</span>':`<button class="btn sm ghost" data-act="setUp" data-v="${i}" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="setDel" data-v="stages.${i}" aria-label="Remove">${ic('x')}</button>`}</div>`).join('')}
+  <div class="card" data-tab="calls"><h2>Lead stages</h2>${d.stages.map((x,i)=>`<div class="row" style="margin-bottom:8px"><input class="input" style="max-width:320px" data-sp="stages.${i}.name" value="${esc(x.name)}" aria-label="Stage name">${['won','lost','new'].includes(x.id)?'<span class="small muted">fixed</span>':`<button class="btn sm ghost" data-act="setUp" data-v="${i}" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="setDel" data-v="stages.${i}" aria-label="Remove">${ic('x')}</button>`}</div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="stages">${ic('plus')}Add stage</button></div>
-  <div class="card"><h2>Lost reasons</h2><p class="small muted" style="margin-top:-6px">When a lead is marked Lost, the caller picks one of these. Reports → Lost reasons shows which come up most.</p><label class="field" style="max-width:420px"><span>One per line</span><textarea class="input" rows="8" data-sp="lostReasonsText">${esc(d.lostReasons.join('\n'))}</textarea></label></div>
-  <div class="card"><h2>Daily targets</h2><p class="small muted" style="margin-top:-6px">Each telecaller sees today's progress on the dashboard and in the phone app. Leave a box empty (or 0) for no target. A person's own numbers replace the team numbers.</p>
+  <div class="card" data-tab="calls"><h2>Lost reasons</h2><p class="small muted" style="margin-top:-6px">When a lead is marked Lost, the caller picks one of these. Reports → Lost reasons shows which come up most.</p><label class="field" style="max-width:420px"><span>One per line</span><textarea class="input" rows="8" data-sp="lostReasonsText">${esc(d.lostReasons.join('\n'))}</textarea></label></div>
+  <div class="card" data-tab="team"><h2>Daily targets</h2><p class="small muted" style="margin-top:-6px">Each telecaller sees today's progress on the dashboard and in the phone app. Leave a box empty (or 0) for no target. A person's own numbers replace the team numbers.</p>
   <div class="tbl-wrap"><table><thead><tr><th>Who</th><th class="r">Calls a day</th><th class="r">Connected calls</th><th class="r">Conversions</th></tr></thead><tbody>
   <tr><td><b>Whole team (default)</b></td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.${k}" value="${esc(d.targets[k]||'')}" aria-label="Team ${k}"></td>`).join('')}</tr>
   ${agents().filter(m=>m.role==='telecaller').map(m=>`<tr><td>${esc(m.name)}</td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.agents.${m.id}.${k}" value="${esc(d.targets.agents[m.id]?.[k]||'')}" placeholder="${esc(d.targets[k]||'')}" aria-label="${esc(m.name)} ${k}"></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
-  <div class="card"><h2>Call scripts</h2><p class="small muted" style="margin-top:-6px">What to say on the call, shown in Calling mode, on the lead and in the phone app. The best match is used: program and language, then program, then the script under Campaigns → Edit, then language only, then a general one. Use {first_name}, {program}, {city}, {agent} and {company}.</p>
+  <div class="card" data-tab="team"><h2>Call scripts</h2><p class="small muted" style="margin-top:-6px">What to say on the call, shown in Calling mode, on the lead and in the phone app. The best match is used: program and language, then program, then the script under Campaigns → Edit, then language only, then a general one. Use {first_name}, {program}, {city}, {agent} and {company}.</p>
   ${d.scripts.map((x,i)=>`<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:6px"><div class="row"><input class="input" style="max-width:240px" data-sp="scripts.${i}.name" value="${esc(x.name)}" aria-label="Script name" placeholder="Name, e.g. GAC Telugu"><select class="input" style="width:auto" data-sp="scripts.${i}.campaign_id" aria-label="Program">${opt('','Any program',x.campaign_id)}${S.campaigns.map(c=>opt(c.id,c.name,x.campaign_id)).join('')}</select><select class="input" style="width:auto" data-sp="scripts.${i}.language" aria-label="Language">${opt('','Any language',x.language)}${d.languages.map(g=>opt(g,g,x.language)).join('')}</select><button class="btn sm ghost" data-act="setDel" data-v="scripts.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="8" data-sp="scripts.${i}.body" aria-label="Script" placeholder="Opening: Hello {first_name}, I am {agent} from {company}…&#10;Questions to ask…&#10;If they say the fee is high: …">${esc(x.body||'')}</textarea></div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="scripts">${ic('plus')}Add script</button></div>
-  <div class="card"><h2>Languages</h2><label class="field" style="max-width:420px"><span>Languages your team works in, one per line</span><textarea class="input" rows="6" data-sp="languagesText">${esc(d.languages.join('\n'))}</textarea></label><p class="small muted">Save to update the language lists everywhere.</p></div>
-  <div class="card"><h2>Source names</h2><label class="field" style="max-width:420px"><span>One per line (used in lists and filters)</span><textarea class="input" rows="6" data-sp="sourcesText">${esc(d.sources.join('\n'))}</textarea></label></div>
-  <div class="card"><h2>Quick messages (WhatsApp app and SMS)</h2><p class="small muted" style="margin-top:-6px">Ready-made texts that open in the phone's WhatsApp or SMS app. Use {name}, {agent}, {company} and {phone}. Approved WhatsApp API templates are managed under WhatsApp above.</p>
+  <div class="card" data-tab="biz"><h2>Languages</h2><label class="field" style="max-width:420px"><span>Languages your team works in, one per line</span><textarea class="input" rows="6" data-sp="languagesText">${esc(d.languages.join('\n'))}</textarea></label><p class="small muted">Save to update the language lists everywhere.</p></div>
+  <div class="card" data-tab="src"><h2>Source names</h2><label class="field" style="max-width:420px"><span>One per line (used in lists and filters)</span><textarea class="input" rows="6" data-sp="sourcesText">${esc(d.sources.join('\n'))}</textarea></label></div>
+  <div class="card" data-tab="msg"><h2>Quick messages (WhatsApp app and SMS)</h2><p class="small muted" style="margin-top:-6px">Ready-made texts that open in the phone's WhatsApp or SMS app. Use {name}, {agent}, {company} and {phone}. Approved WhatsApp API templates are managed under WhatsApp above.</p>
   ${d.templates.map((x,i)=>`<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:6px"><div class="row"><input class="input" style="max-width:260px" data-sp="templates.${i}.name" value="${esc(x.name)}" aria-label="Template name"><select class="input" style="width:auto" data-sp="templates.${i}.channel" aria-label="Channel">${opt('whatsapp','WhatsApp',x.channel)}${opt('sms','SMS',x.channel)}</select><button class="btn sm ghost" data-act="setDel" data-v="templates.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="3" data-sp="templates.${i}.body" aria-label="Message">${esc(x.body)}</textarea></div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="templates">${ic('plus')}Add template</button></div></div>`;
 }};
@@ -826,9 +842,10 @@ const TABS=['home','leads','dialer','followups','wa'];
 function renderNav(){
   const badge=v=>v==='followups'&&S.badge?`<span class="badge">${S.badge>99?'99+':S.badge}</span>`:v==='wa'&&S.wa&&S.wa.unread?`<span class="badge" style="background:var(--call)">${S.wa.unread>99?'99+':S.wa.unread}</span>`:'';
   const cur=v=>S.view===v?' aria-current="page"':'';
-  $('#sideNav').innerHTML=NAV.map(([v,l,i])=>`<button class="nav-btn" data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${l}</span>${badge(v)}</button>`).join('');
+  const btn=([v,l,i])=>`<button class="nav-btn" data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${l}</span>${badge(v)}</button>`;
+  $('#sideNav').innerHTML=`<div class="nav-group">Daily work</div>${NAV.filter(n=>TABS.includes(n[0])).map(btn).join('')}<div class="nav-group">Manage</div>${NAV.filter(n=>!TABS.includes(n[0])).map(btn).join('')}`;
   $('#tabNav').innerHTML=TABS.map(v=>{const[,l,i]=NAV.find(n=>n[0]===v);return `<button data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${v==='dialer'?'Call':v==='followups'?'Follow-ups':l}</span>${badge(v)}</button>`}).join('')+`<button data-act="moreNav"${TABS.includes(S.view)?'':' aria-current="page"'}>${ic('more')}<span>More</span></button>`;
-  $('#brandName').textContent=S.cfg.company||'Dialbook';$('#meName').textContent=S.me?.name||'';$('#meRole').textContent=role()[0].toUpperCase()+role().slice(1);
+  $('#brandName').textContent=S.cfg.company||'Dialbook';$('#meName').innerHTML=S.me?`${avatar(S.me.name,'sm')}<span>${esc(S.me.name||'')}</span>`:'';$('#meRole').textContent=role()[0].toUpperCase()+role().slice(1);
 }
 function render(){const v=V[S.view]||V.home;S.rv++;$('#main').innerHTML=v.mount();renderNav();if(v.load)v.load().catch(fail)}
 function go(v){if(v!=='settings'){S.sd=null;S.sdirty=false}if(v!=='leads')S.sel.clear();S.view=v;render();window.scrollTo(0,0);try{history.replaceState(null,'','#'+v)}catch(e){}}
@@ -903,6 +920,9 @@ document.addEventListener('click',async e=>{
   if(a==='lead'&&e.target.closest('input,select,textarea,a,button:not([data-act="lead"])'))return;
   try{switch(a){
     case'nav':closeModal();go(v);break;
+    case'waOpen':openChat(id);break;
+    case'fltTog':{S.fltOpen=!S.fltOpen;const tb=t.closest('.toolbar');tb.classList.toggle('open',S.fltOpen);t.setAttribute('aria-expanded',String(S.fltOpen));break}
+    case'setTab':{S.setTab=v;const b=$('.set-body');if(b)b.dataset.cur=v;$$('.set-tabs button').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));window.scrollTo(0,0);break}
     case'moreNav':modal(`<h2>More</h2><div class="list" style="margin-top:12px">${NAV.filter(([k])=>!TABS.includes(k)).map(([k,l,i])=>`<button class="li btn" style="justify-content:flex-start" data-act="nav" data-v="${k}">${ic(i)}${l}</button>`).join('')}<button class="li btn" style="justify-content:flex-start" data-act="logout">Sign out</button></div>`);break;
     case'authMode':S.authMode=v;showAuth();break;
     case'authForgot':{const email=($('#aEmail')?.value||'').trim(),m=$('#aMsg');if(!email){m.className='small prio-hot';m.textContent='Type your email above, then press Forgot password.';break}
