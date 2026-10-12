@@ -37,6 +37,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     lint { checkReleaseBuilds = false; abortOnError = false }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -44,4 +45,11 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Only for the screen previews (.github/workflows/app-preview.yml); not part of the app
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("androidx.work:work-testing:2.9.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

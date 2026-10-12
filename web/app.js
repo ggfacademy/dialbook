@@ -501,6 +501,50 @@ async function loadTransfers(from,to){
   ${data.map(a=>`<tr><td class="small">${esc(fmtDT(a.created_at))}</td><td><b>${esc(a.lead?.name||'')}</b><div class="lead-phone">${esc(a.lead?.phone||'')}</div></td><td>${esc(nameOf(a.data.from))}</td><td>${esc(nameOf(a.data.to))}</td><td class="hide-sm">${esc(nameOf(a.actor_id))}</td><td class="small">${esc(a.data.note||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No transfers in this range.</td></tr>'}</tbody></table></div>`;
 }
 
+/* TEAM CHAT: messages between telecallers, managers and admins */
+S.tc={ch:'team',inbox:[],share:null};
+const tcDm=uid=>'dm:'+[S.me.id,uid].sort().join(':');
+const tcName=ch=>ch==='team'?'Everyone':nameOf(ch.split(':').slice(1).find(x=>x!==S.me.id));
+async function tcBadge(){try{const n=await rpc('team_unread',{});if(n!==S.tcUnread){S.tcUnread=n||0;renderNav()}}catch(e){}}
+function tcLive(ev){const m=ev&&ev.new;if(S.view==='chat'){if(m&&m.channel===S.tc.ch)tcThread();tcLoadInbox().then(tcList).catch(()=>{})}else if(m&&m.sender_id!==S.me.id){tcBadge();if(m.channel==='team'||m.channel.includes(S.me.id))toast(`💬 ${nameOf(m.sender_id)}: ${String(m.body||'').slice(0,60)}`)}}
+async function tcLoadInbox(){const {data,error}=await sb.rpc('team_inbox');if(error)throw error;S.tc.inbox=data||[]}
+V.chat={live:false,mount(){
+  return `<div class="tc-page">`+head('Team chat','Quick messages between telecallers, managers and admins. Share a lead so a colleague can open it in one tap.')+
+  `<div class="wa-wrap tc" id="tcWrap"><div class="wa-list"><div id="tcList" style="overflow:auto;flex:1">${loadingHTML}</div></div>
+   <div class="wa-thread"><div class="wa-head" id="tcHead"></div><div class="wa-msgs" id="tcMsgs">${loadingHTML}</div>
+   <div class="wa-comp"><div id="tcShare"></div><form id="tcForm" class="row" style="align-items:flex-end;flex-wrap:nowrap"><textarea class="input" id="tcText" rows="1" placeholder="Type a message" style="min-height:42px;max-height:140px;flex:1"></textarea><button class="btn primary" type="submit">${ic('msg')}Send</button></form></div></div></div></div>`;
+},async load(){
+  try{await tcLoadInbox()}catch(e){const b=$('#tcList');if(b)b.innerHTML=`<div class="empty" style="margin:12px"><h3>Not switched on yet</h3><p>Ask your admin to run <b>supabase/team-chat.sql</b> in Supabase.</p></div>`;const m=$('#tcMsgs');if(m)m.innerHTML='';return}
+  if(S.tc.share)$('#tcWrap')?.classList.add('wa-open');
+  tcList();await tcThread();
+  const f=$('#tcForm');if(f){f.onsubmit=e=>{e.preventDefault();tcSend()};$('#tcText').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();tcSend()}}}
+}};
+function tcList(){const b=$('#tcList');if(!b)return;const by={};for(const x of S.tc.inbox)by[x.channel]=x;
+  const people=agents().filter(m=>m.id!==S.me.id).map(m=>({ch:tcDm(m.id),name:m.name,sub:m.role}));
+  const rows=[{ch:'team',name:'Everyone',sub:'whole team'},...people].map(r=>({...r,x:by[r.ch]})).sort((a,b)=>a.ch==='team'?-1:b.ch==='team'?1:(ts(b.x?.last_at)||0)-(ts(a.x?.last_at)||0)||a.name.localeCompare(b.name));
+  b.innerHTML=rows.map(r=>`<button class="wa-conv ${S.tc.ch===r.ch?'on':''}" data-act="tcPick" data-v="${esc(r.ch)}">${r.ch==='team'?`<span class="av" style="background:var(--side)">${ic('team')}</span>`:avatar(r.name)}
+    <span class="grow"><span class="row" style="flex-wrap:nowrap"><b class="wa-name grow">${esc(r.name)}</b>${r.x?.last_at?`<span class="small muted">${esc(fmtWhen(r.x.last_at))}</span>`:''}</span>
+    <span class="row" style="flex-wrap:nowrap"><span class="small muted wa-snip grow">${r.x?.last_body?esc((r.x.last_sender===S.me.id?'You: ':'')+r.x.last_body):esc(r.sub||'')}</span>${r.x?.unread?`<span class="badge" style="background:var(--s2)">${r.x.unread}</span>`:''}</span></span></button>`).join('');
+}
+async function tcThread(keep){const ch=S.tc.ch;const h=$('#tcHead');if(!h)return;
+  h.innerHTML=`<button class="btn sm ghost wa-back" data-act="tcBack" aria-label="Back">←</button>${ch==='team'?`<span class="av sm" style="background:var(--side)">${ic('team')}</span>`:avatar(tcName(ch),'sm')}<div class="grow"><b>${esc(tcName(ch))}</b><div class="small muted">${ch==='team'?'Everyone in the team sees these messages':'Private chat'}</div></div>`;
+  const sh=$('#tcShare');if(sh)sh.innerHTML=S.tc.share?`<div class="row small" style="margin-bottom:8px"><span class="tag">Lead: ${esc(S.tc.share.name)}</span><button class="btn sm ghost" data-act="tcUnshare">Remove</button></div>`:'';
+  if(keep)return;
+  const {data,error}=await sb.from('team_messages').select('*, lead:leads(id,name,phone)').eq('channel',ch).order('created_at',{ascending:false}).limit(300);
+  const box=$('#tcMsgs');if(!box||S.tc.ch!==ch)return;if(error){box.innerHTML=`<p class="small muted">${esc(error.message)}</p>`;return}
+  const ms=(data||[]).reverse();let last='';
+  box.innerHTML=ms.length?ms.map(m=>{const me=m.sender_id===S.me.id;const day=new Date(ts(m.created_at)).toDateString();const sep=day!==last?`<div class="small muted" style="text-align:center;margin:8px 0">${esc(new Date(ts(m.created_at)).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}))}</div>`:'';last=day;
+    return sep+`<div class="bub ${me?'out':''}">${!me&&ch==='team'?`<span style="margin-right:6px">${avatar(nameOf(m.sender_id),'sm')}</span>`:''}<div class="bub-in">${!me&&ch==='team'?`<div class="small" style="font-weight:600;color:var(--accent)">${esc(nameOf(m.sender_id))}</div>`:''}${m.body?`<div class="bub-t">${esc(m.body)}</div>`:''}
+      ${m.lead?`<button class="btn sm" style="margin-top:6px" data-act="lead" data-id="${m.lead.id}">${ic('leads')}${esc(m.lead.name||m.lead.phone)}</button>`:m.lead_id?'<div class="small muted">Lead not available to you</div>':''}
+      <div class="bub-meta">${esc(new Date(ts(m.created_at)).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}))}${me||isAdmin()?` · <button class="btn sm ghost" style="padding:0 4px;font-size:.7rem" data-act="tcDel" data-id="${m.id}">delete</button>`:''}</div></div></div>`}).join(''):`<div class="empty" style="margin:16px"><div class="em-ic">${ic('msg')}</div><h3>No messages yet</h3><p>${ch==='team'?'Say hello to the team.':'Start the conversation.'}</p></div>`;
+  box.scrollTop=box.scrollHeight;
+  const before=S.tc.inbox.find(x=>x.channel===ch)?.unread;
+  try{await rpc('team_mark_read',{p_channel:ch});const x=S.tc.inbox.find(x=>x.channel===ch);if(x)x.unread=0;if(before)tcList();tcBadge()}catch(e){}
+}
+async function tcSend(){const t=$('#tcText');const body=(t?.value||'').trim();if(!body&&!S.tc.share)return;
+  const row={channel:S.tc.ch,sender_id:S.me.id,body,lead_id:S.tc.share?.id||null};t.value='';
+  try{await R(sb.from('team_messages').insert(row));S.tc.share=null;await tcThread();await tcLoadInbox();tcList()}catch(e){t.value=body;fail(e)}}
+
 /* AI CALLING */
 V.ai={mount(){
   const a=S.ai;
@@ -591,7 +635,7 @@ function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
     <div id="dwNu"></div>
     <div class="card" style="margin-top:14px"><h2>Activity</h2><div class="row" style="margin:10px 0 14px;align-items:flex-start"><textarea class="input" id="dwNoteAdd" rows="2" placeholder="Add a note" style="flex:1;min-height:44px"></textarea><button class="btn" data-act="addNote">Add note</button></div><div id="dwTl"></div></div>
     <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">AI assistant</h2><span class="spacer"></span><button class="btn sm" data-act="aiAssist">${ic('spark')}Suggest next step</button></div><div id="aiOut" class="small muted" style="margin-top:8px">Reads this lead's calls, transcripts and notes and suggests what to do next, with a ready-to-send message.</div></div>
-    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
+    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><button class="btn sm" data-act="tcShare">${ic('msg')}Share in team chat</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
   loadDrawer().catch(fail);
 }
 function closeDrawer(){tStop('dw');S.openLead=null;S.lead=null;$('#dw').innerHTML=''}
@@ -837,14 +881,15 @@ async function exportCalls(){toast('Preparing export…');try{
 function exportAgents(){const st=S.repStats;if(!st)return;saveCSV(`caller-summary-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['Caller','Calls','Connected','Connect %','Talk time (min)','Avg call (sec)','Interested','Converted','Follow-ups set'],...[...S.team.map(m=>[m.name,st.by_agent?.[m.id]]),['AI agent',st.by_agent?.ai]].filter(x=>x[1]).map(([n,s])=>[n,s.n,s.conn,Math.round(s.n?s.conn/s.n*100:0),Math.round(s.talk/60),Math.round(s.conn?s.talk/s.conn:0),s.intr,s.conv,s.fus])])}
 
 /* ---------- navigation & render ---------- */
-const NAV=[['home','Dashboard','home'],['leads','Leads','leads'],['dialer','Calling mode','phone'],['followups','Follow-ups','clock'],['wa','WhatsApp','msg'],['pipeline','Pipeline','cols'],['campaigns','Campaigns','flag'],['ai','AI calling','spark'],['team','Team','team'],['reports','Reports','chart'],['settings','Settings','gear']];
+const NAV=[['home','Dashboard','home'],['leads','Leads','leads'],['dialer','Calling mode','phone'],['followups','Follow-ups','clock'],['wa','WhatsApp','msg'],['chat','Team chat','team'],['pipeline','Pipeline','cols'],['campaigns','Campaigns','flag'],['ai','AI calling','spark'],['team','Team','team'],['reports','Reports','chart'],['settings','Settings','gear']];
 const TABS=['home','leads','dialer','followups','wa'];
+const DAILY=[...TABS,'chat'];
 function renderNav(){
-  const badge=v=>v==='followups'&&S.badge?`<span class="badge">${S.badge>99?'99+':S.badge}</span>`:v==='wa'&&S.wa&&S.wa.unread?`<span class="badge" style="background:var(--call)">${S.wa.unread>99?'99+':S.wa.unread}</span>`:'';
+  const badge=v=>v==='chat'&&S.tcUnread?`<span class="badge" style="background:var(--s2)">${S.tcUnread>99?'99+':S.tcUnread}</span>`:v==='followups'&&S.badge?`<span class="badge">${S.badge>99?'99+':S.badge}</span>`:v==='wa'&&S.wa&&S.wa.unread?`<span class="badge" style="background:var(--call)">${S.wa.unread>99?'99+':S.wa.unread}</span>`:'';
   const cur=v=>S.view===v?' aria-current="page"':'';
   const btn=([v,l,i])=>`<button class="nav-btn" data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${l}</span>${badge(v)}</button>`;
-  $('#sideNav').innerHTML=`<div class="nav-group">Daily work</div>${NAV.filter(n=>TABS.includes(n[0])).map(btn).join('')}<div class="nav-group">Manage</div>${NAV.filter(n=>!TABS.includes(n[0])).map(btn).join('')}`;
-  $('#tabNav').innerHTML=TABS.map(v=>{const[,l,i]=NAV.find(n=>n[0]===v);return `<button data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${v==='dialer'?'Call':v==='followups'?'Follow-ups':l}</span>${badge(v)}</button>`}).join('')+`<button data-act="moreNav"${TABS.includes(S.view)?'':' aria-current="page"'}>${ic('more')}<span>More</span></button>`;
+  $('#sideNav').innerHTML=`<div class="nav-group">Daily work</div>${NAV.filter(n=>DAILY.includes(n[0])).map(btn).join('')}<div class="nav-group">Manage</div>${NAV.filter(n=>!DAILY.includes(n[0])).map(btn).join('')}`;
+  $('#tabNav').innerHTML=TABS.map(v=>{const[,l,i]=NAV.find(n=>n[0]===v);return `<button data-act="nav" data-v="${v}"${cur(v)}>${ic(i)}<span>${v==='dialer'?'Call':v==='followups'?'Follow-ups':l}</span>${badge(v)}</button>`}).join('')+`<button data-act="moreNav"${TABS.includes(S.view)?'':' aria-current="page"'}>${ic('more')}<span>More</span>${S.tcUnread?`<span class="badge" style="background:var(--s2)">${S.tcUnread>99?'99+':S.tcUnread}</span>`:''}</button>`;
   $('#brandName').textContent=S.cfg.company||'Dialbook';$('#meName').innerHTML=S.me?`${avatar(S.me.name,'sm')}<span>${esc(S.me.name||'')}</span>`:'';$('#meRole').textContent=role()[0].toUpperCase()+role().slice(1);
 }
 function render(){const v=V[S.view]||V.home;S.rv++;$('#main').innerHTML=v.mount();renderNav();if(v.load)v.load().catch(fail)}
@@ -909,8 +954,8 @@ async function afterLogin(){
   $('#auth').hidden=true;$('#app').hidden=false;
   const h=(location.hash||'').slice(1);if(V[h])S.view=h;else if(h.startsWith('wa:')&&/^[0-9a-f-]{36}$/i.test(h.slice(3))){S.view='wa';S.wa.lead=h.slice(3)}
   await loadWa();await loadSourceNames();
-  render();updateBadge();waBadge();
-  if(!subscribed){subscribed=true;sb.channel('dialbook').on('postgres_changes',{event:'*',schema:'public',table:'leads'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'ai_calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'wa_messages'},onLive).subscribe()}
+  render();updateBadge();waBadge();tcBadge();
+  if(!subscribed){subscribed=true;sb.channel('dialbook').on('postgres_changes',{event:'*',schema:'public',table:'leads'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'ai_calls'},onLive).on('postgres_changes',{event:'*',schema:'public',table:'wa_messages'},onLive).on('postgres_changes',{event:'INSERT',schema:'public',table:'team_messages'},tcLive).subscribe()}
 }
 
 /* ---------- events ---------- */
@@ -921,6 +966,11 @@ document.addEventListener('click',async e=>{
   try{switch(a){
     case'nav':closeModal();go(v);break;
     case'waOpen':openChat(id);break;
+    case'tcShare':{if(!S.lead)break;S.tc.share={id:S.lead.id,name:S.lead.name||S.lead.phone};closeDrawer();go('chat');break}
+    case'tcPick':S.tc.ch=v;$('#tcWrap')?.classList.add('wa-open');tcList();tcThread();break;
+    case'tcBack':$('#tcWrap')?.classList.remove('wa-open');break;
+    case'tcUnshare':S.tc.share=null;tcThread(true);break;
+    case'tcDel':arm(t,async()=>{await R(sb.from('team_messages').delete().eq('id',id));tcThread()},'Delete?');break;
     case'fltTog':{S.fltOpen=!S.fltOpen;const tb=t.closest('.toolbar');tb.classList.toggle('open',S.fltOpen);t.setAttribute('aria-expanded',String(S.fltOpen));break}
     case'setTab':{S.setTab=v;const b=$('.set-body');if(b)b.dataset.cur=v;$$('.set-tabs button').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));window.scrollTo(0,0);break}
     case'moreNav':modal(`<h2>More</h2><div class="list" style="margin-top:12px">${NAV.filter(([k])=>!TABS.includes(k)).map(([k,l,i])=>`<button class="li btn" style="justify-content:flex-start" data-act="nav" data-v="${k}">${ic(i)}${l}</button>`).join('')}<button class="li btn" style="justify-content:flex-start" data-act="logout">Sign out</button></div>`);break;

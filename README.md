@@ -273,6 +273,13 @@ Run `supabase/sales-tools.sql` once in the SQL Editor, then redeploy the **leads
 - **Contact list in batches**: **Settings → Nurture sequences → Send to contact list** sends a sequence to the old data, a set number a day.
 - **Facebook**: leads are also pulled every 15 minutes, in case Meta's instant delivery misses one.
 
+### Team chat
+
+Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team chat** (website menu, phone app **Chat** tab):
+**Everyone** for the whole team, and a private chat with each colleague. **Share in team chat** on a lead sends it so the
+colleague can open it in one tap. On the website new messages arrive at once; the phone app shows them every few seconds
+while a chat is open, and as a notification when the app checks in the background.
+
 ## Backups (daily, to Dropbox)
 
 Every night at 2:00 am India time, GitHub copies the CRM data into your Dropbox folder `/CRM` (on the PC: `F:\Dropbox\CRM`) as `dialbook-YYYY-MM-DD.zip`. Each zip has the main tables as CSV files for Excel (`csv/leads.csv`…), a full copy for restoring (`database.sql`, `logins.sql`) and a README. The last 30 days are kept. Call recordings are not included.
@@ -313,6 +320,7 @@ supabase/pipeline-contacts.sql       keeps the contact list out of Pipeline coun
 supabase/conversion.sql              hot leads from form answers, new enquiries due at once, 2-minute WhatsApp nurture, speed-to-lead report
 supabase/auto-messages.sql           automatic WhatsApp after a not-connected call and on stage changes (e.g. Payment pending)
 supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
+supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
@@ -325,6 +333,7 @@ ai-agents/REGIONAL-AGENTS.md         Tamil, Telugu, Kannada (and Hindi) AI agent
 web/                                 the CRM website (index.html, app.js, config.js)
 android/                             the Android app (Kotlin)
 .github/workflows/build.yml          builds the app and publishes the website
+.github/workflows/app-preview.yml    renders the phone app's screens with sample data (saved to the app-previews branch)
 ```
 
 ## Troubleshooting

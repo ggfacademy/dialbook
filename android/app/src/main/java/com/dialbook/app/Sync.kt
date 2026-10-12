@@ -22,6 +22,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val p = Prefs(applicationContext)
         if (!p.loggedIn) return@withContext Result.success()
+        try { TeamChat.notifyNew(applicationContext) } catch (e: Exception) { Log.w("Dialbook", "chat check failed", e) }
         if (!applicationContext.has(Manifest.permission.READ_CALL_LOG)) return@withContext Result.success()
         try {
             CallSync.run(applicationContext)

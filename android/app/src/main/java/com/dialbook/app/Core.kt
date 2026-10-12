@@ -44,11 +44,14 @@ class App : Application() {
             val ch = NotificationChannel(CHANNEL, "Call outcomes", NotificationManager.IMPORTANCE_HIGH)
             ch.description = "Asks you to log the outcome after a call with a lead"
             getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+            val chat = NotificationChannel(CHAT, "Team chat", NotificationManager.IMPORTANCE_HIGH)
+            chat.description = "Messages from your colleagues"
+            getSystemService(NotificationManager::class.java).createNotificationChannel(chat)
         }
         SyncWorker.schedulePeriodic(this)
     }
 
-    companion object { const val CHANNEL = "calls" }
+    companion object { const val CHANNEL = "calls"; const val CHAT = "team-chat" }
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,6 +76,7 @@ class Prefs(ctx: Context) {
     var recordingsEnabled: Boolean get() = p.getBoolean("recOn", true); set(v) = p.edit().putBoolean("recOn", v).apply()
     var extraFolder: String get() = p.getString("folder", "") ?: ""; set(v) = p.edit().putString("folder", v).apply()
     var dispositions: String get() = p.getString("dispos", "") ?: ""; set(v) = p.edit().putString("dispos", v).apply()
+    var chatNotified: Long get() = p.getLong("chatNotified", 0); set(v) = p.edit().putLong("chatNotified", v).apply()
     var settingsJson: String get() = p.getString("settings", "{}") ?: "{}"; set(v) = p.edit().putString("settings", v).apply()
     var pendingRecs: String get() = p.getString("pendingRecs", "[]") ?: "[]"; set(v) = p.edit().putString("pendingRecs", v).apply()
     /** Numbers the telecaller marked "Personal call" (last 10 digits). Kept only on this phone. */
@@ -201,6 +205,7 @@ object Api {
 
     fun get(ctx: Context, path: String): String = send(ctx, "GET", path, null)
     fun rpc(ctx: Context, fn: String, args: JSONObject): String = send(ctx, "POST", "/rest/v1/rpc/$fn", args.toString())
+    fun post(ctx: Context, path: String, body: String): String = send(ctx, "POST", path, body, mapOf("Prefer" to "return=minimal"))
 
     fun upload(ctx: Context, objectPath: String, bytes: ByteArray, contentType: String) {
         val p = Prefs(ctx)
