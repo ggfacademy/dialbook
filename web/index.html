@@ -336,7 +336,7 @@ tbody tr.click:hover{background:var(--accent-soft)}
 .set-tabs button[aria-selected="true"]{background:var(--side);color:var(--gold-hi)}
 .set-tabs button:hover:not([aria-selected="true"]){background:var(--surface2);color:var(--fg)}
 .set-body>[data-tab]{display:none}
-.set-body[data-cur="biz"]>[data-tab="biz"],.set-body[data-cur="msg"]>[data-tab="msg"],.set-body[data-cur="src"]>[data-tab="src"],.set-body[data-cur="calls"]>[data-tab="calls"],.set-body[data-cur="team"]>[data-tab="team"],.set-body[data-cur="ai"]>[data-tab="ai"]{display:block}
+.set-body[data-cur="ov"]>[data-tab="ov"],.set-body[data-cur="conv"]>[data-tab="conv"],.set-body[data-cur="speed"]>[data-tab="speed"],.set-body[data-cur="work"]>[data-tab="work"],.set-body[data-cur="log"]>[data-tab="log"],.set-body[data-cur="biz"]>[data-tab="biz"],.set-body[data-cur="msg"]>[data-tab="msg"],.set-body[data-cur="src"]>[data-tab="src"],.set-body[data-cur="calls"]>[data-tab="calls"],.set-body[data-cur="team"]>[data-tab="team"],.set-body[data-cur="ai"]>[data-tab="ai"]{display:block}
 
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 /* loading and empty */
@@ -380,6 +380,7 @@ tbody tr.click:hover{background:var(--accent-soft)}
   .flt #lq{flex:1 1 60%}
 }
 @media (min-width:761px){.flt-btn,.sm-only{display:none}}
+@media (max-width:760px){.rep-filters .row .field{flex:1 1 45%!important}.rep-filters .chip-toggle{padding:5px 11px;font-size:.85rem}}
 @media (max-width:760px){.tc-page .page-head{margin-bottom:10px}.tc-page .page-head p{display:none}.wa-wrap.tc{height:calc(100dvh - 190px);min-height:380px}main:has(.tc-page){padding-bottom:96px}}
 </style>
 </head>
