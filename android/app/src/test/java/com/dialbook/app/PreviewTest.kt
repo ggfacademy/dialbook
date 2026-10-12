@@ -32,7 +32,7 @@ class PreviewApp : Application() {
     override fun onCreate() { super.onCreate(); WorkManagerTestInitHelper.initializeTestWorkManager(this) }
 }
 
-/** Renders the main screens with sample data into build/previews/*.png, so the design can be checked without a phone. */
+/** Renders the main screens with sample data as PNG files in build/previews, so the design can be checked without a phone. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], application = PreviewApp::class, qualifiers = "w393dp-h852dp-xxhdpi")
