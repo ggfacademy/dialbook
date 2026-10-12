@@ -7,7 +7,7 @@
 <title>Dialbook Pro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Colours: Global Gold Foundation navy and gold. Layout: fixed navy rail on desktop, bottom tab bar on phones; content is a single scrolling work surface. */
 :root{
@@ -17,9 +17,10 @@
   --side:#0b1f4b; --side-fg:#c8d2ea; --side-hi:#ffffff; --side-line:#1c3366;
   --s1:#5b6b8c; --s2:#3a7bd5; --s3:#12834a; --s4:#a86300; --s5:#8a4fc4; --s6:#0e7c7b; --s7:#bd3434; --s8:#6b7280;
   --shadow:0 1px 2px rgba(20,30,40,.06),0 4px 16px rgba(20,30,40,.06);
-  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
-  --f-body:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
-  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-display:"Poppins","Segoe UI",system-ui,sans-serif;
+  --f-body:"Poppins","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-mono:"Poppins","Segoe UI",system-ui,sans-serif;
+  --f-code:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -213,7 +214,7 @@ audio{width:100%;max-width:360px;height:36px;margin-top:6px}
 details.tx summary{cursor:pointer;font-size:.8rem;color:var(--accent)}
 details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;background:var(--surface2);padding:10px;border-radius:8px;max-height:260px;overflow:auto}
 .pager{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
-.code-box{font-family:var(--f-mono);font-size:.78rem;word-break:break-all;background:var(--surface2);padding:10px;border-radius:8px}
+.code-box{font-family:var(--f-code);font-size:.78rem;word-break:break-all;background:var(--surface2);padding:10px;border-radius:8px}
 .loading{padding:30px;text-align:center;color:var(--muted)}
 .side-foot .who{color:var(--side-hi);font-weight:600}
 .side-foot .btn{background:var(--side-line);border-color:var(--side-line);color:var(--side-fg)}
@@ -252,7 +253,9 @@ details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;b
 :root{--r:14px;--shadow:0 1px 2px rgba(11,31,75,.05),0 6px 20px rgba(11,31,75,.07);--shadow-hi:0 2px 4px rgba(11,31,75,.07),0 12px 32px rgba(11,31,75,.12)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--shadow-hi:0 2px 4px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.35)}}
 :root[data-theme="dark"]{--shadow-hi:0 2px 4px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.35)}
-body{font-size:14.5px}
+body{font-size:14px}
+h1,h2,h3{font-weight:600;letter-spacing:-.005em}
+.lead-name,.btn,.nav-btn{font-weight:500}
 h1{font-size:1.75rem}
 .card,.kpi,.li,.empty{border-color:transparent;box-shadow:var(--shadow)}
 .card{padding:18px 20px}
@@ -330,11 +333,11 @@ tbody tr.click:hover{background:var(--accent-soft)}
 .row-acts .btn.wa{color:#128c4b;border-color:var(--call-soft);background:var(--call-soft)}
 
 /* settings tabs */
-.set-tabs{display:flex;gap:6px;flex-wrap:wrap;background:var(--surface);padding:6px;border-radius:14px;box-shadow:var(--shadow);margin-bottom:16px;position:sticky;top:8px;z-index:5}
-.set-tabs button{border:0;background:none;padding:8px 12px;font-size:.88rem;border-radius:10px;cursor:pointer;font-weight:600;color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+.set-tabs{display:flex;gap:6px;flex-wrap:wrap;background:linear-gradient(120deg,#0b1f4b 0%,#14306b 70%,#1c3a7a 100%);padding:6px;border-radius:14px;box-shadow:var(--shadow);margin-bottom:16px;position:sticky;top:8px;z-index:5}
+.set-tabs button{border:0;background:none;padding:8px 12px;font-size:.88rem;border-radius:10px;cursor:pointer;font-weight:600;color:#c8d2ea;display:inline-flex;gap:7px;align-items:center;transition:background .15s,color .15s}
 .set-tabs button svg{width:16px;height:16px}
-.set-tabs button[aria-selected="true"]{background:var(--side);color:var(--gold-hi)}
-.set-tabs button:hover:not([aria-selected="true"]){background:var(--surface2);color:var(--fg)}
+.set-tabs button[aria-selected="true"]{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#0b1f4b}
+.set-tabs button:hover:not([aria-selected="true"]){background:#fff;color:#0b1f4b}
 .set-body>[data-tab]{display:none}
 .set-body[data-cur="ov"]>[data-tab="ov"],.set-body[data-cur="conv"]>[data-tab="conv"],.set-body[data-cur="speed"]>[data-tab="speed"],.set-body[data-cur="work"]>[data-tab="work"],.set-body[data-cur="log"]>[data-tab="log"],.set-body[data-cur="biz"]>[data-tab="biz"],.set-body[data-cur="msg"]>[data-tab="msg"],.set-body[data-cur="src"]>[data-tab="src"],.set-body[data-cur="calls"]>[data-tab="calls"],.set-body[data-cur="team"]>[data-tab="team"],.set-body[data-cur="ai"]>[data-tab="ai"]{display:block}
 

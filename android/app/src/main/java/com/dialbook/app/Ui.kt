@@ -64,6 +64,10 @@ open class BaseActivity : Activity() {
 
     fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
+    /** Poppins, the same font as the website (res/font). */
+    val regularFont: Typeface by lazy { try { resources.getFont(R.font.poppins_regular) } catch (e: Exception) { Typeface.DEFAULT } }
+    val boldFont: Typeface by lazy { try { resources.getFont(R.font.poppins_semibold) } catch (e: Exception) { Typeface.DEFAULT_BOLD } }
+
     fun <T> io(work: suspend () -> T, done: (T) -> Unit, failed: (Exception) -> Unit = { toast(it.message ?: "Something went wrong") }) {
         scope.launch {
             try {
@@ -89,14 +93,14 @@ open class BaseActivity : Activity() {
     fun row(): LinearLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
 
     fun text(s: String, size: Float = 15f, color: Int = FG, bold: Boolean = false): TextView = TextView(this).apply {
-        text = s; textSize = size; setTextColor(color); if (bold) typeface = Typeface.DEFAULT_BOLD
+        text = s; textSize = size; setTextColor(color); typeface = if (bold) boldFont else regularFont
         setLineSpacing(0f, 1.15f)
     }
 
     fun heading(s: String) = text(s, 24f, FG, true).apply { setPadding(0, dp(4), 0, dp(8)) }
 
     fun button(label: String, color: Int = ACCENT, filled: Boolean = true, onClick: () -> Unit): TextView = TextView(this).apply {
-        text = label; textSize = 16f; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
+        text = label; textSize = 16f; gravity = Gravity.CENTER; typeface = boldFont
         setTextColor(if (filled) Color.WHITE else color)
         background = if (filled) rounded(color, 0, 14) else rounded(SURFACE, LINE, 14)
         setPadding(dp(16), dp(13), dp(16), dp(13))
@@ -107,14 +111,14 @@ open class BaseActivity : Activity() {
     fun chip(label: String, selected: Boolean, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label; textSize = 14f; gravity = Gravity.CENTER
         setTextColor(if (selected) Color.WHITE else FG)
-        if (selected) typeface = Typeface.DEFAULT_BOLD
+        typeface = if (selected) boldFont else regularFont
         background = if (selected) rounded(NAVY, NAVY, 20) else rounded(SURFACE, LINE, 20)
         setPadding(dp(14), dp(8), dp(14), dp(8))
         setOnClickListener { onClick() }
     }
 
     fun input(hint: String, type: Int = InputType.TYPE_CLASS_TEXT, lines: Int = 1): EditText = EditText(this).apply {
-        this.hint = hint; inputType = type; textSize = 16f; setTextColor(FG); setHintTextColor(MUTED)
+        this.hint = hint; inputType = type; textSize = 16f; setTextColor(FG); setHintTextColor(MUTED); typeface = regularFont
         background = rounded(SURFACE, LINE, 12); setPadding(dp(14), dp(12), dp(14), dp(12))
         if (lines > 1) { minLines = lines; gravity = Gravity.TOP or Gravity.START
             inputType = type or InputType.TYPE_TEXT_FLAG_MULTI_LINE }
@@ -132,7 +136,7 @@ open class BaseActivity : Activity() {
     fun avatar(name: String, size: Int = 44, color: Int = 0): TextView = TextView(this).apply {
         val n = name.trim().ifEmpty { "?" }
         text = n.split(Regex("\\s+")).take(2).joinToString("") { it.take(1) }.uppercase()
-        textSize = size / 3.2f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+        textSize = size / 3.2f; typeface = boldFont; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
         var h = 0; for (c in n) h = h * 31 + c.code
         background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (color != 0) color else AVATAR[Math.floorMod(h, AVATAR.size)]) }
         layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
