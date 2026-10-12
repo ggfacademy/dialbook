@@ -1,9 +1,13 @@
 # Renders the phone app's screens with sample data (no phone needed) and saves them to the
-# "app-previews" branch, so a design change can be checked before it goes live. Run by hand.
+# "app-previews" branch, so a design change can be checked before it goes live.
+# Runs by hand, or when app changes are pushed to a claude/ working branch.
 name: App screen previews
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths: ["android/**", ".github/workflows/app-preview.yml"]
 
 permissions:
   contents: write
