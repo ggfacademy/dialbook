@@ -286,7 +286,7 @@ V.pipeline={mount(){
 },async load(){
   const rv=S.rv;const agent=isMgr()?(S.pf.agent||null):S.me.id;
   const summ=await rpc('lead_summary',{p_agent:agent,p_campaign:S.pf.camp||null,p_tz:TZ});
-  const cols=await Promise.all(S.cfg.stages.map(s=>{let q=sb.from('leads').select('*').eq('stage',s.id).order('updated_at',{ascending:false}).limit(40);if(agent)q=q.eq('assigned_to',agent);if(S.pf.camp)q=q.eq('campaign_id',S.pf.camp);return R(q).then(r=>r.data)}));
+  const cols=await Promise.all(S.cfg.stages.map(s=>{let q=sb.from('leads').select('*').eq('stage',s.id).order('updated_at',{ascending:false}).limit(40);if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);if(S.pf.camp)q=q.eq('campaign_id',S.pf.camp);return R(q).then(r=>r.data)}));
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
   vb.innerHTML=`<div class="kanban">${S.cfg.stages.map((s,i)=>{const ls=cols[i],n=summ.stages?.[s.id]?.n||0,val=summ.stages?.[s.id]?.value||0;
     return `<div class="col" data-stage="${s.id}"><div class="col-head"><span style="color:${stageColor(s.id)}">● <span style="color:var(--fg)">${esc(s.name)}</span></span><span class="small muted num">${n}${val?' · '+inr(val):''}</span></div>
