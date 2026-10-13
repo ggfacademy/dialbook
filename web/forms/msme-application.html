@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1f4b">
+<title>MSME Application Form – Gold Appraisal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<style>
+/* Fill-in version of the MSME–TDC Chennai application form. Everything stays on this phone or computer:
+   nothing is sent anywhere. "Print / Save as PDF" prints it in the layout of the official form. */
+:root{--navy:#0b1f4b;--gold:#e3b341;--gold-hi:#f2c14e;--accent:#946600;--bg:#f6f4ef;--fg:#1b1e2b;--muted:#5e6273;--line:#e3ddd0;--card:#fff;--soft:#fbf1d9;--ok:#12834a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Poppins,"Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45}
+.top{background:linear-gradient(120deg,#0b1f4b,#1c3a7a);color:#fff;padding:20px 16px 26px}
+.top .in{max-width:760px;margin:0 auto}
+.top h1{margin:0;font-size:1.35rem;font-weight:600}
+.top p{margin:6px 0 0;color:#c8d2ea;font-size:.9rem}
+main{max-width:760px;margin:-14px auto 0;padding:0 16px 120px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 1px 2px rgba(11,31,75,.05),0 6px 20px rgba(11,31,75,.07);padding:18px 18px 8px;margin-bottom:14px}
+.card h2{font-size:1rem;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+.card h2 .n{flex:none;width:26px;height:26px;border-radius:50%;background:var(--navy);color:var(--gold-hi);display:grid;place-items:center;font-size:.8rem}
+label.f{display:block;margin-bottom:12px}
+label.f>span{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=tel],input[type=email],input[type=date],input[type=number],select,textarea{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--fg)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+textarea{min-height:76px;resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.opts label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:99px;padding:7px 12px;cursor:pointer;background:#fff;font-size:.9rem}
+.opts input{accent-color:var(--navy);width:16px;height:16px}
+.opts label:has(input:checked){border-color:var(--navy);background:#e6eaf4}
+.hint{font-size:.8rem;color:var(--muted);margin:-6px 0 12px}
+.fixed{padding:10px 12px;border-radius:10px;background:var(--soft);font-weight:600}
+.photo{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+.photo .ph{width:92px;height:112px;border:1px dashed var(--muted);border-radius:8px;display:grid;place-items:center;text-align:center;font-size:.72rem;color:var(--muted);background:#fafafa;overflow:hidden}
+.photo .ph img{width:100%;height:100%;object-fit:cover}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--fg);border-radius:12px;padding:11px 16px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn.gold{background:linear-gradient(180deg,var(--gold-hi),var(--gold));border-color:var(--gold);color:var(--navy)}
+.btn.sm{padding:7px 12px;font-size:.85rem}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--navy);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;justify-content:center;z-index:5;box-shadow:0 -4px 16px rgba(11,31,75,.2)}
+.bar .btn{flex:1;max-width:260px}
+.bar .btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.35)}
+.note{background:#e1f3e8;color:#0d5c34;border-radius:12px;padding:10px 12px;font-size:.85rem;margin-bottom:14px}
+.steps{margin:0;padding-left:20px;font-size:.88rem}
+.steps li{margin-bottom:4px}
+.err{color:#bd3434;font-size:.8rem;margin:-8px 0 10px;display:none}
+.err.on{display:block}
+
+/* ---------- printed form (A4, same layout as the official form) ---------- */
+#sheet{display:none}
+@media print{
+  @page{size:A4;margin:9mm 10mm}
+  body{background:#fff;font-family:"Times New Roman",Times,serif;font-size:10pt;line-height:1.25}
+  .top,main,.bar{display:none!important}
+  #sheet{display:block}
+  table{width:100%;border-collapse:collapse}
+  td{border:1px solid #000;padding:3px 5px;vertical-align:middle}
+  .hd td{text-align:center;font-weight:700;font-size:12pt;padding:6px}
+  .hd .t2{text-decoration:underline}
+  .c{text-align:center}
+  .sl{width:7%;text-align:center}
+  .ct{width:28%}
+  .v{font-family:Arial,Helvetica,sans-serif;font-size:10pt}
+  .ph{width:17%;text-align:center;font-weight:700;font-size:10pt;overflow:hidden;padding:2px}
+  .ph img{width:26mm;height:31mm;object-fit:cover;display:block;margin:0 auto}
+  .tick{display:inline-block;min-width:16px;text-align:center;font-family:Arial,sans-serif}
+  .small{font-size:9pt}
+  .r17 td{font-size:9.5pt;line-height:1.2}
+  .decl td{font-size:10pt}
+  tr{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <h1>MSME Application Form</h1>
+  <p>MSME – Technology Development Center, Chennai · Gold Appraisal course</p>
+</div></div>
+
+<main>
+  <div class="card" style="padding-bottom:14px">
+    <h2>How to use this form</h2>
+    <ol class="steps">
+      <li>Fill in your details below. Everything stays on your phone – nothing is sent to anyone.</li>
+      <li>Tap <b>Print / Save as PDF</b> at the bottom. Choose your printer, or <b>Save as PDF</b> to print it at a shop.</li>
+      <li><b>Sign</b> the printed form, paste your passport photo (if you did not add it here) and bring it on the first day of class with your documents.</li>
+    </ol>
+    <p style="margin:10px 0 0;font-size:.85rem">Prefer to write by hand? <a href="../media/msme-application-form.pdf" target="_blank" rel="noopener">Download the blank form (PDF)</a>.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">1</span>Course and your name</h2>
+    <label class="f"><span>1. Name of the course applied for</span><div class="fixed">GOLD APPRAISAL</div></label>
+    <label class="f"><span>2. Name of candidate (in capital letters)</span><input type="text" id="name" autocomplete="name" style="text-transform:uppercase"></label>
+    <label class="f"><span>3. Name of father / mother</span><input type="text" id="parent"></label>
+    <div class="row2">
+      <label class="f"><span>4. Date of birth</span><input type="date" id="dob"></label>
+      <label class="f"><span>Age</span><input type="number" id="age" min="10" max="99" inputmode="numeric"></label>
+    </div>
+    <div class="photo"><div class="ph" id="phBox">Passport size photo</div>
+      <div><label class="btn sm" for="photo">Add photo</label><input type="file" id="photo" accept="image/*" hidden>
+      <div class="hint" style="margin:8px 0 0">Optional – it is printed in the photo box. Or paste a printed photo later.</div></div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">2</span>Education and contact</h2>
+    <label class="f"><span>5. Educational qualifications</span><input type="text" id="edu" placeholder="e.g. 12th, B.Com"></label>
+    <label class="f"><span>6. Address for communication</span><textarea id="addr" autocomplete="street-address"></textarea></label>
+    <label class="f"><span>7. Contact no.</span><input type="tel" id="phone" inputmode="tel" autocomplete="tel"></label>
+    <label class="f"><span>8. E-mail id</span><input type="email" id="email" autocomplete="email"></label>
+    <label class="f"><span>9. Aadhaar card no.</span><input type="text" id="aadhaar" inputmode="numeric" maxlength="14" placeholder="1234 5678 9012"></label>
+    <div class="err" id="aErr">Aadhaar number should have 12 digits.</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">3</span>Work and experience</h2>
+    <label class="f"><span>10. Technical experience, if any</span><input type="text" id="exp"></label>
+    <label class="f"><span>11. Mention if MSME</span><input type="text" id="msme" placeholder="If you run or work in an MSME unit"></label>
+    <label class="f"><span>12. Employed / Self-employed / Unemployed</span>
+      <select id="emp"><option value="">— choose —</option><option>Employed</option><option>Self-Employed</option><option>Unemployed</option></select></label>
+    <label class="f"><span>12a. If employed, name and address of the firm / company, place</span><textarea id="firm" style="min-height:56px"></textarea></label>
+    <label class="f"><span>12b. Your designation</span><input type="text" id="desig"></label>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">4</span>Community and purpose</h2>
+    <label class="f" style="margin-bottom:6px"><span>13. Community</span></label>
+    <div class="opts" id="comm"><label><input type="radio" name="comm" value="General">General</label><label><input type="radio" name="comm" value="OBC">OBC</label><label><input type="radio" name="comm" value="SC">SC</label><label><input type="radio" name="comm" value="ST">ST</label></div>
+    <label class="f" style="margin-bottom:6px"><span>14. Purpose of studying this course (tick all that apply)</span></label>
+    <div class="opts" id="purp"><label><input type="checkbox" value="emp">Employability</label><label><input type="checkbox" value="org">Organizational growth</label><label><input type="checkbox" value="tech">Technical skill</label><label><input type="checkbox" value="mgmt">Management skill</label></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">5</span>Course fee paid</h2>
+    <div class="opts" id="payBy"><label><input type="radio" name="pay" value="online">Online / NEFT</label><label><input type="radio" name="pay" value="dd">Demand Draft (DD)</label></div>
+    <div id="payOnline" hidden>
+      <label class="f"><span>UTR number</span><input type="text" id="utr"></label>
+      <div class="row2"><label class="f"><span>Date</span><input type="date" id="oDate"></label><label class="f"><span>Amount (Rs.)</span><input type="number" id="oAmt" inputmode="numeric" placeholder="15000"></label></div>
+    </div>
+    <div id="payDD" hidden>
+      <label class="f"><span>DD number</span><input type="text" id="ddNo"></label>
+      <div class="row2"><label class="f"><span>Amount (Rs.)</span><input type="number" id="ddAmt" inputmode="numeric" placeholder="15000"></label><label class="f"><span>Date</span><input type="date" id="ddDate"></label></div>
+      <label class="f"><span>Bank</span><input type="text" id="ddBank"></label>
+      <div class="hint">DD in the name of “Director, MSME TDC Chennai”.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">6</span>Documents and how you heard</h2>
+    <label class="f" style="margin-bottom:6px"><span>16. Certificates enclosed (tick what you will bring)</span></label>
+    <div class="opts" id="docs"><label><input type="checkbox" value="dd">Demand Draft / Online receipt</label><label><input type="checkbox" value="qual">Qualification proof</label><label><input type="checkbox" value="photo">Photo affixed</label><label><input type="checkbox" value="addr">Address proof</label></div>
+    <label class="f" style="margin-bottom:6px"><span>17. Training known through</span></label>
+    <div class="opts" id="src"><label><input type="checkbox" value="news">Newspaper</label><label><input type="checkbox" value="tw">Twitter</label><label><input type="checkbox" value="fb">Facebook</label><label><input type="checkbox" value="ig">Instagram</label><label><input type="checkbox" value="web">www.cftichennai.in</label><label><input type="checkbox" value="ref">Reference</label></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">7</span>Declaration</h2>
+    <p style="margin:0 0 12px;font-size:.88rem">I hereby declare that the details furnished above are true to the best of my knowledge and belief and in case any information is found false or incorrect at any stage, my candidature may please be cancelled.</p>
+    <div class="row2"><label class="f"><span>Date</span><input type="date" id="sDate"></label><label class="f"><span>Place</span><input type="text" id="place"></label></div>
+    <div class="hint" style="margin-top:0">Sign the printed form by hand.</div>
+  </div>
+
+  <div class="note">Your details are saved only on this device, so you can come back and finish later. Tap <b>Clear</b> when you are done if this is a shared phone.</div>
+</main>
+
+<div class="bar"><button class="btn ghost" id="clear" type="button">Clear</button><button class="btn gold" id="print" type="button">Print / Save as PDF</button></div>
+
+<!-- printed version -->
+<div id="sheet">
+<table>
+  <tr class="hd"><td colspan="5"><div>MSME – TECHNOLOGY DEVELOPMENT CENTER,</div><div>CHENNAI</div><div class="t2">APPLICATION FORM</div><div class="small" style="font-weight:400;margin-top:2px">Ministry of Micro, Small and Medium Enterprises, Government of India</div></td></tr>
+  <tr><td class="sl"><b>Sl. No.</b></td><td class="ct c"><b>Contents</b></td><td colspan="2" class="c"><b>Particulars</b></td><td class="ph" rowspan="4" id="pPhoto">Space for Passport size Photograph</td></tr>
+  <tr><td class="sl">1</td><td class="ct">Name of the course applied for</td><td colspan="2" class="c v"><b>GOLD APPRAISAL</b></td></tr>
+  <tr><td class="sl">2</td><td class="ct">Name of Candidate<br>(In Capital Letters)</td><td colspan="2" class="v" id="pName"></td></tr>
+  <tr><td class="sl">3</td><td class="ct">Name of Father/Mother</td><td colspan="2" class="v" id="pParent"></td></tr>
+  <tr><td class="sl">4</td><td class="ct">Date of Birth</td><td class="v" id="pDob"></td><td class="c small" style="width:10%">Age</td><td class="v" id="pAge"></td></tr>
+  <tr><td class="sl">5</td><td class="ct">Educational Qualifications</td><td colspan="3" class="v" id="pEdu"></td></tr>
+  <tr><td class="sl">6</td><td class="ct">Address for<br>Communication</td><td colspan="3" class="v" id="pAddr" style="height:58px;white-space:pre-wrap"></td></tr>
+  <tr><td class="sl">7</td><td class="ct">Contact No.</td><td colspan="3" class="v" id="pPhone"></td></tr>
+  <tr><td class="sl">8</td><td class="ct">E-mail id</td><td colspan="3" class="v" id="pEmail"></td></tr>
+  <tr><td class="sl">9</td><td class="ct">Aadhar Card No.</td><td colspan="3" class="v" id="pAadhaar"></td></tr>
+  <tr><td class="sl">10</td><td class="ct">Technical Experience, if any</td><td colspan="3" class="v" id="pExp"></td></tr>
+  <tr><td class="sl">11</td><td class="ct small">Mention if MSME</td><td colspan="3" class="v" id="pMsme"></td></tr>
+  <tr><td class="sl">12</td><td class="ct small">Employed/Self-Employed/<br>Unemployed</td><td colspan="3" class="v" id="pEmp"></td></tr>
+  <tr><td class="sl">a.</td><td class="ct">If Employed, name and address of the Firm/Company,Place</td><td colspan="3" class="v" id="pFirm" style="white-space:pre-wrap"></td></tr>
+  <tr><td class="sl">b.</td><td class="ct">Your Designation</td><td colspan="3" class="v" id="pDesig"></td></tr>
+  <tr><td class="sl">13</td><td class="ct">Community</td><td colspan="3" style="padding:0"><table><tr>
+    <td class="c" style="border-width:0 1px 0 0">General [<span class="tick" id="cGeneral"></span>]</td><td class="c" style="border-width:0 1px 0 0">OBC [<span class="tick" id="cOBC"></span>]</td><td class="c" style="border-width:0 1px 0 0">SC [<span class="tick" id="cSC"></span>]</td><td class="c" style="border:0">ST [<span class="tick" id="cST"></span>]</td></tr></table></td></tr>
+  <tr><td class="sl">14</td><td class="ct">Purpose of studying this course<br>[mark ✔]</td><td colspan="3" style="padding:0"><table><tr>
+    <td class="c" style="border-width:0 1px 0 0">Employability [<span class="tick" id="uEmp"></span>]</td><td class="c" style="border-width:0 1px 0 0">Organizational growth [<span class="tick" id="uOrg"></span>]</td><td class="c" style="border:0">Technical skill [<span class="tick" id="uTech"></span>]<br>Management skill [<span class="tick" id="uMgmt"></span>]</td></tr></table></td></tr>
+  <tr><td class="sl">15</td><td class="ct">Details of Course Fee paid</td><td colspan="3" style="padding:0"><table><tr>
+    <td class="v small" style="border-width:0 1px 0 0;width:50%">Online/ NEFT : <span id="fOnline"></span><br>UTR Number : <span id="fUtr"></span><br>Date : <span id="fODate"></span><br>Amount : <span id="fOAmt"></span></td>
+    <td class="v small" style="border:0">DD No. : <span id="fDdNo"></span><br>Amount : <span id="fDdAmt"></span><br>Date : <span id="fDdDate"></span><br>Bank : <span id="fDdBank"></span></td></tr></table></td></tr>
+  <tr><td class="sl">16</td><td class="ct">Details of Certificates enclosed</td><td colspan="3" style="padding:0"><table><tr>
+    <td style="border-width:0 1px 1px 0">1. Demand Draft/Online Receipt [<span class="tick" id="dDd"></span>]</td><td style="border-width:0 0 1px 0">3. Photo Affixed [<span class="tick" id="dPhoto"></span>]</td></tr><tr>
+    <td style="border-width:0 1px 0 0">2. Qualification Proof [<span class="tick" id="dQual"></span>]</td><td style="border:0">4. Address Proof [<span class="tick" id="dAddr"></span>]</td></tr></table></td></tr>
+  <tr class="r17"><td class="sl">17</td><td class="ct">Training know through [mark ✔]</td><td colspan="3" style="padding:0"><table><tr>
+    <td class="c" style="border-width:0 1px 0 0">NEWS Paper [<span class="tick" id="sNews"></span>]</td><td style="border-width:0 1px 0 0;white-space:nowrap">Twitter [<span class="tick" id="sTw"></span>]<br>Facebook [<span class="tick" id="sFb"></span>]<br>Instagram [<span class="tick" id="sIg"></span>]</td><td class="c" style="border-width:0 1px 0 0">www.cftichennai.in [<span class="tick" id="sWeb"></span>]</td><td class="c" style="border:0">Referrence [<span class="tick" id="sRef"></span>]</td></tr></table></td></tr>
+  <tr class="decl"><td colspan="5">I hereby declare that the details furnished above are true to the best of my knowledge and belief and in case any information is found false or incorrect at any stage, my candidature may please be cancelled.</td></tr>
+  <tr><td colspan="2" class="v" style="height:46px">Date: <span id="pSDate"></span><br>Place : <span id="pPlace"></span></td><td colspan="3" style="vertical-align:top">Signature</td></tr>
+</table>
+</div>
+
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const KEY='msme-form-v1';
+const TEXT=['name','parent','dob','age','edu','addr','phone','email','aadhaar','exp','msme','emp','firm','desig','utr','oDate','oAmt','ddNo','ddAmt','ddDate','ddBank','sDate','place'];
+const GROUPS=['comm','purp','payBy','docs','src'];
+let photo='';
+const fmtD=v=>{if(!v)return'';const [y,m,d]=v.split('-');return `${d}/${m}/${y}`};
+const tick=(id,on)=>{$(id).textContent=on?'✔':''};
+
+function collect(){const d={photo};TEXT.forEach(k=>d[k]=$(k).value);GROUPS.forEach(g=>d[g]=[...document.querySelectorAll(`#${g} input:checked`)].map(i=>i.value));return d}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(collect()))}catch(e){/* storage full or blocked: the form still works */}}
+function load(){let d=null;try{d=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
+  // name and number sent by the telecaller in the link
+  const q=new URLSearchParams(location.search);
+  // a link for a different person (e.g. a shared phone) starts a fresh form
+  if(d&&q.get('n')&&String(d.name||'').trim().toLowerCase()!==q.get('n').trim().toLowerCase())d=null;
+  if(!d){d={};if(q.get('n'))d.name=q.get('n');if(q.get('p'))d.phone=q.get('p')}
+  TEXT.forEach(k=>{if(d[k]!=null)$(k).value=d[k]});
+  GROUPS.forEach(g=>(d[g]||[]).forEach(v=>{const i=document.querySelector(`#${g} input[value="${CSS.escape(v)}"]`);if(i)i.checked=true}));
+  if(d.photo)setPhoto(d.photo);
+  if(!$('sDate').value)$('sDate').value=new Date().toISOString().slice(0,10);
+  payShow()}
+function setPhoto(src){photo=src;$('phBox').innerHTML=src?`<img src="${src}" alt="Your photo">`:'Passport size photo'}
+function payShow(){const v=document.querySelector('#payBy input:checked')?.value;$('payOnline').hidden=v!=='online';$('payDD').hidden=v!=='dd'}
+function ageFrom(v){if(!v)return'';const b=new Date(v+'T00:00'),n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a>0&&a<100?String(a):''}
+
+function fill(){const d=collect();
+  const set=(id,v)=>{$(id).textContent=v||''};
+  set('pName',(d.name||'').toUpperCase());set('pParent',d.parent);set('pDob',fmtD(d.dob));set('pAge',d.age);set('pEdu',d.edu);set('pAddr',d.addr);
+  set('pPhone',d.phone);set('pEmail',d.email);set('pAadhaar',d.aadhaar);set('pExp',d.exp);set('pMsme',d.msme);set('pEmp',d.emp);set('pFirm',d.firm);set('pDesig',d.desig);
+  ['General','OBC','SC','ST'].forEach(c=>tick('c'+c,d.comm.includes(c)));
+  tick('uEmp',d.purp.includes('emp'));tick('uOrg',d.purp.includes('org'));tick('uTech',d.purp.includes('tech'));tick('uMgmt',d.purp.includes('mgmt'));
+  const on=d.payBy.includes('online'),dd=d.payBy.includes('dd');
+  set('fOnline',on?'✔':'');set('fUtr',on?d.utr:'');set('fODate',on?fmtD(d.oDate):'');set('fOAmt',on&&d.oAmt?'Rs. '+d.oAmt:'');
+  set('fDdNo',dd?d.ddNo:'');set('fDdAmt',dd&&d.ddAmt?'Rs. '+d.ddAmt:'');set('fDdDate',dd?fmtD(d.ddDate):'');set('fDdBank',dd?d.ddBank:'');
+  tick('dDd',d.docs.includes('dd'));tick('dQual',d.docs.includes('qual'));tick('dPhoto',d.docs.includes('photo')||!!photo);tick('dAddr',d.docs.includes('addr'));
+  tick('sNews',d.src.includes('news'));tick('sTw',d.src.includes('tw'));tick('sFb',d.src.includes('fb'));tick('sIg',d.src.includes('ig'));tick('sWeb',d.src.includes('web'));tick('sRef',d.src.includes('ref'));
+  set('pSDate',fmtD(d.sDate));set('pPlace',d.place);
+  $('pPhoto').innerHTML=photo?`<img src="${photo}" alt="">`:'Space for Passport size Photograph'}
+
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.id==='aadhaar'){const dg=t.value.replace(/\D/g,'').slice(0,12);t.value=dg.replace(/(\d{4})(?=\d)/g,'$1 ');$('aErr').classList.toggle('on',dg.length>0&&dg.length!==12)}
+  if(t.id==='dob'&&!$('age').dataset.typed)$('age').value=ageFrom(t.value);
+  if(t.id==='age')t.dataset.typed=t.value?'1':'';
+  if(t.name==='pay')payShow();
+  save()});
+document.addEventListener('change',save);
+$('photo').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+  const img=new Image(),r=new FileReader();r.onload=()=>{img.onload=()=>{ // shrink to a passport-size picture so it can be saved on the phone
+      const W=300,H=360,c=document.createElement('canvas');c.width=W;c.height=H;const s=Math.max(W/img.width,H/img.height),w=img.width*s,h=img.height*s;
+      c.getContext('2d').drawImage(img,(W-w)/2,(H-h)/2,w,h);setPhoto(c.toDataURL('image/jpeg',.85));save()};img.src=r.result};r.readAsDataURL(f)});
+$('print').addEventListener('click',()=>{const dg=$('aadhaar').value.replace(/\D/g,'');
+  if(!$('name').value.trim()){alert('Please fill in your name first.');$('name').focus();return}
+  if(dg&&dg.length!==12){alert('Please check your Aadhaar number – it should have 12 digits.');$('aadhaar').focus();return}
+  fill();window.print()});
+window.addEventListener('beforeprint',fill);
+$('clear').addEventListener('click',()=>{if(!confirm('Clear everything you typed on this device?'))return;try{localStorage.removeItem(KEY)}catch(e){}
+  TEXT.forEach(k=>$(k).value='');document.querySelectorAll('main input[type=radio],main input[type=checkbox]').forEach(i=>i.checked=false);setPhoto('');$('age').dataset.typed='';
+  $('sDate').value=new Date().toISOString().slice(0,10);payShow()});
+load();
+})();
+</script>
+</body>
+</html>

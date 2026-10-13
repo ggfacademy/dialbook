@@ -258,8 +258,16 @@ open class BaseActivity : Activity() {
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + (if (hash.isNotEmpty()) "#$hash" else "")))) } catch (e: Exception) { toast("No browser found") }
     }
 
-    fun openWhatsApp(phone: String) {
+    fun openWhatsApp(phone: String, message: String = "") {
         val d = Fmt.e164(phone).filter { it.isDigit() }
-        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$d"))) } catch (e: Exception) { toast("WhatsApp is not installed") }
+        val q = if (message.isNotEmpty()) "?text=" + Uri.encode(message) else ""
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$d$q"))) } catch (e: Exception) { toast("WhatsApp is not installed") }
+    }
+
+    /** The MSME application form the candidate fills in and prints (web/forms/msme-application.html). */
+    fun sendApplicationForm(name: String, phone: String) {
+        val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone)
+        val first = name.trim().split(" ").firstOrNull() ?: ""
+        openWhatsApp(phone, "Hello $first, here is the MSME application form for the Gold Appraisal course. Please fill it on your phone, tap \"Print / Save as PDF\", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n$url")
     }
 }
