@@ -92,7 +92,13 @@ textarea{min-height:76px;resize:vertical}
   </div>
 
   <div class="card">
-    <h2><span class="n">1</span>Course and your name</h2>
+    <h2>Who is this form for?</h2>
+    <div class="opts" id="forWho" style="margin-bottom:6px"><label><input type="radio" name="forWho" value="self">Myself</label><label><input type="radio" name="forWho" value="child">My son / daughter</label><label><input type="radio" name="forWho" value="friend">A friend / relative</label></div>
+    <div class="hint" id="whoHint" style="margin:0 0 6px">Filling this for someone else? All the details below are about the person who will attend the class.</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">1</span><span id="t1">Course and your name</span></h2>
     <label class="f"><span>1. Name of the course applied for</span><div class="fixed">GOLD APPRAISAL</div></label>
     <label class="f"><span>2. Name of candidate (in capital letters)</span><input type="text" id="name" autocomplete="name" style="text-transform:uppercase"></label>
     <label class="f"><span>3. Name of father / mother</span><input type="text" id="parent"></label>
@@ -210,24 +216,45 @@ textarea{min-height:76px;resize:vertical}
 const $=id=>document.getElementById(id);
 const KEY='msme-form-v1';
 const TEXT=['name','parent','dob','age','edu','addr','phone','email','aadhaar','exp','msme','emp','firm','desig','utr','oDate','oAmt','ddNo','ddAmt','ddDate','ddBank','sDate','place'];
-const GROUPS=['comm','purp','payBy','docs','src'];
+const GROUPS=['forWho','comm','purp','payBy','docs','src'];
 let photo='';
 const fmtD=v=>{if(!v)return'';const [y,m,d]=v.split('-');return `${d}/${m}/${y}`};
 const tick=(id,on)=>{$(id).textContent=on?'✔':''};
 
-function collect(){const d={photo};TEXT.forEach(k=>d[k]=$(k).value);GROUPS.forEach(g=>d[g]=[...document.querySelectorAll(`#${g} input:checked`)].map(i=>i.value));return d}
+let linkKey='';
+function collect(){const d={photo,link:linkKey};TEXT.forEach(k=>d[k]=$(k).value);GROUPS.forEach(g=>d[g]=[...document.querySelectorAll(`#${g} input:checked`)].map(i=>i.value));return d}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(collect()))}catch(e){/* storage full or blocked: the form still works */}}
 function load(){let d=null;try{d=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
   // name and number sent by the telecaller in the link
   const q=new URLSearchParams(location.search);
+  // n = the person the telecaller spoke to, c = the candidate if that is someone else (e.g. their son or daughter)
+  const link=[q.get('n')||'',q.get('c')||''].join('|').trim().toLowerCase();
   // a link for a different person (e.g. a shared phone) starts a fresh form
-  if(d&&q.get('n')&&String(d.name||'').trim().toLowerCase()!==q.get('n').trim().toLowerCase())d=null;
-  if(!d){d={};if(q.get('n'))d.name=q.get('n');if(q.get('p'))d.phone=q.get('p')}
+  if(d&&link!=='|'&&d.link!==link)d=null;
+  if(!d){d={link};const n=q.get('n')||'',c=q.get('c')||'';
+    const r=q.get('r')==='friend'?'friend':'child';
+    if(c){d.name=c;if(r==='child')d.parent=n;d.forWho=[r]}else{if(n)d.name=n;d.forWho=['self']}
+    if(q.get('p'))d.phone=q.get('p')}
+  linkKey=d.link||'';
   TEXT.forEach(k=>{if(d[k]!=null)$(k).value=d[k]});
   GROUPS.forEach(g=>(d[g]||[]).forEach(v=>{const i=document.querySelector(`#${g} input[value="${CSS.escape(v)}"]`);if(i)i.checked=true}));
   if(d.photo)setPhoto(d.photo);
   if(!$('sDate').value)$('sDate').value=new Date().toISOString().slice(0,10);
-  payShow()}
+  payShow();whoShow()}
+let lastWho='self';
+function whoShow(){const w=document.querySelector('#forWho input:checked')?.value||'self',other=w!=='self';lastWho=w;
+  $('t1').textContent=other?'Course and the candidate (the person attending)':'Course and your name';
+  $('name').placeholder=w==='child'?'Name of your son / daughter':w==='friend'?'Name of your friend / relative':'';
+  $('phone').closest('label').querySelector('span').textContent=other?'7. Contact no. (yours or the candidate’s)':'7. Contact no.'}
+// The name filled in from the link is the person who enquired.
+// For a son / daughter it becomes the Father/Mother name; for a friend / relative the candidate's details are typed fresh.
+function whoSwitch(v){const n=$('name'),pa=$('parent'),from=lastWho,q=new URLSearchParams(location.search),caller=(q.get('n')||'').trim().toLowerCase();
+  const isCaller=x=>caller&&x.trim().toLowerCase()===caller;
+  if(from==='self'&&v!=='self'&&n.value.trim()){if(v==='child'&&!pa.value.trim())pa.value=n.value;n.value='';setTimeout(()=>n.focus(),50)}
+  else if(from==='child'&&v==='friend'&&isCaller(pa.value))pa.value='';
+  else if(from==='friend'&&v==='child'&&!pa.value.trim()&&caller)pa.value=q.get('n');
+  else if(v==='self'&&!n.value.trim()&&caller){n.value=q.get('n');if(isCaller(pa.value))pa.value=''}
+  whoShow()}
 function setPhoto(src){photo=src;$('phBox').innerHTML=src?`<img src="${src}" alt="Your photo">`:'Passport size photo'}
 function payShow(){const v=document.querySelector('#payBy input:checked')?.value;$('payOnline').hidden=v!=='online';$('payDD').hidden=v!=='dd'}
 function ageFrom(v){if(!v)return'';const b=new Date(v+'T00:00'),n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a>0&&a<100?String(a):''}
@@ -251,6 +278,7 @@ document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='dob'&&!$('age').dataset.typed)$('age').value=ageFrom(t.value);
   if(t.id==='age')t.dataset.typed=t.value?'1':'';
   if(t.name==='pay')payShow();
+  if(t.name==='forWho')whoSwitch(t.value);
   save()});
 document.addEventListener('change',save);
 $('photo').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
@@ -264,7 +292,7 @@ $('print').addEventListener('click',()=>{const dg=$('aadhaar').value.replace(/\D
 window.addEventListener('beforeprint',fill);
 $('clear').addEventListener('click',()=>{if(!confirm('Clear everything you typed on this device?'))return;try{localStorage.removeItem(KEY)}catch(e){}
   TEXT.forEach(k=>$(k).value='');document.querySelectorAll('main input[type=radio],main input[type=checkbox]').forEach(i=>i.checked=false);setPhoto('');$('age').dataset.typed='';
-  $('sDate').value=new Date().toISOString().slice(0,10);payShow()});
+  $('sDate').value=new Date().toISOString().slice(0,10);document.querySelector('#forWho input[value=self]').checked=true;payShow();whoShow()});
 load();
 })();
 </script>
