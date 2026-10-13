@@ -521,8 +521,11 @@ async function loadTransfers(from,to){
 }
 
 /* MSME application form: a link the candidate fills in and prints (web/forms/msme-application.html) */
-const formLink=l=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');const q=new URLSearchParams();if(l.name)q.set('n',l.name);if(l.phone)q.set('p',l.phone);return base+'forms/msme-application.html?'+q}
-const formMsg=(l,url)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the MSME application form for the Gold Appraisal course. Please fill it on your phone, tap "Print / Save as PDF", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
+const sfRel=()=>document.querySelector('input[name=sfRel]:checked')?.value||'child';
+const formLink=(l,child)=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');const q=new URLSearchParams();if(l.name)q.set('n',l.name);if(child){q.set('c',child);q.set('r',sfRel())}if(l.phone)q.set('p',l.phone);return base+'forms/msme-application.html?'+q}
+function sfUpdate(){const l=S.lead,b=$('#sfMsg');if(!l||!b)return;const c=($('#sfChild')?.value||'').trim();const rl=$('#sfRel');if(rl)rl.hidden=!c;const url=formLink(l,c),msg=formMsg(l,url,c);
+  b.textContent=msg;$('#sfWa').href=waLink(l.phone,msg);$('#sfOpen').href=url}
+const formMsg=(l,url,child)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the MSME application form for the Gold Appraisal course${child?` for ${child}`:''}. Please fill it on your phone, tap "Print / Save as PDF", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
 
 /* TEAM CHAT: messages between telecallers, managers and admins */
 S.tc={ch:'team',inbox:[],share:null};
@@ -989,11 +992,15 @@ document.addEventListener('click',async e=>{
   try{switch(a){
     case'nav':closeModal();go(v);break;
     case'waOpen':openChat(id);break;
-    case'sendForm':{const l=S.lead;if(!l)break;const url=formLink(l);const msg=formMsg(l,url);
-      modal(`<h2>Send the MSME application form</h2><p class="small muted" style="margin-top:-6px">${esc(l.name||'The candidate')} fills it on their phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Their name and number are already filled in.</p>
-      <div class="script" style="margin:10px 0">${esc(msg)}</div>
-      <div class="row"><a class="btn call" href="${esc(waLink(l.phone,msg))}" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="copy" data-v="${esc(msg)}">${ic('copy')}Copy message</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open the form</a><a class="btn ghost" href="media/msme-application-form.pdf" target="_blank" rel="noopener">${ic('down')}Blank PDF</a></div>`);
-      addActivity(l.id,'msg','MSME application form link',{channel:'whatsapp'}).catch(()=>{});break}
+    case'sendForm':{const l=S.lead;if(!l)break;
+      modal(`<h2>Send the MSME application form</h2><p class="small muted" style="margin-top:-6px">The candidate fills it on the phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Names and number are filled in from here.</p>
+      <label class="field" style="margin:10px 0"><span>Candidate's name – only if someone else attends the class (e.g. ${esc((l.name||'the lead').split(' ')[0])}'s son or daughter)</span><input class="input" id="sfChild" placeholder="Leave empty if ${esc(l.name||'this person')} attends"></label>
+      <div class="row small" id="sfRel" style="margin:-4px 0 8px;gap:14px" hidden><span class="muted">The candidate is ${esc((l.name||'the lead').split(' ')[0])}'s</span><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="child" checked> son / daughter</label><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="friend"> friend / relative</label></div>
+      <div class="script" id="sfMsg" style="margin:10px 0"></div>
+      <div class="row"><a class="btn call" id="sfWa" data-act="sfLog" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="sfCopy">${ic('copy')}Copy message</button><a class="btn" id="sfOpen" target="_blank" rel="noopener">Open the form</a><a class="btn ghost" href="media/msme-application-form.pdf" target="_blank" rel="noopener">${ic('down')}Blank PDF</a></div>`);
+      sfUpdate();break}
+    case'sfLog':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();addActivity(l.id,'msg','MSME application form link'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
+    case'sfCopy':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();copyText(formMsg(l,formLink(l,c),c));addActivity(l.id,'msg','MSME application form link (copied)'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
     case'repTab':{S.repTab=v;const b=$('.rep-body');if(b)b.dataset.cur=v;$$('.set-tabs [data-act=repTab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));break}
     case'rRange':{const d=new Date(),y=d.getFullYear(),m=d.getMonth();let a,b=d;
       if(v==='d0')a=d;else if(v==='d1'){a=new Date(y,m,d.getDate()-1);b=a}else if(v==='d7')a=new Date(y,m,d.getDate()-6);else if(v==='y0')a=new Date(y,0,1);
@@ -1634,5 +1641,6 @@ async function boot(){
   if(S.recovery)return showNewPass();
   afterLogin().catch(e=>{fail(e);showAuth()});
 }
+document.addEventListener('input',e=>{if(e.target.id==='sfChild'||e.target.name==='sfRel')sfUpdate()});
 boot();
 })();
