@@ -52,7 +52,9 @@ textarea{min-height:76px;resize:vertical}
 /* ---------- printed form (A4, same layout as the official form) ---------- */
 #sheet{display:none}
 @media print{
-  @page{size:A4;margin:9mm 10mm}
+  /* no page margin: browsers then leave out their own header and footer (date, title, web address, page number) */
+  @page{size:A4;margin:0}
+  #sheet{padding:10mm 11mm}
   body{background:#fff;font-family:"Times New Roman",Times,serif;font-size:10pt;line-height:1.25}
   .top,main,.bar{display:none!important}
   #sheet{display:block}
