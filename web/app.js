@@ -520,6 +520,10 @@ async function loadTransfers(from,to){
   ${data.map(a=>`<tr><td class="small">${esc(fmtDT(a.created_at))}</td><td><b>${esc(a.lead?.name||'')}</b><div class="lead-phone">${esc(a.lead?.phone||'')}</div></td><td>${esc(nameOf(a.data.from))}</td><td>${esc(nameOf(a.data.to))}</td><td class="hide-sm">${esc(nameOf(a.actor_id))}</td><td class="small">${esc(a.data.note||'')}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">No transfers in this range.</td></tr>'}</tbody></table></div>`;
 }
 
+/* MSME application form: a link the candidate fills in and prints (web/forms/msme-application.html) */
+const formLink=l=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');const q=new URLSearchParams();if(l.name)q.set('n',l.name);if(l.phone)q.set('p',l.phone);return base+'forms/msme-application.html?'+q}
+const formMsg=(l,url)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the MSME application form for the Gold Appraisal course. Please fill it on your phone, tap "Print / Save as PDF", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
+
 /* TEAM CHAT: messages between telecallers, managers and admins */
 S.tc={ch:'team',inbox:[],share:null};
 const tcDm=uid=>'dm:'+[S.me.id,uid].sort().join(':');
@@ -654,7 +658,7 @@ function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
     <div id="dwNu"></div>
     <div class="card" style="margin-top:14px"><h2>Activity</h2><div class="row" style="margin:10px 0 14px;align-items:flex-start"><textarea class="input" id="dwNoteAdd" rows="2" placeholder="Add a note" style="flex:1;min-height:44px"></textarea><button class="btn" data-act="addNote">Add note</button></div><div id="dwTl"></div></div>
     <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">AI assistant</h2><span class="spacer"></span><button class="btn sm" data-act="aiAssist">${ic('spark')}Suggest next step</button></div><div id="aiOut" class="small muted" style="margin-top:8px">Reads this lead's calls, transcripts and notes and suggests what to do next, with a ready-to-send message.</div></div>
-    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><button class="btn sm" data-act="tcShare">${ic('msg')}Share in team chat</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
+    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><button class="btn sm" data-act="tcShare">${ic('msg')}Share in team chat</button><button class="btn sm" data-act="sendForm">${ic('up')}Send application form</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
   loadDrawer().catch(fail);
 }
 function closeDrawer(){tStop('dw');S.openLead=null;S.lead=null;$('#dw').innerHTML=''}
@@ -985,6 +989,11 @@ document.addEventListener('click',async e=>{
   try{switch(a){
     case'nav':closeModal();go(v);break;
     case'waOpen':openChat(id);break;
+    case'sendForm':{const l=S.lead;if(!l)break;const url=formLink(l);const msg=formMsg(l,url);
+      modal(`<h2>Send the MSME application form</h2><p class="small muted" style="margin-top:-6px">${esc(l.name||'The candidate')} fills it on their phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Their name and number are already filled in.</p>
+      <div class="script" style="margin:10px 0">${esc(msg)}</div>
+      <div class="row"><a class="btn call" href="${esc(waLink(l.phone,msg))}" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="copy" data-v="${esc(msg)}">${ic('copy')}Copy message</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open the form</a><a class="btn ghost" href="media/msme-application-form.pdf" target="_blank" rel="noopener">${ic('down')}Blank PDF</a></div>`);
+      addActivity(l.id,'msg','MSME application form link',{channel:'whatsapp'}).catch(()=>{});break}
     case'repTab':{S.repTab=v;const b=$('.rep-body');if(b)b.dataset.cur=v;$$('.set-tabs [data-act=repTab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));break}
     case'rRange':{const d=new Date(),y=d.getFullYear(),m=d.getMonth();let a,b=d;
       if(v==='d0')a=d;else if(v==='d1'){a=new Date(y,m,d.getDate()-1);b=a}else if(v==='d7')a=new Date(y,m,d.getDate()-6);else if(v==='y0')a=new Date(y,0,1);

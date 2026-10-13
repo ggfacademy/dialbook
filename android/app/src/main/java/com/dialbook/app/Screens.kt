@@ -64,7 +64,10 @@ class LeadActivity : BaseActivity() {
             tiles.add(tile(R.drawable.ic_transfer, "Transfer", NAVY, android.graphics.Color.parseColor("#E6EAF4")) { transfer(name) }, 8, 1f)
             box.add(tiles)
             box.add(text("WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
-            box.add(button("💬  Share in team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 10)
+            val more = row()
+            more.add(button("💬  Team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 0, 1f)
+            more.add(button("📄  Send form", ACCENT, false) { sendApplicationForm(name, phone) }, 8, 1f)
+            box.add(more, 10)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
             if (fu > 0) {
                 val late = fu < System.currentTimeMillis()
