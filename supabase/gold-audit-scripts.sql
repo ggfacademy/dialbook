@@ -1,10 +1,11 @@
 -- Dialbook Pro – call scripts for the Gold Audit and Appraisal course (English, Hindi, Tamil, Telugu).
--- Run once in Supabase → SQL Editor, after courses.sql. Safe to run again: a script that is already there
--- (same id) is left as it is, so edits made later in Settings → Call scripts are kept.
+-- Run in Supabase → SQL Editor, after courses.sql. Safe to run again: it puts this version of the four
+-- Gold Audit scripts in place (replacing earlier copies of them) and leaves every other script as it is.
 --
 -- The scripts are for the course "Gold Audit and Appraisal", so they work for every city's campaign of that
 -- course. The English one is for any language; Hindi, Tamil and Telugu are used for leads with that language.
 -- {fee}, {duration}, {timing}, {venue} and {dates} are filled from the lead's campaign (Campaigns → Edit).
+-- Payment: the QR code on the MSME website link, or a DD in the name of "Director, MSME TDC Chennai".
 
 with s(id, name, language, body, ord) as (values
   ('ga-en', 'Gold Audit – English', '', $gs$GOLD AUDIT AND APPRAISAL – ENGLISH CALL SCRIPT
@@ -49,8 +50,10 @@ Dates: {dates}
 
 7. FEES AND PAYMENT
 "The fee is {fee}.
-Payment is only through the QR code on the MSME website link. I'll send you the link on WhatsApp."
-(No cash and no DD for this course.)
+You can pay in either of two ways:
+- through the QR code on the MSME website link – I'll send you the link on WhatsApp, or
+- by DD in the name of 'Director, MSME TDC Chennai'."
+(No cash.)
 
 8. AFTER THE COURSE
 "With this certificate you can get empanelled with banks and NBFCs as a gold auditor or gold appraiser.
@@ -59,7 +62,7 @@ Many people also start their own gold loan or old gold business."
 
 ★ 9. ALWAYS END WITH A NEXT STEP – never end the call without one
 "I'll send you the course details on WhatsApp now. Shall I book your seat for this batch?"
-→ YES: "I'll send the payment link now." Move the lead to Payment pending and set a follow-up to confirm the payment.
+→ YES: "I'll send the payment link now – or you can bring the DD." Move the lead to Payment pending and set a follow-up to confirm the payment.
 → NEEDS TIME: "When can I call you back – today evening or tomorrow morning?" Set the follow-up for that exact time.
 → NOT INTERESTED: ask politely "May I know the reason?" and pick it as the lost reason.
 
@@ -128,8 +131,10 @@ Dates: {dates}
 
 7. FEES और PAYMENT
 "Fees {fee} है।
-Payment सिर्फ MSME website link के QR code से होता है। मैं आपको link WhatsApp पर भेज देता/देती हूँ।"
-(इस course के लिए cash या DD नहीं।)
+Payment आप दो तरीकों से कर सकते हैं:
+- MSME website link के QR code से – मैं आपको link WhatsApp पर भेज देता/देती हूँ, या
+- 'Director, MSME TDC Chennai' के नाम पर DD से।"
+(Cash नहीं।)
 
 8. COURSE के बाद
 "इस certificate से आप banks और NBFCs में gold auditor या gold appraiser के रूप में empanel हो सकते हैं।
@@ -138,7 +143,7 @@ Payment सिर्फ MSME website link के QR code से होता ह
 
 ★ 9. हमेशा NEXT STEP के साथ call खत्म कीजिए
 "मैं अभी आपको WhatsApp पर course की details भेज रहा/रही हूँ। क्या इस batch के लिए आपकी seat book कर दूँ?"
-→ हाँ: "मैं अभी payment link भेज देता/देती हूँ।" Lead को Payment pending में डालिए और payment confirm करने का follow-up लगाइए।
+→ हाँ: "मैं अभी payment link भेज देता/देती हूँ – या आप DD भी दे सकते हैं।" Lead को Payment pending में डालिए और payment confirm करने का follow-up लगाइए।
 → समय चाहिए: "आपको कब call करूँ – आज शाम या कल सुबह?" उसी समय का follow-up लगाइए।
 → Interest नहीं: विनम्रता से पूछिए "क्या मैं वजह जान सकता/सकती हूँ?" और वही lost reason चुनिए।
 
@@ -207,8 +212,10 @@ Dates: {dates}
 
 7. FEES, PAYMENT
 "Fees {fee}.
-Payment MSME website link-ல இருக்கற QR code மூலமா மட்டும் தான். Link-ஐ WhatsApp-ல அனுப்பறேன்."
-(இந்த course-க்கு cash, DD கிடையாது.)
+Payment ரெண்டு வழியில பண்ணலாம்:
+- MSME website link-ல இருக்கற QR code மூலமா – link-ஐ WhatsApp-ல அனுப்பறேன், அல்லது
+- 'Director, MSME TDC Chennai' பேர்ல DD எடுத்து."
+(Cash கிடையாது.)
 
 8. COURSE முடிஞ்ச பிறகு
 "இந்த certificate வெச்சு banks, NBFCs-ல gold auditor அல்லது gold appraiser-ஆ empanel ஆகலாம்.
@@ -217,7 +224,7 @@ Payment MSME website link-ல இருக்கற QR code மூலமா ம�
 
 ★ 9. எப்பவும் ஒரு NEXT STEP-ஓட call-ஐ முடிங்க
 "இப்போ WhatsApp-ல course details அனுப்பறேன். இந்த batch-க்கு உங்க seat book பண்ணட்டுமா?"
-→ சரி: "இப்போ payment link அனுப்பறேன்." Lead-ஐ Payment pending-க்கு மாத்தி, payment confirm பண்ண follow-up வெச்சுக்கோங்க.
+→ சரி: "இப்போ payment link அனுப்பறேன் – இல்லைன்னா DD-ஆவும் கொடுக்கலாம்." Lead-ஐ Payment pending-க்கு மாத்தி, payment confirm பண்ண follow-up வெச்சுக்கோங்க.
 → யோசிக்கணும்: "எப்போ call பண்ணட்டும் – இன்னைக்கு சாயங்காலமா, நாளைக்கு காலையிலயா?" அந்த நேரத்துக்கு follow-up வெச்சுக்கோங்க.
 → Interest இல்லை: மரியாதையா "என்ன காரணம்னு தெரிஞ்சுக்கலாமா?"ன்னு கேட்டு, அதை lost reason-ஆ select பண்ணுங்க.
 
@@ -286,8 +293,10 @@ Dates: {dates}
 
 7. FEES, PAYMENT
 "Fees {fee}.
-Payment MSME website link లో ఉన్న QR code ద్వారా మాత్రమే. Link ని WhatsApp లో పంపిస్తాను."
-(ఈ course కి cash, DD ఉండదు.)
+Payment రెండు విధాలుగా చేయవచ్చు:
+- MSME website link లో ఉన్న QR code ద్వారా – link ని WhatsApp లో పంపిస్తాను, లేదా
+- 'Director, MSME TDC Chennai' పేరు మీద DD ద్వారా."
+(Cash ఉండదు.)
 
 8. COURSE తర్వాత
 "ఈ certificate తో banks, NBFCs లో gold auditor లేదా gold appraiser గా empanel అవ్వవచ్చు.
@@ -296,7 +305,7 @@ Payment MSME website link లో ఉన్న QR code ద్వారా మా�
 
 ★ 9. ఎప్పుడూ ఒక NEXT STEP తో call ముగించండి
 "ఇప్పుడే WhatsApp లో course details పంపిస్తాను. ఈ batch కి మీ seat book చేయమంటారా?"
-→ సరే: "ఇప్పుడే payment link పంపిస్తాను." Lead ని Payment pending కి మార్చి, payment confirm చేయడానికి follow-up పెట్టండి.
+→ సరే: "ఇప్పుడే payment link పంపిస్తాను – లేదా DD కూడా ఇవ్వవచ్చు." Lead ని Payment pending కి మార్చి, payment confirm చేయడానికి follow-up పెట్టండి.
 → ఆలోచించాలి: "ఎప్పుడు call చేయమంటారు – ఈ రోజు సాయంత్రమా, రేపు ఉదయమా?" ఆ సమయానికి follow-up పెట్టండి.
 → Interest లేదు: మర్యాదగా "కారణం తెలుసుకోవచ్చా?" అని అడిగి, దాన్ని lost reason గా select చేయండి.
 
@@ -324,14 +333,14 @@ CUSTOMERS అడిగే ప్రశ్నలు – ఏం చెప్పా
 ప్ర: Certificate వేరే state లో valid ఆ?
 జ: "ఇది Central Government (MSME) certificate, Government of India logo తో. భారతదేశం అంతటా ఉపయోగించవచ్చు."$gs$, 3)
 ), add as (
-  select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'campaign_id', '', 'course', 'Gold Audit and Appraisal',
-                                               'language', s.language, 'body', s.body) order by s.ord), '[]'::jsonb) as items
-    from s, public.settings st
-   where st.id = 1
-     and not exists (select 1 from jsonb_array_elements(coalesce(st.data->'scripts', '[]'::jsonb)) x where x->>'id' = s.id)
+  select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'campaign_id', '', 'course', 'Gold Audit and Appraisal',
+                                      'language', language, 'body', body) order by ord) as items
+    from s
 )
 update public.settings st
-   set data = jsonb_set(coalesce(st.data, '{}'::jsonb), '{scripts}', coalesce(st.data->'scripts', '[]'::jsonb) || add.items),
+   set data = jsonb_set(coalesce(st.data, '{}'::jsonb), '{scripts}',
+                        coalesce((select jsonb_agg(x) from jsonb_array_elements(coalesce(st.data->'scripts', '[]'::jsonb)) x
+                                   where coalesce(x->>'id', '') not in (select id from s)), '[]'::jsonb) || add.items),
        updated_at = now()
   from add
- where st.id = 1 and jsonb_array_length(add.items) > 0;
+ where st.id = 1;
