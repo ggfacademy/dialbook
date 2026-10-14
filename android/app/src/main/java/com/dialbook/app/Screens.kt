@@ -14,6 +14,8 @@ import java.util.Calendar
 /* ------------------------------------------------------------------ */
 class LeadActivity : BaseActivity() {
     private lateinit var leadId: String
+    /** The lead's course (its campaign's course details), for the application form message. */
+    var course = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +68,7 @@ class LeadActivity : BaseActivity() {
             box.add(text("WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
             val more = row()
             more.add(button("💬  Team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 0, 1f)
-            more.add(button("📄  Send form", ACCENT, false) { sendApplicationForm(name, phone) }, 8, 1f)
+            more.add(button("📄  Send form", ACCENT, false) { sendApplicationForm(name, phone, course) }, 8, 1f)
             box.add(more, 10)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
             if (fu > 0) {
@@ -114,19 +116,23 @@ class LeadActivity : BaseActivity() {
 private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: JSONObject) {
     val campId = l.optString("campaign_id").let { if (it == "null") "" else it }
     io({
-        if (campId.isEmpty()) JSONArray() else JSONArray(Api.get(this, "/rest/v1/campaigns?select=name,script&id=eq.$campId"))
+        if (campId.isEmpty()) JSONArray() else JSONArray(Api.get(this, "/rest/v1/campaigns?select=*&id=eq.$campId"))
     }, { arr ->
         val camp = if (arr.length() > 0) arr.getJSONObject(0) else JSONObject()
+        val det = camp.optJSONObject("details") ?: JSONObject()
+        val co = det.optString("course")
+        course = co
         val lang = l.optString("language").lowercase()
         var best: JSONObject? = null; var bs = -1
         val list = settings.optJSONArray("scripts") ?: JSONArray()
         for (i in 0 until list.length()) {
             val x = list.getJSONObject(i)
             if (x.optString("body").isBlank()) continue
-            val xc = x.optString("campaign_id"); val xl = x.optString("language").lowercase()
+            val xc = x.optString("campaign_id"); val xk = x.optString("course"); val xl = x.optString("language").lowercase()
             if (xc.isNotEmpty() && xc != campId) continue
+            if (xk.isNotEmpty() && xk != co) continue
             if (xl.isNotEmpty() && xl != lang) continue
-            val sc = (if (xc.isNotEmpty()) 4 else 0) + (if (xl.isNotEmpty()) 2 else 0)
+            val sc = (if (xc.isNotEmpty()) 8 else if (xk.isNotEmpty()) 4 else 0) + (if (xl.isNotEmpty()) 2 else 0)
             if (sc > bs) { bs = sc; best = x }
         }
         val campScript = camp.optString("script").let { if (it == "null") "" else it }
@@ -140,6 +146,10 @@ private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: 
         val filled = body.replace("{first_name}", first).replace("{name}", first)
             .replace("{program}", camp.optString("name")).replace("{city}", l.optString("city"))
             .replace("{agent}", Prefs(this).name).replace("{company}", settings.optString("company"))
+            .replace("{course}", co.ifEmpty { camp.optString("name") })
+            .replace("{fee}", det.optString("fee")).replace("{duration}", det.optString("duration"))
+            .replace("{timing}", det.optString("timing")).replace("{dates}", det.optString("dates"))
+            .replace("{venue}", det.optString("venue")).replace("{phone}", l.optString("phone"))
         val k = card()
         k.add(text("▸ Call script · $title", 15f, BaseActivity.ACCENT, true))
         val tv = text(filled, 15f, BaseActivity.FG).apply { visibility = android.view.View.GONE }
