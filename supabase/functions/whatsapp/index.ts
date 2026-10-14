@@ -82,7 +82,10 @@ const gwError = (d: any) => {
 /* ------------------------------------------------------------------ */
 /* Provider senders. Each returns the provider's message id.          */
 /* ------------------------------------------------------------------ */
-type SendReq = { to: string; text?: string; template?: Obj; params: string[]; header?: { type: string; url: string } };
+type Media = { type: "image" | "document" | "video"; url: string; name: string };
+type SendReq = { to: string; text?: string; template?: Obj; params: string[]; header?: { type: string; url: string }; media?: Media };
+// A file sent as a plain link, for providers without a media format: the caption, then the link
+const mediaAsText = (m: SendReq) => [m.text, m.media!.url].filter(Boolean).join("\n");
 
 async function sendMeta(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
   const v = cfg.api_version || "v23.0";
@@ -94,6 +97,9 @@ async function sendMeta(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
     if (m.header) comps.push({ type: "header", parameters: [{ type: m.header.type, [m.header.type]: { link: m.header.url } }] });
     if (m.params.length) comps.push({ type: "body", parameters: m.params.map((t) => ({ type: "text", text: t || "-" })) });
     if (comps.length) body.template.components = comps;
+  } else if (m.media) {
+    body.type = m.media.type;
+    body[m.media.type] = { link: m.media.url, ...(m.text ? { caption: m.text } : {}), ...(m.media.type === "document" ? { filename: m.media.name } : {}) };
   } else {
     body.type = "text";
     body.text = { preview_url: true, body: m.text };
@@ -121,7 +127,7 @@ async function sendTwilio(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
   if (m.template) {
     f.set("ContentSid", m.template.external_id);
     if (m.params.length) f.set("ContentVariables", JSON.stringify(Object.fromEntries(m.params.map((p, i) => [String(i + 1), p]))));
-  } else f.set("Body", m.text || "");
+  } else { f.set("Body", m.text || ""); if (m.media) f.set("MediaUrl", m.media.url); }
   f.set("StatusCallback", `${HOOK}?a=${cfg.__id}&t=${cfg.__token}`);
   const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.account_sid}/Messages.json`, {
     method: "POST",
@@ -138,10 +144,13 @@ async function sendCustom(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
     to: "+" + m.to, to_digits: m.to, to_local: m.to.slice(-10), text: m.text || "",
     template: m.template?.name || "", language: m.template?.language || "en",
     params_json: m.params, header_type: m.header?.type || "", header_url: m.header?.url || "",
-    header_values_json: m.header ? [m.header.url] : [], ...Object.fromEntries(m.params.map((p, i) => [`param${i + 1}`, p])),
+    header_values_json: m.header ? [m.header.url] : [],
+    media_type: m.media ? m.media.type[0].toUpperCase() + m.media.type.slice(1) : "", media_type_lower: m.media?.type || "",
+    media_url: m.media?.url || "", file_name: m.media?.name || "", ...Object.fromEntries(m.params.map((p, i) => [`param${i + 1}`, p])),
     ...Object.fromEntries(Object.entries(sec).map(([k, v]) => [`secret.${k}`, v])),
   };
-  const bodyTpl = m.template ? (cfg.template_body || cfg.text_body) : cfg.text_body;
+  if (m.media && !cfg.media_body) { vars.text = mediaAsText(m); }   // no file format set up: send the link as text
+  const bodyTpl = m.template ? (cfg.template_body || cfg.text_body) : (m.media && cfg.media_body) ? cfg.media_body : cfg.text_body;
   if (!bodyTpl) throw new UserError(m.template ? "This provider has no template message format set up." : "This provider has no text message format set up.");
   const url = fill(m.template && cfg.template_url ? cfg.template_url : cfg.url, vars, false);
   let headers: Obj = { "Content-Type": "application/json" };
@@ -157,7 +166,12 @@ async function sendCustom(cfg: Obj, sec: Obj, m: SendReq): Promise<string> {
 
 async function sendQr(cfg: Obj, m: SendReq): Promise<string> {
   const text = m.template ? renderTemplate(m.template.body, m.params) : (m.text || "");
-  const r = await gw(`/message/sendText/${encodeURIComponent(cfg.instance)}`, "POST", { number: m.to, text });
+  if (m.media) {
+    const rm = await gw(`/message/sendMedia/${encodeURIComponent(cfg.instance)}`, "POST",
+      { number: m.to, mediatype: m.media.type, media: m.media.url, caption: text, fileName: m.media.name });
+    if (rm.ok) return rm.data?.key?.id || "";
+  }
+  const r = await gw(`/message/sendText/${encodeURIComponent(cfg.instance)}`, "POST", { number: m.to, text: m.media ? mediaAsText(m) : text });
   if (!r.ok) {
     if (r.status === 404) throw new UserError("This WhatsApp is not linked any more. Scan the QR code again in Settings → WhatsApp.");
     throw new UserError("WhatsApp gateway: " + gwError(r.data));
@@ -248,13 +262,14 @@ async function syncTemplates(acc: Obj, sec: Obj): Promise<number> {
 /* ------------------------------------------------------------------ */
 /* Sending to a lead (used by "send" and by nurture sequences)        */
 /* ------------------------------------------------------------------ */
-async function deliver(acc: Obj, sec: Obj, lead: Obj, o: { template?: Obj; params: string[]; text?: string; headerUrl?: string; senderId: string | null; note?: string }) {
+async function deliver(acc: Obj, sec: Obj, lead: Obj, o: { template?: Obj; params: string[]; text?: string; headerUrl?: string; media?: Media; senderId: string | null; note?: string }) {
   const template = o.template;
   const headerUrl = String(o.headerUrl || template?.header_url || "").trim();
   if (template?.header_type && !/^https:\/\//i.test(headerUrl)) throw new UserError(`This template needs a public https link to its ${template.header_type}.`);
   const header = template?.header_type ? { type: String(template.header_type), url: headerUrl } : undefined;
-  const m: SendReq = { to: digits(lead.phone), text: String(o.text || ""), template, params: o.params, header };
-  const shown = template ? renderTemplate(template.body || template.name, o.params) : m.text!;
+  const m: SendReq = { to: digits(lead.phone), text: String(o.text || ""), template, params: o.params, header, media: template ? undefined : o.media };
+  const shown = template ? renderTemplate(template.body || template.name, o.params)
+    : m.media ? [`📎 ${m.media.name}`, m.text, m.media.url].filter(Boolean).join("\n") : m.text!;
   let providerId = "", status = "sent", error: string | null = null;
   try {
     const cfg = { ...acc.config, __id: acc.id, __token: acc.webhook_token };
@@ -268,6 +283,7 @@ async function deliver(acc: Obj, sec: Obj, lead: Obj, o: { template?: Obj; param
   const row = {
     account_id: acc.id, lead_id: lead.id, phone_key: pkey(lead.phone), direction: "out", sender_id: o.senderId,
     body: shown, template_name: template?.name || null, status, error, provider_id: providerId || null,
+    media_type: m.media?.type || null,
   };
   let { data: msg, error: insErr } = await admin.from("wa_messages").insert(row).select("*").single();
   if (insErr && providerId) {
@@ -495,8 +511,16 @@ Deno.serve(async (req) => {
           const { data: t } = await admin.from("wa_templates").select("*").eq("id", b.template_id).maybeSingle();
           if (!t || t.account_id !== acc.id) throw new UserError("That template does not belong to this number.");
           template = t;
-        } else if (!String(b.text || "").trim()) throw new UserError("Type a message or pick a template.");
-        const { msg, status, error } = await deliver(acc, sec, lead, { template, params, text: String(b.text || ""), headerUrl: b.header_url, senderId: me.id });
+        }
+        let media: Media | undefined;
+        if (!template && b.media) {
+          const url = String(b.media.url || "").trim();
+          if (!/^https:\/\//i.test(url)) throw new UserError("The file needs a public https link.");
+          const type = ["image", "document", "video"].includes(b.media.type) ? b.media.type : "document";
+          media = { type, url, name: String(b.media.name || url.split("/").pop() || "file").slice(0, 120) };
+        }
+        if (!template && !media && !String(b.text || "").trim()) throw new UserError("Type a message or pick a template.");
+        const { msg, status, error } = await deliver(acc, sec, lead, { template, params, text: String(b.text || ""), headerUrl: b.header_url, media, senderId: me.id });
         if (status === "failed") return json({ error, message: msg }, 400);
         return json({ ok: true, message: msg });
       }
