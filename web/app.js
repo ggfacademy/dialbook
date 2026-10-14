@@ -362,8 +362,9 @@ function campModal(id){
   modal(`<h2>${id?'Edit campaign':'New campaign'}</h2><form id="campForm" style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
   <label class="field"><span>Name</span><input class="input" id="cName" required value="${esc(c.name)}"></label>
   <label class="field"><span>Description</span><input class="input" id="cDesc" value="${esc(c.description)}"></label>
-  <fieldset class="cdet" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px"><legend class="small" style="padding:0 6px"><b>Course details</b> <span class="muted">· filled into call scripts, messages and AI calls as {course}, {fee}, {duration}, {timing}, {dates}, {venue}</span></legend>
-  ${CDET.map(([k,lb,ph])=>k==='venue'?`<label class="field" style="grid-column:1/-1"><span>${lb}</span><textarea class="input" rows="2" id="cd-${k}" placeholder="${esc(ph)}">${esc(cDet(c)[k]||'')}</textarea></label>`:`<label class="field"><span>${lb}</span><input class="input" id="cd-${k}" ${k==='course'?'list="cdCourses" ':''}value="${esc(cDet(c)[k]||'')}" placeholder="${esc(ph)}"></label>`).join('')}
+  <fieldset class="cdet" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px"><legend class="small" style="padding:0 6px"><b>Course details</b> <span class="muted">· filled into call scripts, messages and AI calls as {course}, {fee}, {duration}, {timing}, {dates}, {venue}, {certificate}, {payment}</span></legend>
+  ${CDET.map(([k,lb,ph])=>(k==='venue'||k==='payment')?`<label class="field" style="grid-column:1/-1"><span>${lb}</span><textarea class="input" rows="2" id="cd-${k}" placeholder="${esc(ph)}">${esc(cDet(c)[k]||'')}</textarea></label>`:`<label class="field"><span>${lb}</span><input class="input" id="cd-${k}" ${k==='course'?'list="cdCourses" ':''}value="${esc(cDet(c)[k]||'')}" placeholder="${esc(ph)}"></label>`).join('')}
+  <label class="field" style="grid-column:1/-1"><span>Application form (the “Send form” button)</span><select class="input" id="cd-form">${opt('','MSME application form',cDet(c).form||'')}${opt('none','No application form for this course',cDet(c).form||'')}</select></label>
   <datalist id="cdCourses">${courses().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   <p class="small muted" style="grid-column:1/-1;margin:0">One campaign per course and city (e.g. “Gold Audit and Appraisal – Mumbai”). Use the same course name in every city so one call script can cover all of them.</p></fieldset>
   <label class="field"><span>Call script</span><textarea class="input" id="cScript" rows="8" placeholder="Opening line, questions, objections and answers. {first_name} becomes the lead's first name; {course}, {fee}, {timing}, {venue} … come from the course details above.">${esc(c.script)}</textarea></label>
@@ -373,7 +374,7 @@ function campModal(id){
   <label class="row"><input type="checkbox" id="cActive" ${c.active?'checked':''}> Active</label>
   <div class="row"><button class="btn primary" type="submit">Save campaign</button><button class="btn" type="button" data-act="closeMd">Cancel</button>${id?`<span class="spacer"></span><button class="btn danger" type="button" data-act="campDel" data-id="${id}">Delete</button>`:''}</div></form>`);
   $('#campForm').onsubmit=async e=>{e.preventDefault();const d={name:$('#cName').value.trim(),description:$('#cDesc').value.trim(),script:$('#cScript').value,ai_agent_id:$('#cAgent').value.trim(),language:$('#cLang').value,active:$('#cActive').checked};if(!d.name)return;
-    const det={};CDET.forEach(([k])=>{const v=($('#cd-'+k)?.value||'').trim();if(v)det[k]=v});if(Object.keys(det).length||Object.keys(cDet(c)).length)d.details=det;
+    const det={};[...CDET.map(([k])=>k),'form'].forEach(k=>{const v=($('#cd-'+k)?.value||'').trim();if(v)det[k]=v});if(Object.keys(det).length||Object.keys(cDet(c)).length)d.details=det;
     try{let cid=id;if(id)await R(sb.from('campaigns').update(d).eq('id',id));else{const {data:nc}=await R(sb.from('campaigns').insert(d).select('id').single());cid=nc.id}
       const kw=$('#cKw');if(kw&&isAdmin()&&kw.value.trim()!==((S.cfg.waKeywords||{})[id]||'')){const {data:cur}=await R(sb.from('settings').select('data').eq('id',1).single());const sd=cur.data||{};sd.waKeywords={...(sd.waKeywords||{})};if(kw.value.trim())sd.waKeywords[cid]=kw.value.trim();else delete sd.waKeywords[cid];await R(sb.from('settings').update({data:sd,updated_at:iso(now())}).eq('id',1))}
       await loadBase();closeModal();toast('Campaign saved');render()}catch(err){if(/details/.test(err?.message||''))toast('Course details need a one-time update: ask your admin to run supabase/courses.sql in Supabase.');else fail(err)}};
@@ -754,14 +755,14 @@ function scriptFor(l){const c=camp(l.campaign_id),co=courseOf(c),lang=(l.languag
   if(c&&(c.script||'').trim())return{title:c.name,body:c.script};
   return best?{title:best.name||'Call script',body:best.body}:null}
 /* A campaign's course details (Campaigns → Edit): filled into scripts and messages as {course}, {fee} … */
-const CDET=[['course','Course name','e.g. Gold Audit and Appraisal'],['fee','Course fee','e.g. Rs. 25,000 including GST'],['duration','Duration','e.g. 2 full days'],['timing','Class timing','e.g. 11 am to 5 pm'],['dates','Dates','e.g. 7 and 8 November 2026'],['venue','Venue','Hall name and full address']];
+const CDET=[['course','Course name','e.g. Gold Audit and Appraisal'],['fee','Course fee','e.g. Rs. 25,000 including GST'],['duration','Duration','e.g. 2 full days'],['timing','Class timing','e.g. 11 am to 5 pm'],['dates','Dates','e.g. 7 and 8 November 2026'],['venue','Venue','Hall name and full address'],['cert','Certificate given by','e.g. MSME Technology Development Centre, Chennai – or GJSCI'],['payment','How to pay','e.g. QR on the MSME website link, or DD in the name of “Director, MSME TDC Chennai”']];
 const cDet=c=>(c&&c.details&&typeof c.details==='object')?c.details:{};
 const courseOf=c=>cDet(c).course||'';
 const courses=()=>[...new Set(S.campaigns.map(courseOf).filter(Boolean))].sort();
 function tplVars(l){const c=camp(l.campaign_id),d=cDet(c),first=(l.name||'').split(' ')[0]||'there';
-  return{first_name:first,name:first,program:c?.name||'',course:d.course||c?.name||'',fee:d.fee||'',duration:d.duration||'',timing:d.timing||'',dates:d.dates||'',venue:d.venue||'',city:l.city||'',agent:S.me.name||'our team',company:S.cfg.company||'',phone:l.phone||''}}
-function fillTpl(b,l){const v=tplVars(l);return String(b).replace(/\{(first_name|name|program|course|fee|duration|timing|dates|venue|city|agent|company|phone)\}/g,(_m,k)=>v[k])}
-const TPLHELP='{first_name}, {course}, {fee}, {duration}, {timing}, {dates}, {venue}, {city}, {program}, {agent} and {company}';
+  return{first_name:first,name:first,program:c?.name||'',course:d.course||c?.name||'',fee:d.fee||'',duration:d.duration||'',timing:d.timing||'',dates:d.dates||'',venue:d.venue||'',certificate:d.cert||'',payment:d.payment||'',city:l.city||'',agent:S.me.name||'our team',company:S.cfg.company||'',phone:l.phone||''}}
+function fillTpl(b,l){const v=tplVars(l);return String(b).replace(/\{(first_name|name|program|course|fee|duration|timing|dates|venue|certificate|payment|city|agent|company|phone)\}/g,(_m,k)=>v[k])}
+const TPLHELP='{first_name}, {course}, {fee}, {duration}, {timing}, {dates}, {venue}, {certificate}, {payment}, {city}, {program}, {agent} and {company}';
 function msgModal(){
   const l=S.lead;if(!l)return;const ph=normPhone(l.phone);
   modal(`<h2>Message ${esc(l.name)}</h2><p class="muted small">Opens WhatsApp or your SMS app with the message filled in.</p><div class="list" style="margin-top:12px">
@@ -1009,7 +1010,7 @@ document.addEventListener('click',async e=>{
   try{switch(a){
     case'nav':closeModal();go(v);break;
     case'waOpen':openChat(id);break;
-    case'sendForm':{const l=S.lead;if(!l)break;
+    case'sendForm':{const l=S.lead;if(!l)break;if(cDet(camp(l.campaign_id)).form==='none'){toast('This course has no application form (Campaigns → Edit → Application form).');break}
       modal(`<h2>Send the MSME application form</h2><p class="small muted" style="margin-top:-6px">The candidate fills it on the phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Names and number are filled in from here.</p>
       <label class="field" style="margin:10px 0"><span>Candidate's name – only if someone else attends the class (e.g. ${esc((l.name||'the lead').split(' ')[0])}'s son or daughter)</span><input class="input" id="sfChild" placeholder="Leave empty if ${esc(l.name||'this person')} attends"></label>
       <div class="row small" id="sfRel" style="margin:-4px 0 8px;gap:14px" hidden><span class="muted">The candidate is ${esc((l.name||'the lead').split(' ')[0])}'s</span><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="child" checked> son / daughter</label><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="friend"> friend / relative</label></div>

@@ -148,7 +148,7 @@ WhatsApp message: a short friendly message the caller (${me.name}) can send. Use
             lead_id: l.id, lead_name: l.name || "", first_name: (l.name || "").split(" ")[0] || "",
             city: l.city || "", company_name: cfg.company || "", campaign: c?.name || "", notes: l.note || "", language: l.language || "",
             course: det.course || c?.name || "", fee: det.fee || "", duration: det.duration || "", timing: det.timing || "",
-            dates: det.dates || "", venue: det.venue || "",
+            dates: det.dates || "", venue: det.venue || "", certificate: det.cert || "", payment: det.payment || "",
           },
         };
         if (ai.fromNumber) payload.from_phone_number = ai.fromNumber;

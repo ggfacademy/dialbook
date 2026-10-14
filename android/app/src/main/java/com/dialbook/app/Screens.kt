@@ -16,6 +16,8 @@ class LeadActivity : BaseActivity() {
     private lateinit var leadId: String
     /** The lead's course (its campaign's course details), for the application form message. */
     var course = ""
+    /** The course has no application form (Campaigns → Edit). */
+    var noForm = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,7 +70,7 @@ class LeadActivity : BaseActivity() {
             box.add(text("WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
             val more = row()
             more.add(button("💬  Team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 0, 1f)
-            more.add(button("📄  Send form", ACCENT, false) { sendApplicationForm(name, phone, course) }, 8, 1f)
+            more.add(button("📄  Send form", ACCENT, false) { if (noForm) toast("This course has no application form") else sendApplicationForm(name, phone, course) }, 8, 1f)
             box.add(more, 10)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
             if (fu > 0) {
@@ -122,6 +124,7 @@ private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: 
         val det = camp.optJSONObject("details") ?: JSONObject()
         val co = det.optString("course")
         course = co
+        noForm = det.optString("form") == "none"
         val lang = l.optString("language").lowercase()
         var best: JSONObject? = null; var bs = -1
         val list = settings.optJSONArray("scripts") ?: JSONArray()
@@ -150,6 +153,7 @@ private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: 
             .replace("{fee}", det.optString("fee")).replace("{duration}", det.optString("duration"))
             .replace("{timing}", det.optString("timing")).replace("{dates}", det.optString("dates"))
             .replace("{venue}", det.optString("venue")).replace("{phone}", l.optString("phone"))
+            .replace("{certificate}", det.optString("cert")).replace("{payment}", det.optString("payment"))
         val k = card()
         k.add(text("▸ Call script · $title", 15f, BaseActivity.ACCENT, true))
         val tv = text(filled, 15f, BaseActivity.FG).apply { visibility = android.view.View.GONE }
