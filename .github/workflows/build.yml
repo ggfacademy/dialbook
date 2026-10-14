@@ -33,12 +33,18 @@ jobs:
 
       - name: Build Android app
         working-directory: android
+        env:
+          APP_BUILD: ${{ github.run_number }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Put the app inside the website
         run: |
           mkdir -p web/download
           cp android/app/build/outputs/apk/release/app-release.apk web/download/dialbook.apk
+          echo "{\"code\": ${{ github.run_number }}}" > web/download/version.json
+          # website: a fresh copy of the scripts on each build, and the build number for the "Refresh" prompt
+          echo "{\"v\": \"${{ github.run_number }}\"}" > web/version.json
+          sed -i 's#src="config.js"#src="config.js?v=${{ github.run_number }}"#; s#src="app.js"#src="app.js?v=${{ github.run_number }}"#' web/index.html
 
       - name: Keep a copy of the app on this run
         uses: actions/upload-artifact@v4

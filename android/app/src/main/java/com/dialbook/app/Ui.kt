@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 /** The full CRM website. */
 const val WEB_URL = "https://ggfacademy.github.io/dialbook/"
 
+/** Set after the first update check, so the app asks at most once per start. */
+private var updateChecked = false
+
 /** Shared look and helpers for every screen. Views are built in code to keep the app small. */
 open class BaseActivity : Activity() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -265,6 +268,28 @@ open class BaseActivity : Activity() {
     }
 
     /** The MSME application form the candidate fills in and prints (web/forms/msme-application.html). */
+    /** Once per app start: if the website has a newer app build, offer it. Installing it over this one keeps the login and data. */
+    fun checkForUpdate() {
+        if (updateChecked || android.os.Build.FINGERPRINT == "robolectric") return
+        updateChecked = true
+        io({
+            val c = java.net.URL(WEB_URL + "download/version.json?t=" + System.currentTimeMillis()).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 8000; c.readTimeout = 8000
+            try { org.json.JSONObject(c.inputStream.bufferedReader().readText()).optLong("code") } finally { c.disconnect() }
+        }, { latest ->
+            val mine = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(packageManager.getPackageInfo(packageName, 0))
+            if (latest > mine && !isFinishing) android.app.AlertDialog.Builder(this)
+                .setTitle("New version of the app")
+                .setMessage("An update is ready. Tap Update: it downloads, then tap the downloaded file and Install (or Update). No need to uninstall, and you stay logged in.")
+                .setPositiveButton("Update") { _, _ -> openApk() }
+                .setNegativeButton("Later", null).show()
+        }, { /* offline: try again next start */ })
+    }
+
+    fun openApk() {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + "download/dialbook.apk"))) } catch (e: Exception) { toast("No browser found") }
+    }
+
     fun sendApplicationForm(name: String, phone: String, course: String = "") {
         val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone) +
             (if (course.isNotEmpty()) "&k=" + Uri.encode(course) else "")
