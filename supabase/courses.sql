@@ -47,13 +47,23 @@ update public.campaigns
  where details->>'course' in ('Gold Appraisal', 'Gold Audit and Appraisal');
 
 -- GAC with the GJSCI certificate (Global Gold Foundation): any campaign with "GJSCI" in its name gets the GJSCI
--- application form (web/forms/gjsci-application.html) and the GJSCI certificate sample. Fee, dates and venue:
--- add them in Campaigns → Edit.
+-- application form (web/forms/gjsci-application.html), the GJSCI certificate sample, 4 days, 10 am to 1 pm, Rs. 15,000
+-- (no GST mentioned), payment online or by QR. Dates and venue: add them in Campaigns → Edit.
 update public.campaigns
    set details = jsonb_build_object('course', 'Gold Appraisal – GJSCI',
                                     'cert', 'Gem & Jewellery Skill Council of India (GJSCI), Ministry of Skill Development & Entrepreneurship, Govt of India',
+                                    'fee', 'Rs. 15,000', 'duration', '4 days', 'timing', '10 am to 1 pm',
+                                    'payment', 'online (NEFT / GPay) or the QR code we share on WhatsApp',
                                     'form', 'gjsci', 'specimen', 'media/certificate-gjsci.jpg') || details
  where name ~* 'gjsci';
+-- a GJSCI campaign that got the MSME Gold Appraisal defaults earlier: switch it to the GJSCI details
+update public.campaigns
+   set details = details || jsonb_build_object('course', 'Gold Appraisal – GJSCI',
+                                    'cert', 'Gem & Jewellery Skill Council of India (GJSCI), Ministry of Skill Development & Entrepreneurship, Govt of India',
+                                    'fee', 'Rs. 15,000', 'duration', '4 days', 'timing', '10 am to 1 pm',
+                                    'payment', 'online (NEFT / GPay) or the QR code we share on WhatsApp',
+                                    'form', 'gjsci', 'specimen', 'media/certificate-gjsci.jpg')
+ where name ~* 'gjsci' and details->>'course' = 'Gold Appraisal';
 update public.campaigns
    set details = details || jsonb_build_object('form', 'gjsci', 'specimen', 'media/certificate-gjsci.jpg')
  where name ~* 'gjsci' and (details->>'specimen' = 'media/certificate-msme.jpg' or coalesce(details->>'form', '') = '');
