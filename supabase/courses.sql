@@ -22,12 +22,12 @@ update public.campaigns
    set details = details || jsonb_build_object('venue', 'The Federation of Telangana Chambers of Commerce and Industry - Federation House, 11-6-841, Red Hills, Hyderabad 500004')
  where details->>'course' = 'Gold Appraisal' and coalesce(details->>'venue', '') = '' and name ~* 'hyderabad|\mhyd\M';
 
--- New course: Gold Audit and Appraisal (2 full days, 11 am to 5 pm, Rs. 25,000), first batch in Mumbai.
+-- New course: Gold Audit and Appraisal (2 full days, 11 am to 5 pm, Rs. 25,000 including GST), first batch in Mumbai.
 -- Add the venue and dates in Campaigns → Edit when they are fixed. For another city, copy this campaign's
 -- details into a new campaign, e.g. "Gold Audit and Appraisal – Delhi".
 insert into public.campaigns (name, description, language, details)
 select 'Gold Audit and Appraisal – Mumbai', '2-day Gold Audit and Appraisal training, Mumbai', '',
-       jsonb_build_object('course', 'Gold Audit and Appraisal', 'fee', 'Rs. 25,000', 'duration', '2 full days', 'timing', '11 am to 5 pm')
+       jsonb_build_object('course', 'Gold Audit and Appraisal', 'fee', 'Rs. 25,000 including GST', 'duration', '2 full days', 'timing', '11 am to 5 pm')
  where not exists (select 1 from public.campaigns where name ilike 'gold audit%mumbai%');
 
 notify pgrst, 'reload schema';

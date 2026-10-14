@@ -284,7 +284,7 @@ while a chat is open, and as a notification when the app checks in the backgroun
 
 Run `supabase/courses.sql` once in the SQL Editor. It adds **course details** to every campaign (course name, fee, duration,
 timing, dates, venue), fills them in for the existing Gold Appraisal (GAC) campaigns and creates
-**Gold Audit and Appraisal – Mumbai** (2 full days, 11 am to 5 pm, Rs. 25,000).
+**Gold Audit and Appraisal – Mumbai** (2 full days, 11 am to 5 pm, Rs. 25,000 including GST).
 
 - Make one campaign per course and city (**Campaigns → New campaign**), with the same course name in every city.
 - `{course}`, `{fee}`, `{duration}`, `{timing}`, `{dates}` and `{venue}` are filled from the lead's campaign in call scripts,
