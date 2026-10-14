@@ -287,8 +287,11 @@ timing, dates, venue), fills them in for the existing Gold Appraisal (GAC) campa
 **Gold Audit and Appraisal – Mumbai** (2 full days, 11 am to 5 pm, Rs. 25,000 including GST).
 
 - Make one campaign per course and city (**Campaigns → New campaign**), with the same course name in every city.
-- `{course}`, `{fee}`, `{duration}`, `{timing}`, `{dates}` and `{venue}` are filled from the lead's campaign in call scripts,
+- `{course}`, `{fee}`, `{duration}`, `{timing}`, `{dates}`, `{venue}`, `{certificate}` and `{payment}` are filled from the lead's campaign in call scripts,
   quick messages, nurture template values and AI calls (Bolna variables of the same names).
+- **Certificate given by** and **How to pay** (`{certificate}`, `{payment}`) and **Application form** (MSME form or none) are set
+  per campaign too. A batch with another certificate, e.g. GAC with GJSCI, is its own course (e.g. "Gold Appraisal – GJSCI")
+  with its own campaigns and scripts.
 - **Settings → Call scripts** can pick a **course** instead of one campaign, so one script covers every city of that course.
 - A campaign's own AI agent (Campaigns → Edit) is used for all its leads; campaigns without one use the language agents.
 - The MSME application form link and message carry the lead's course.

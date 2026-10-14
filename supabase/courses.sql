@@ -3,7 +3,7 @@
 --
 -- A campaign is one course in one city, e.g. "Gold Audit and Appraisal – Mumbai". Its course details are
 -- filled into call scripts, quick messages, WhatsApp nurture templates and AI calls as
--- {course}, {fee}, {duration}, {timing}, {dates} and {venue}. Edit them in Campaigns → Edit.
+-- {course}, {fee}, {duration}, {timing}, {dates}, {venue}, {certificate} and {payment}. Edit them in Campaigns → Edit.
 
 alter table public.campaigns add column if not exists details jsonb not null default '{}'::jsonb;
 
@@ -29,5 +29,16 @@ insert into public.campaigns (name, description, language, details)
 select 'Gold Audit and Appraisal – Mumbai', '2-day Gold Audit and Appraisal training, Mumbai', '',
        jsonb_build_object('course', 'Gold Audit and Appraisal', 'fee', 'Rs. 25,000 including GST', 'duration', '2 full days', 'timing', '11 am to 5 pm')
  where not exists (select 1 from public.campaigns where name ilike 'gold audit%mumbai%');
+
+-- Who gives the certificate and how to pay ({certificate}, {payment}); only where not set yet. A batch with another
+-- certificate (e.g. GJSCI) is its own course: make a campaign with its own course name, certificate and payment.
+update public.campaigns
+   set details = jsonb_build_object('cert', 'MSME Technology Development Centre, Chennai',
+                                    'payment', 'the payment QR code we send on WhatsApp, or DD in the name of "Director, MSME TDC Chennai"') || details
+ where details->>'course' = 'Gold Appraisal';
+update public.campaigns
+   set details = jsonb_build_object('cert', 'MSME Technology Development Centre, Chennai',
+                                    'payment', 'QR code on the MSME website link, or DD in the name of "Director, MSME TDC Chennai"') || details
+ where details->>'course' = 'Gold Audit and Appraisal';
 
 notify pgrst, 'reload schema';
