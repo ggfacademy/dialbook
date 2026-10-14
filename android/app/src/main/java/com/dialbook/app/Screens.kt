@@ -18,6 +18,7 @@ class LeadActivity : BaseActivity() {
     var course = ""
     /** The course has no application form (Campaigns → Edit). */
     var noForm = false
+    var formKind = ""
     /** The course's certificate specimen links and who gives the certificate (Campaigns → Edit). */
     var specimen = ""
     var certBy = ""
@@ -73,7 +74,7 @@ class LeadActivity : BaseActivity() {
             box.add(text("WhatsApp opens your own WhatsApp. Company WA sends templates from the company number, saved in the CRM.", 12f, MUTED), 6)
             val more = row()
             more.add(button("💬  Team chat", NAVY, false) { shareLeadInChat(leadId, name) }, 0, 1f)
-            more.add(button("📄  Send form", ACCENT, false) { if (noForm) toast("This course has no application form") else sendApplicationForm(name, phone, course) }, 8, 1f)
+            more.add(button("📄  Send form", ACCENT, false) { if (noForm) toast("This course has no application form") else sendApplicationForm(name, phone, course, formKind) }, 8, 1f)
             box.add(more, 10)
             box.add(button("🎓  Send certificate sample", NAVY, false) { sendCertificate(name, phone, course, certBy, specimen) }, 8)
             val fu = Fmt.parse(l.optString("next_follow_up_at"))
@@ -128,7 +129,7 @@ private fun LeadActivity.loadScript(box: LinearLayout, l: JSONObject, settings: 
         val det = camp.optJSONObject("details") ?: JSONObject()
         val co = det.optString("course")
         course = co
-        noForm = det.optString("form") == "none"
+        noForm = det.optString("form") == "none"; formKind = det.optString("form")
         specimen = det.optString("specimen"); certBy = det.optString("cert")
         val lang = l.optString("language").lowercase()
         var best: JSONObject? = null; var bs = -1

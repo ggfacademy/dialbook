@@ -364,7 +364,7 @@ function campModal(id){
   <label class="field"><span>Description</span><input class="input" id="cDesc" value="${esc(c.description)}"></label>
   <fieldset class="cdet" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px"><legend class="small" style="padding:0 6px"><b>Course details</b> <span class="muted">· filled into call scripts, messages and AI calls as {course}, {fee}, {duration}, {timing}, {dates}, {venue}, {certificate}, {payment}</span></legend>
   ${CDET.map(([k,lb,ph])=>(k==='venue'||k==='payment')?`<label class="field" style="grid-column:1/-1"><span>${lb}</span><textarea class="input" rows="2" id="cd-${k}" placeholder="${esc(ph)}">${esc(cDet(c)[k]||'')}</textarea></label>`:`<label class="field"><span>${lb}</span><input class="input" id="cd-${k}" ${k==='course'?'list="cdCourses" ':''}value="${esc(cDet(c)[k]||'')}" placeholder="${esc(ph)}"></label>`).join('')}
-  <label class="field" style="grid-column:1/-1"><span>Application form (the “Send form” button)</span><select class="input" id="cd-form">${opt('','MSME application form',cDet(c).form||'')}${opt('none','No application form for this course',cDet(c).form||'')}</select></label>
+  <label class="field" style="grid-column:1/-1"><span>Application form (the “Send form” button)</span><select class="input" id="cd-form">${opt('','MSME application form',cDet(c).form||'')}${opt('gjsci','GJSCI application form (Global Gold Foundation)',cDet(c).form||'')}${opt('none','No application form for this course',cDet(c).form||'')}</select></label>
   <datalist id="cdCourses">${courses().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   <p class="small muted" style="grid-column:1/-1;margin:0">One campaign per course and city (e.g. “Gold Audit and Appraisal – Mumbai”). Use the same course name in every city so one call script can cover all of them.</p></fieldset>
   <label class="field"><span>Call script</span><textarea class="input" id="cScript" rows="8" placeholder="Opening line, questions, objections and answers. {first_name} becomes the lead's first name; {course}, {fee}, {timing}, {venue} … come from the course details above.">${esc(c.script)}</textarea></label>
@@ -532,10 +532,12 @@ async function loadTransfers(from,to){
 
 /* MSME application form: a link the candidate fills in and prints (web/forms/msme-application.html) */
 const sfRel=()=>document.querySelector('input[name=sfRel]:checked')?.value||'child';
-const formLink=(l,child)=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');const q=new URLSearchParams();if(l.name)q.set('n',l.name);if(child){q.set('c',child);q.set('r',sfRel())}if(l.phone)q.set('p',l.phone);const co=courseOf(camp(l.campaign_id));if(co)q.set('k',co);return base+'forms/msme-application.html?'+q}
+const formLink=(l,child)=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');const q=new URLSearchParams();if(l.name)q.set('n',l.name);if(child){q.set('c',child);q.set('r',sfRel())}if(l.phone)q.set('p',l.phone);const co=courseOf(camp(l.campaign_id));if(co)q.set('k',co);return base+'forms/'+(formKind(l)==='gjsci'?'gjsci':'msme')+'-application.html?'+q}
 function sfUpdate(){const l=S.lead,b=$('#sfMsg');if(!l||!b)return;const c=($('#sfChild')?.value||'').trim();const rl=$('#sfRel');if(rl)rl.hidden=!c;const url=formLink(l,c),msg=formMsg(l,url,c);
   b.textContent=msg;$('#sfWa').href=waLink(l.phone,msg);$('#sfOpen').href=url}
-const formMsg=(l,url,child)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the MSME application form for the ${courseOf(camp(l.campaign_id))||'Gold Appraisal'} course${child?` for ${child}`:''}. Please fill it on your phone, tap "Print / Save as PDF", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
+const formKind=l=>cDet(camp(l.campaign_id)).form||'';
+const formName=l=>formKind(l)==='gjsci'?'GJSCI':'MSME';
+const formMsg=(l,url,child)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the ${formName(l)} application form for the ${courseOf(camp(l.campaign_id))||'Gold Appraisal'} course${child?` for ${child}`:''}. Please fill it on your phone, tap "Print / Save as PDF", sign the printed ${formKind(l)==='gjsci'?'pages':'form'} and bring ${formKind(l)==='gjsci'?'them':'it'} on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
 
 /* Certificate specimen: the course's sample certificate (Campaigns → Edit), sent as a link on WhatsApp */
 const certLinks=l=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');return String(cDet(camp(l.campaign_id)).specimen||'').split(/[\s,]+/).filter(Boolean).map(x=>/^https?:\/\//.test(x)?x:base+x.replace(/^\/+/,''))};
@@ -1015,7 +1017,7 @@ document.addEventListener('click',async e=>{
     case'nav':closeModal();go(v);break;
     case'waOpen':openChat(id);break;
     case'sendForm':{const l=S.lead;if(!l)break;if(cDet(camp(l.campaign_id)).form==='none'){toast('This course has no application form (Campaigns → Edit → Application form).');break}
-      modal(`<h2>Send the MSME application form</h2><p class="small muted" style="margin-top:-6px">The candidate fills it on the phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Names and number are filled in from here.</p>
+      modal(`<h2>Send the ${formName(l)} application form</h2><p class="small muted" style="margin-top:-6px">The candidate fills it on the phone, taps <b>Print / Save as PDF</b>, signs it and brings it on the first day. Names and number are filled in from here.</p>
       <label class="field" style="margin:10px 0"><span>Candidate's name – only if someone else attends the class (e.g. ${esc((l.name||'the lead').split(' ')[0])}'s son or daughter)</span><input class="input" id="sfChild" placeholder="Leave empty if ${esc(l.name||'this person')} attends"></label>
       <div class="row small" id="sfRel" style="margin:-4px 0 8px;gap:14px" hidden><span class="muted">The candidate is ${esc((l.name||'the lead').split(' ')[0])}'s</span><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="child" checked> son / daughter</label><label class="row" style="gap:4px"><input type="radio" name="sfRel" value="friend"> friend / relative</label></div>
       <div class="script" id="sfMsg" style="margin:10px 0"></div>
@@ -1028,8 +1030,8 @@ document.addEventListener('click',async e=>{
       <div class="row"><a class="btn call" href="${esc(waLink(l.phone,msg))}" data-act="certLog" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="certCopy">${ic('copy')}Copy message</button></div>`);break}
     case'certLog':{const l=S.lead;if(l)addActivity(l.id,'msg','Certificate sample',{channel:'whatsapp'}).catch(()=>{});break}
     case'certCopy':{const l=S.lead;if(!l)break;copyText(certMsg(l));addActivity(l.id,'msg','Certificate sample (copied)',{channel:'whatsapp'}).catch(()=>{});break}
-    case'sfLog':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();addActivity(l.id,'msg','MSME application form link'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
-    case'sfCopy':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();copyText(formMsg(l,formLink(l,c),c));addActivity(l.id,'msg','MSME application form link (copied)'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
+    case'sfLog':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();addActivity(l.id,'msg',formName(l)+' application form link'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
+    case'sfCopy':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();copyText(formMsg(l,formLink(l,c),c));addActivity(l.id,'msg',formName(l)+' application form link (copied)'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
     case'repTab':{S.repTab=v;const b=$('.rep-body');if(b)b.dataset.cur=v;$$('.set-tabs [data-act=repTab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));break}
     case'rRange':{const d=new Date(),y=d.getFullYear(),m=d.getMonth();let a,b=d;
       if(v==='d0')a=d;else if(v==='d1'){a=new Date(y,m,d.getDate()-1);b=a}else if(v==='d7')a=new Date(y,m,d.getDate()-6);else if(v==='y0')a=new Date(y,0,1);

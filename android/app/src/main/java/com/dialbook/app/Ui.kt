@@ -299,10 +299,11 @@ open class BaseActivity : Activity() {
             (if (certBy.isNotEmpty()) ", issued by $certBy" else "") + ":\n" + links.joinToString("\n"))
     }
 
-    fun sendApplicationForm(name: String, phone: String, course: String = "") {
-        val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone) +
+    fun sendApplicationForm(name: String, phone: String, course: String = "", form: String = "") {
+        val gj = form == "gjsci"
+        val url = WEB_URL + "forms/" + (if (gj) "gjsci" else "msme") + "-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone) +
             (if (course.isNotEmpty()) "&k=" + Uri.encode(course) else "")
         val first = name.trim().split(" ").firstOrNull() ?: ""
-        openWhatsApp(phone, "Hello $first, here is the MSME application form for the ${course.ifEmpty { "Gold Appraisal" }} course. Please fill it on your phone, tap \"Print / Save as PDF\", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n$url")
+        openWhatsApp(phone, "Hello $first, here is the ${if (gj) "GJSCI" else "MSME"} application form for the ${course.ifEmpty { "Gold Appraisal" }} course. Please fill it on your phone, tap \"Print / Save as PDF\", sign the printed ${if (gj) "pages and bring them" else "form and bring it"} on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n$url")
     }
 }
