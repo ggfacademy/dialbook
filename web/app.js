@@ -1,6 +1,8 @@
 /* Dialbook Pro – web CRM (Supabase) */
 (()=>{
 'use strict';
+/* The website build this page was loaded from (set by .github/workflows/build.yml as app.js?v=N) */
+const BUILD=((document.currentScript&&document.currentScript.src||'').match(/[?&]v=(\d+)/)||[])[1]||'';
 /* ---------- helpers ---------- */
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
@@ -1656,6 +1658,12 @@ async function boot(){
   if(S.recovery)return showNewPass();
   afterLogin().catch(e=>{fail(e);showAuth()});
 }
+/* A newer website build is out (version.json): offer a refresh. Checked every 5 minutes and when the tab is opened again. */
+async function checkUpdate(){if(!BUILD||$('#updBar'))return;try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=String((await r.json()).v||'');
+  if(v&&v!==BUILD){const b=document.createElement('div');b.id='updBar';b.setAttribute('role','status');b.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:70;background:var(--navy,#0f1f4b);color:#fff;padding:10px 12px 10px 16px;border-radius:10px;display:flex;gap:12px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:calc(100% - 32px);font-weight:500';
+    b.innerHTML='<span>A new version of Dialbook is ready.</span><button class="btn sm primary" type="button">Refresh</button><button class="btn sm ghost" type="button" aria-label="Later" style="color:#fff">Later</button>';
+    const [ok,later]=b.querySelectorAll('button');ok.onclick=()=>location.reload();later.onclick=()=>b.remove();document.body.appendChild(b)}}catch(e){/* offline */}}
+setInterval(checkUpdate,5*60e3);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 document.addEventListener('input',e=>{if(e.target.id==='sfChild'||e.target.name==='sfRel')sfUpdate()});
 boot();
 })();

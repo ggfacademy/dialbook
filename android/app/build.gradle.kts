@@ -11,8 +11,10 @@ android {
         applicationId = "com.dialbook.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Each website build is a new version, so the app can tell when an update is ready (download/version.json)
+        val build = (System.getenv("APP_BUILD") ?: "1").toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "1.$build"
     }
 
     signingConfigs {

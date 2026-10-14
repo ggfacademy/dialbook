@@ -35,7 +35,7 @@ class MainActivity : BaseActivity() {
             !p.connected -> connectScreen()
             !p.loggedIn -> loginScreen()
             !corePerms() || !permsDone -> permissionsScreen()
-            else -> home()
+            else -> { home(); checkForUpdate() }
         }
     }
 
