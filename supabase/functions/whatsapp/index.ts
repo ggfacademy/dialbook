@@ -293,7 +293,7 @@ async function cronAllowed(req: Request): Promise<boolean> {
   return !!data?.value?.token && data.value.token === t;
 }
 export function fillLeadVars(text: string, v: Obj): string {
-  return String(text || "").replace(/\{(first_name|name|city|program|company|agent|phone|address)\}/g, (_m, k) => String(v[k] ?? ""));
+  return String(text || "").replace(/\{(first_name|name|city|program|course|fee|duration|timing|dates|venue|company|agent|phone|address)\}/g, (_m, k) => String(v[k] ?? ""));
 }
 async function runNurture(): Promise<Obj> {
   const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
@@ -340,9 +340,14 @@ async function runNurture(): Promise<Obj> {
       const { data: pr } = await admin.from("profiles").select("name").eq("id", lead.assigned_to).maybeSingle();
       names[lead.assigned_to] = pr?.name || "";
     }
-    let program = "";
-    if (lead.campaign_id) { const { data: c } = await admin.from("campaigns").select("name").eq("id", lead.campaign_id).maybeSingle(); program = c?.name || ""; }
+    let program = "", det: Obj = {};
+    if (lead.campaign_id) {
+      const { data: c } = await admin.from("campaigns").select("*").eq("id", lead.campaign_id).maybeSingle();
+      program = c?.name || ""; if (c?.details && typeof c.details === "object") det = c.details;
+    }
+    const line = (x: unknown) => String(x || "").replace(/\s*\n\s*/g, ", ");
     const vars = { first_name: String(lead.name || "").split(" ")[0] || "there", name: lead.name || "", city: lead.city || "", program,
+      course: det.course || program, fee: line(det.fee), duration: line(det.duration), timing: line(det.timing), dates: line(det.dates), venue: line(det.venue),
       company: cfg.company || "", agent: names[lead.assigned_to] || "", phone: lead.phone || "", address: String(seq.address || "").replace(/\s*\n\s*/g, ", ") };  // template values may not contain line breaks
     const params = String(step.params ?? "").split("|").map((x) => fillLeadVars(x.trim(), vars)).slice(0, Number(tpl.params) || 0);
     while (params.length < (Number(tpl.params) || 0)) params.push("");

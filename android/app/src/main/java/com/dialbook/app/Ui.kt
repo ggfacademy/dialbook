@@ -265,9 +265,10 @@ open class BaseActivity : Activity() {
     }
 
     /** The MSME application form the candidate fills in and prints (web/forms/msme-application.html). */
-    fun sendApplicationForm(name: String, phone: String) {
-        val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone)
+    fun sendApplicationForm(name: String, phone: String, course: String = "") {
+        val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone) +
+            (if (course.isNotEmpty()) "&k=" + Uri.encode(course) else "")
         val first = name.trim().split(" ").firstOrNull() ?: ""
-        openWhatsApp(phone, "Hello $first, here is the MSME application form for the Gold Appraisal course. Please fill it on your phone, tap \"Print / Save as PDF\", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n$url")
+        openWhatsApp(phone, "Hello $first, here is the MSME application form for the ${course.ifEmpty { "Gold Appraisal" }} course. Please fill it on your phone, tap \"Print / Save as PDF\", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n$url")
     }
 }

@@ -131,13 +131,15 @@ WhatsApp message: a short friendly message the caller (${me.name}) can send. Use
       if (error) return json({ error: error.message }, 400);
       const mine = (leads || []).filter((l: Record<string, unknown>) => isMgr || l.assigned_to === me.id);
 
-      const { data: camps } = await admin.from("campaigns").select("id,name,ai_agent_id");
+      const { data: camps } = await admin.from("campaigns").select("*");
       const campOf = (id: string) => (camps || []).find((c: { id: string }) => c.id === id);
       let queued = 0; const errors: string[] = [];
       for (const l of mine) {
         const c = campOf(l.campaign_id);
-        // Agent choice: the lead's language agent (e.g. Tamil) → the campaign's agent → the default agent.
-        const agentId = langAgents[l.language || ""] || c?.ai_agent_id || ai.agentId;
+        // Agent choice: the campaign's own agent (a course with its own script, e.g. Gold Audit) → the lead's
+        // language agent (e.g. Tamil) → the default agent.
+        const agentId = c?.ai_agent_id || langAgents[l.language || ""] || ai.agentId;
+        const det = (c?.details && typeof c.details === "object") ? c.details : {};
         if (!agentId) { errors.push(`${l.name || l.phone}: no AI agent for ${l.language || "this lead"}'s language`); continue; }
         const payload: Record<string, unknown> = {
           agent_id: agentId,
@@ -145,6 +147,8 @@ WhatsApp message: a short friendly message the caller (${me.name}) can send. Use
           user_data: {
             lead_id: l.id, lead_name: l.name || "", first_name: (l.name || "").split(" ")[0] || "",
             city: l.city || "", company_name: cfg.company || "", campaign: c?.name || "", notes: l.note || "", language: l.language || "",
+            course: det.course || c?.name || "", fee: det.fee || "", duration: det.duration || "", timing: det.timing || "",
+            dates: det.dates || "", venue: det.venue || "",
           },
         };
         if (ai.fromNumber) payload.from_phone_number = ai.fromNumber;

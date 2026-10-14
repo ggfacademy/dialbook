@@ -280,9 +280,22 @@ Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team ch
 colleague can open it in one tap. On the website new messages arrive at once; the phone app shows them every few seconds
 while a chat is open, and as a notification when the app checks in the background.
 
+### Courses (new training programs)
+
+Run `supabase/courses.sql` once in the SQL Editor. It adds **course details** to every campaign (course name, fee, duration,
+timing, dates, venue), fills them in for the existing Gold Appraisal (GAC) campaigns and creates
+**Gold Audit and Appraisal – Mumbai** (2 full days, 11 am to 5 pm, Rs. 25,000).
+
+- Make one campaign per course and city (**Campaigns → New campaign**), with the same course name in every city.
+- `{course}`, `{fee}`, `{duration}`, `{timing}`, `{dates}` and `{venue}` are filled from the lead's campaign in call scripts,
+  quick messages, nurture template values and AI calls (Bolna variables of the same names).
+- **Settings → Call scripts** can pick a **course** instead of one campaign, so one script covers every city of that course.
+- A campaign's own AI agent (Campaigns → Edit) is used for all its leads; campaigns without one use the language agents.
+- The MSME application form link and message carry the lead's course.
+
 ## Backups (daily, to Dropbox)
 
-Every night at 2:00 am India time, GitHub copies the CRM data into your Dropbox folder `/CRM` (on the PC: `F:\Dropbox\CRM`) as `dialbook-YYYY-MM-DD.zip`. Each zip has the main tables as CSV files for Excel (`csv/leads.csv`…), a full copy for restoring (`database.sql`, `logins.sql`) and a README. The last 30 days are kept. Call recordings are not included.
+Every night at 2:00 am India time, GitHub copies the CRM data into your Dropbox folder `/CRM` (on the PC: `F:\Dropbox\CRM`) as `dialbook-YYYY-MM-DD.zip`. (If the Dropbox app was created with **App folder** access, they are in `F:\Dropbox\Apps\<app name>\CRM` instead.) Each zip has the main tables as CSV files for Excel (`csv/leads.csv`…), a full copy for restoring (`database.sql`, `logins.sql`) and a README. The last 30 days are kept. Call recordings are not included.
 
 Set it up once:
 1. Open `https://ggfacademy.github.io/dialbook/backup-setup.html` and follow it. At the end it gives two values, `DROPBOX_APP_KEY` and `DROPBOX_REFRESH_TOKEN`.
@@ -321,6 +334,7 @@ supabase/conversion.sql              hot leads from form answers, new enquiries 
 supabase/auto-messages.sql           automatic WhatsApp after a not-connected call and on stage changes (e.g. Payment pending)
 supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
 supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
+supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
