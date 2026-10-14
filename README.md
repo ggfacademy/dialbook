@@ -273,6 +273,13 @@ Run `supabase/sales-tools.sql` once in the SQL Editor, then redeploy the **leads
 - **Contact list in batches**: **Settings → Nurture sequences → Send to contact list** sends a sequence to the old data, a set number a day.
 - **Facebook**: leads are also pulled every 15 minutes, in case Meta's instant delivery misses one.
 
+### Sending files on WhatsApp (brochures, certificate samples)
+
+Run `supabase/wa-media.sql` once. In a WhatsApp chat, **📎 Attach file** sends a file from the shared **files library**
+(upload a brochure once, everyone can send it), or the course's certificate sample. Files are public links, so keep ID
+proofs out of it. It works inside the 24-hour reply window. Providers: Meta and Twilio send the file itself; for
+"Other WhatsApp API" (Interakt) fill **File message body** in the number's settings, otherwise the file goes as a link.
+
 ### Team chat
 
 Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team chat** (website menu, phone app **Chat** tab):
@@ -342,6 +349,7 @@ supabase/sales-tools.sql             lost reasons, daily targets, contact-list b
 supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
 supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
 supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
+supabase/wa-media.sql                files library for sending brochures and other files in WhatsApp chats
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking

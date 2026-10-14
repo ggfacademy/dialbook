@@ -1240,7 +1240,7 @@ async function waThread(rv,keepComposer){
   }
   $('#waMsgs').innerHTML=bubbles;$('#waMsgs').scrollTop=$('#waMsgs').scrollHeight;
   const comp=$('#waComp');const typed=$('#waText')?.value||'';
-  comp.innerHTML=usable.length?`<div class="row" style="gap:6px;margin-bottom:6px"><select class="input" id="waAcc" style="width:auto;max-width:100%" aria-label="Send from">${usable.map(a=>opt(a.id,`${a.name} · ${a.provider==='qr'?'own WhatsApp':PROV[a.provider]}`,S.wa.sendAcc)).join('')}</select><button class="btn sm" data-act="waTpl">${ic('flag')}Template</button><a class="btn sm ghost" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener">Open in WhatsApp app</a></div>
+  comp.innerHTML=usable.length?`<div class="row" style="gap:6px;margin-bottom:6px"><select class="input" id="waAcc" style="width:auto;max-width:100%" aria-label="Send from">${usable.map(a=>opt(a.id,`${a.name} · ${a.provider==='qr'?'own WhatsApp':PROV[a.provider]}`,S.wa.sendAcc)).join('')}</select><button class="btn sm" data-act="waTpl">${ic('flag')}Template</button><button class="btn sm" data-act="waAttach" ${needT?'disabled title="Only templates can be sent until the customer replies"':''}>📎 Attach file</button><a class="btn sm ghost" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener">Open in WhatsApp app</a></div>
     ${needT?`<p class="small" style="margin:0 0 6px;color:var(--warn)">This customer has not messaged this number in the last 24 hours, so WhatsApp only allows an approved template right now.</p>`:''}
     <div class="row" style="align-items:flex-end;gap:6px"><textarea class="input" id="waText" rows="2" style="flex:1;min-height:44px" placeholder="${needT?'Pick a template to start the chat':'Type a message'}" ${needT?'disabled':''}>${esc(typed)}</textarea><button class="btn primary" data-act="waSend" ${needT?'disabled':''}>Send</button></div>`
     :`<p class="small muted" style="margin:0">No WhatsApp number is ready to send from. <button class="btn sm" data-act="nav" data-v="settings">Connect one</button> <a class="btn sm ghost" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener">Open in WhatsApp app</a></p>`;
@@ -1251,6 +1251,33 @@ async function waSendText(btn){
   const t=$('#waText');const text=t.value.trim();if(!text)return;btn.disabled=true;
   try{await waFn({action:'send',lead_id:S.wa.lead,account_id:$('#waAcc').value,text});t.value='';await waThread(S.rv,true);V.wa.load()}catch(e){fail(e)}finally{btn.disabled=false}
 }
+/* Attach a file (brochure, certificate sample, poster…) in a WhatsApp chat. Files live in the public "wa-media"
+   storage bucket (supabase/wa-media.sql), shared by the whole team. Only inside the 24-hour reply window. */
+const fileKind=n=>/\.(png|jpe?g|webp|gif)$/i.test(n)?'image':/\.(mp4|3gp)$/i.test(n)?'video':'document';
+const fileShort=n=>String(n).replace(/^\d{13}-/,'');
+async function waAttachModal(){
+  const l=S.wa.threadLead;if(!l)return;S.wa.att=null;
+  const own=certLinks(l).map(u=>({name:'Certificate sample – '+decodeURIComponent(u.split('/').pop()),url:u}));
+  modal(`<h2>Send a file</h2><p class="small muted" style="margin-top:-6px">Pick a file, add a line if you like, and send. It goes from the selected company number.</p>
+  ${own.length?`<p class="small" style="margin:12px 0 4px"><b>For this course</b></p><div class="list">${own.map(f=>`<label class="li" style="gap:8px"><input type="radio" name="waAtt" value="${esc(f.url)}" data-n="${esc(f.name)}"> ${esc(f.name)}</label>`).join('')}</div>`:''}
+  <p class="small" style="margin:12px 0 4px"><b>Files library</b> <span class="muted">(brochures, posters, forms – shared with the team)</span></p><div class="list" id="waLib">${loadingHTML}</div>
+  <label class="field" style="margin-top:12px"><span>Upload a new file (PDF, photo or video, up to 16 MB)</span><input class="input" type="file" id="waUp" accept="image/*,application/pdf,video/mp4,.doc,.docx,.xls,.xlsx,.ppt,.pptx"></label>
+  <label class="field" style="margin-top:10px"><span>Message with the file (optional)</span><input class="input" id="waCap" placeholder="e.g. Here is the brochure for the ${esc(courseOf(camp(l.campaign_id))||'course')}"></label>
+  <div class="row" style="margin-top:12px"><button class="btn primary" data-act="waAttSend">Send file</button><button class="btn" data-act="closeMd">Cancel</button><span class="small muted" id="waAttMsg"></span></div>`);
+  waLibLoad();
+  $('#waUp').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>16*1024*1024){toast('That file is bigger than 16 MB.');e.target.value='';return}
+    $('#waAttMsg').textContent='Uploading…';
+    try{const path=Date.now()+'-'+f.name.replace(/[^\w.\-]+/g,'_').slice(-80);const {error}=await sb.storage.from('wa-media').upload(path,f,{contentType:f.type||undefined,upsert:false});
+      if(error)throw /not found|bucket/i.test(error.message)?new Error('File sending needs a one-time update: ask your admin to run supabase/wa-media.sql in Supabase.'):error;
+      $('#waAttMsg').textContent='Uploaded.';await waLibLoad(path)}catch(err){$('#waAttMsg').textContent='';fail(err)}};
+}
+async function waLibLoad(sel){const box=$('#waLib');if(!box)return;
+  const {data,error}=await sb.storage.from('wa-media').list('',{limit:200,sortBy:{column:'created_at',order:'desc'}});
+  if(error){box.innerHTML=`<p class="small muted">${/not found|bucket/i.test(error.message)?'Not switched on yet: ask your admin to run supabase/wa-media.sql.':esc(error.message)}</p>`;return}
+  const files=(data||[]).filter(f=>f.name&&!f.name.startsWith('.'));
+  box.innerHTML=files.length?files.map(f=>{const url=sb.storage.from('wa-media').getPublicUrl(f.name).data.publicUrl,k=fileKind(f.name);
+    return `<label class="li" style="gap:8px"><input type="radio" name="waAtt" value="${esc(url)}" data-n="${esc(fileShort(f.name))}" ${sel===f.name?'checked':''}> <span class="grow">${k==='image'?'🖼️':k==='video'?'🎬':'📄'} ${esc(fileShort(f.name))}</span><a class="btn sm ghost" href="${esc(url)}" target="_blank" rel="noopener">View</a>${isMgr()?`<button class="btn sm ghost" type="button" data-act="waLibDel" data-v="${esc(f.name)}" aria-label="Delete">${ic('x')}</button>`:''}</label>`}).join('')
+    :'<p class="small muted">No files yet. Upload the brochure below; it stays here for everyone.</p>'}
 function waTemplateModal(){
   const accId=$('#waAcc')?.value||S.wa.sendAcc;const acc=S.wa.accounts.find(a=>a.id===accId);const l=S.wa.threadLead;
   const list=S.wa.templates.filter(t=>t.account_id===accId&&!/REJECTED|DISABLED|PAUSED/i.test(t.status));
@@ -1306,6 +1333,7 @@ function waConnectModal(id){
     f('config.url','Send message URL',c.url,'https://api.provider.com/v1/messages')+`<label class="field"><span>Method</span><select class="input" data-wf="config.method">${opt('POST','POST',c.method||'POST')}${opt('PUT','PUT',c.method)}</select></label>`+
     f('secrets.token','API key / token','',keep||'Your provider API key','password')+ta('config.headers','Headers (JSON)',c.headers,'{"Authorization":"Bearer {{secret.token}}"}')+
     ta('config.text_body','Text message body (JSON)',c.text_body,'{"to":"{{to_digits}}","type":"text","text":"{{text}}"}')+ta('config.template_body','Template message body (JSON)',c.template_body,'{"to":"{{to_digits}}","template":"{{template}}","params":{{params_json}}}')+
+    ta('config.media_body','File message body (JSON, optional – for 📎 Attach file)',c.media_body,'Interakt: {"countryCode":"+91","phoneNumber":"{{to_local}}","type":"{{media_type}}","data":{"message":"{{text}}","mediaUrl":"{{media_url}}","fileName":"{{file_name}}"}}')+
     f('config.id_path','Where the message ID is in the answer',c.id_path,'e.g. data.id or messages.0.id')+
     `<p class="small muted" style="grid-column:1/-1;margin-bottom:0">Incoming messages (optional): where the provider puts each field in its webhook.</p>`+
     f('config.inbound.list_path','List of messages',c.inbound?.list_path,'e.g. messages (empty if one per call)')+f('config.inbound.from_path','Sender number',c.inbound?.from_path,'e.g. from')+f('config.inbound.text_path','Message text',c.inbound?.text_path,'e.g. text.body')+f('config.inbound.id_path','Message ID',c.inbound?.id_path,'e.g. id')+f('config.inbound.name_path','Sender name',c.inbound?.name_path,'e.g. contact.name')+f('config.inbound.status_id_path','Status: message ID',c.inbound?.status_id_path,'e.g. message_id')+f('config.inbound.status_path','Status: value',c.inbound?.status_path,'e.g. status');
@@ -1502,6 +1530,10 @@ document.addEventListener('click',async e=>{
     case'waBack':S.wa.lead=null;$('#waWrap')?.classList.remove('wa-open');break;
     case'waUnread':S.wa.f.unread=!S.wa.f.unread;t.setAttribute('aria-pressed',S.wa.f.unread);V.wa.load();break;
     case'waSend':await waSendText(t);break;
+    case'waAttach':await waAttachModal();break;
+    case'waLibDel':arm(t,async()=>{const {error}=await sb.storage.from('wa-media').remove([v]);if(error)throw error;toast('File deleted');waLibLoad()});break;
+    case'waAttSend':{const r=document.querySelector('input[name=waAtt]:checked');if(!r){toast('Pick a file or upload one.');break}
+      t.disabled=true;try{await waFn({action:'send',lead_id:S.wa.lead,account_id:$('#waAcc')?.value||S.wa.sendAcc,text:$('#waCap').value.trim(),media:{url:r.value,name:r.dataset.n,type:fileKind(r.dataset.n||r.value)}});closeModal();toast('File sent');await waThread(S.rv,true);V.wa.load()}catch(e){fail(e)}finally{t.disabled=false}break}
     case'waTpl':waTemplateModal();break;
     case'waTplSend':await waTemplateSend(t);break;
     case'waConnect':S.wa.newProv=S.wa.newProv||'meta';waConnectModal(id);break;
