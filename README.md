@@ -279,6 +279,8 @@ Run `supabase/wa-media.sql` once. In a WhatsApp chat, **📎 Attach file** sends
 (upload a brochure once, everyone can send it), or the course's certificate sample. Files are public links, so keep ID
 proofs out of it. It works inside the 24-hour reply window. Providers: Meta and Twilio send the file itself; for
 "Other WhatsApp API" (Interakt) fill **File message body** in the number's settings, otherwise the file goes as a link.
+For Interakt this format works (sends a real attachment):
+`{"countryCode":"+91","phoneNumber":"{{to_local}}","type":"{{media_type}}","data":{"message":"{{text}}","mediaUrl":"{{media_url}}","fileName":"{{file_name}}"}}`
 
 ### Team chat
 
