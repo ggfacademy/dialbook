@@ -290,6 +290,15 @@ open class BaseActivity : Activity() {
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + "download/dialbook.apk"))) } catch (e: Exception) { toast("No browser found") }
     }
 
+    /** The course's certificate specimen (Campaigns → Edit) as links on WhatsApp. */
+    fun sendCertificate(name: String, phone: String, course: String, certBy: String, specimen: String) {
+        val links = specimen.split(Regex("[\\s,]+")).filter { it.isNotBlank() }.map { if (it.startsWith("http")) it else WEB_URL + it.trimStart('/') }
+        if (links.isEmpty()) { toast("No certificate sample for this course yet. Ask your manager to add it."); return }
+        val first = name.trim().split(" ").firstOrNull() ?: ""
+        openWhatsApp(phone, "Hello $first, here is a specimen (sample) of the certificate you receive after completing the ${course.ifEmpty { "our" }} course" +
+            (if (certBy.isNotEmpty()) ", issued by $certBy" else "") + ":\n" + links.joinToString("\n"))
+    }
+
     fun sendApplicationForm(name: String, phone: String, course: String = "") {
         val url = WEB_URL + "forms/msme-application.html?n=" + Uri.encode(name) + "&p=" + Uri.encode(phone) +
             (if (course.isNotEmpty()) "&k=" + Uri.encode(course) else "")

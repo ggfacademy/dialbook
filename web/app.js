@@ -537,6 +537,10 @@ function sfUpdate(){const l=S.lead,b=$('#sfMsg');if(!l||!b)return;const c=($('#s
   b.textContent=msg;$('#sfWa').href=waLink(l.phone,msg);$('#sfOpen').href=url}
 const formMsg=(l,url,child)=>`Hello ${(l.name||'').split(' ')[0]||''}, here is the MSME application form for the ${courseOf(camp(l.campaign_id))||'Gold Appraisal'} course${child?` for ${child}`:''}. Please fill it on your phone, tap "Print / Save as PDF", sign the printed form and bring it on the first day of class with your photo, Aadhaar xerox and qualification certificate xerox:\n${url}`;
 
+/* Certificate specimen: the course's sample certificate (Campaigns → Edit), sent as a link on WhatsApp */
+const certLinks=l=>{const base=location.origin+location.pathname.replace(/[^/]*$/,'');return String(cDet(camp(l.campaign_id)).specimen||'').split(/[\s,]+/).filter(Boolean).map(x=>/^https?:\/\//.test(x)?x:base+x.replace(/^\/+/,''))};
+const certMsg=l=>{const d=cDet(camp(l.campaign_id)),co=d.course||camp(l.campaign_id)?.name||'our';return `Hello ${(l.name||'').split(' ')[0]||''}, here is a specimen (sample) of the certificate you receive after completing the ${co} course${d.cert?`, issued by ${d.cert}`:''}:\n${certLinks(l).join('\n')}`};
+
 /* TEAM CHAT: messages between telecallers, managers and admins */
 S.tc={ch:'team',inbox:[],share:null};
 const tcDm=uid=>'dm:'+[S.me.id,uid].sort().join(':');
@@ -671,7 +675,7 @@ function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
     <div id="dwNu"></div>
     <div class="card" style="margin-top:14px"><h2>Activity</h2><div class="row" style="margin:10px 0 14px;align-items:flex-start"><textarea class="input" id="dwNoteAdd" rows="2" placeholder="Add a note" style="flex:1;min-height:44px"></textarea><button class="btn" data-act="addNote">Add note</button></div><div id="dwTl"></div></div>
     <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">AI assistant</h2><span class="spacer"></span><button class="btn sm" data-act="aiAssist">${ic('spark')}Suggest next step</button></div><div id="aiOut" class="small muted" style="margin-top:8px">Reads this lead's calls, transcripts and notes and suggests what to do next, with a ready-to-send message.</div></div>
-    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><button class="btn sm" data-act="tcShare">${ic('msg')}Share in team chat</button><button class="btn sm" data-act="sendForm">${ic('up')}Send application form</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
+    <div class="row" style="margin-top:14px"><button class="btn sm" data-act="leadTransfer">${ic('team')}Transfer to a colleague</button><button class="btn sm" data-act="tcShare">${ic('msg')}Share in team chat</button><button class="btn sm" data-act="sendForm">${ic('up')}Send application form</button><button class="btn sm" data-act="sendCert">🎓 Send certificate sample</button><span class="spacer"></span>${isMgr()?`<button class="btn sm danger" data-act="leadDel">Delete lead</button>`:''}</div></div>`;
   loadDrawer().catch(fail);
 }
 function closeDrawer(){tStop('dw');S.openLead=null;S.lead=null;$('#dw').innerHTML=''}
@@ -755,7 +759,7 @@ function scriptFor(l){const c=camp(l.campaign_id),co=courseOf(c),lang=(l.languag
   if(c&&(c.script||'').trim())return{title:c.name,body:c.script};
   return best?{title:best.name||'Call script',body:best.body}:null}
 /* A campaign's course details (Campaigns → Edit): filled into scripts and messages as {course}, {fee} … */
-const CDET=[['course','Course name','e.g. Gold Audit and Appraisal'],['fee','Course fee','e.g. Rs. 25,000 including GST'],['duration','Duration','e.g. 2 full days'],['timing','Class timing','e.g. 11 am to 5 pm'],['dates','Dates','e.g. 7 and 8 November 2026'],['venue','Venue','Hall name and full address'],['cert','Certificate given by','e.g. MSME Technology Development Centre, Chennai – or GJSCI'],['payment','How to pay','e.g. QR on the MSME website link, or DD in the name of “Director, MSME TDC Chennai”']];
+const CDET=[['course','Course name','e.g. Gold Audit and Appraisal'],['fee','Course fee','e.g. Rs. 25,000 including GST'],['duration','Duration','e.g. 2 full days'],['timing','Class timing','e.g. 11 am to 5 pm'],['dates','Dates','e.g. 7 and 8 November 2026'],['venue','Venue','Hall name and full address'],['cert','Certificate given by','e.g. MSME Technology Development Centre, Chennai – or GJSCI'],['specimen','Certificate specimen (image)','File in the media folder, e.g. media/certificate-msme.jpg, or a full link. Several: separate with spaces'],['payment','How to pay','e.g. QR on the MSME website link, or DD in the name of “Director, MSME TDC Chennai”']];
 const cDet=c=>(c&&c.details&&typeof c.details==='object')?c.details:{};
 const courseOf=c=>cDet(c).course||'';
 const courses=()=>[...new Set(S.campaigns.map(courseOf).filter(Boolean))].sort();
@@ -1017,6 +1021,13 @@ document.addEventListener('click',async e=>{
       <div class="script" id="sfMsg" style="margin:10px 0"></div>
       <div class="row"><a class="btn call" id="sfWa" data-act="sfLog" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="sfCopy">${ic('copy')}Copy message</button><a class="btn" id="sfOpen" target="_blank" rel="noopener">Open the form</a><a class="btn ghost" href="media/msme-application-form.pdf" target="_blank" rel="noopener">${ic('down')}Blank PDF</a></div>`);
       sfUpdate();break}
+    case'sendCert':{const l=S.lead;if(!l)break;if(!certLinks(l).length){toast(isMgr()?'Add the certificate specimen in Campaigns → Edit for this course first.':'No certificate sample for this course yet. Ask your manager to add it.');break}
+      const msg=certMsg(l);modal(`<h2>Send the certificate sample</h2><p class="small muted" style="margin-top:-6px">A specimen of the certificate for this course. It opens in WhatsApp with the message ready.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:10px 0">${certLinks(l).map(u=>/\.(png|jpe?g|webp|gif)(\?|$)/i.test(u)?`<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Certificate specimen" style="max-height:180px;max-width:100%;border:1px solid var(--line);border-radius:8px"></a>`:`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>
+      <div class="script" style="margin:10px 0">${esc(msg)}</div>
+      <div class="row"><a class="btn call" href="${esc(waLink(l.phone,msg))}" data-act="certLog" target="_blank" rel="noopener">${ic('msg')}Send on WhatsApp</a><button class="btn" data-act="certCopy">${ic('copy')}Copy message</button></div>`);break}
+    case'certLog':{const l=S.lead;if(l)addActivity(l.id,'msg','Certificate sample',{channel:'whatsapp'}).catch(()=>{});break}
+    case'certCopy':{const l=S.lead;if(!l)break;copyText(certMsg(l));addActivity(l.id,'msg','Certificate sample (copied)',{channel:'whatsapp'}).catch(()=>{});break}
     case'sfLog':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();addActivity(l.id,'msg','MSME application form link'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
     case'sfCopy':{const l=S.lead;if(!l)break;const c=($('#sfChild')?.value||'').trim();copyText(formMsg(l,formLink(l,c),c));addActivity(l.id,'msg','MSME application form link (copied)'+(c?' · candidate: '+c+(sfRel()==='child'?' (son/daughter)':' (friend/relative)'):''),{channel:'whatsapp',candidate:c||undefined}).catch(()=>{});break}
     case'repTab':{S.repTab=v;const b=$('.rep-body');if(b)b.dataset.cur=v;$$('.set-tabs [data-act=repTab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));break}
