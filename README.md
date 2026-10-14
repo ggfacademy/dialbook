@@ -292,6 +292,7 @@ timing, dates, venue), fills them in for the existing Gold Appraisal (GAC) campa
 - **Settings → Call scripts** can pick a **course** instead of one campaign, so one script covers every city of that course.
 - A campaign's own AI agent (Campaigns → Edit) is used for all its leads; campaigns without one use the language agents.
 - The MSME application form link and message carry the lead's course.
+- `supabase/gold-audit-scripts.sql` (run after `courses.sql`) adds the Gold Audit call scripts in English, Hindi, Tamil and Telugu.
 
 ## Backups (daily, to Dropbox)
 
@@ -335,6 +336,7 @@ supabase/auto-messages.sql           automatic WhatsApp after a not-connected ca
 supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
 supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
 supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
+supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
 supabase/functions/whatsapp/         sends messages, templates, QR linking
