@@ -41,4 +41,9 @@ update public.campaigns
                                     'payment', 'QR code on the MSME website link, or DD in the name of "Director, MSME TDC Chennai"') || details
  where details->>'course' = 'Gold Audit and Appraisal';
 
+-- Certificate specimen for "Send certificate sample" (web/media/certificate-msme.jpg), only where none is set yet
+update public.campaigns
+   set details = jsonb_build_object('specimen', 'media/certificate-msme.jpg') || details
+ where details->>'course' in ('Gold Appraisal', 'Gold Audit and Appraisal');
+
 notify pgrst, 'reload schema';
