@@ -11,7 +11,7 @@ alter table public.campaigns add column if not exists details jsonb not null def
 -- everywhere, only where nothing is set yet. Check them in Campaigns afterwards.
 update public.campaigns
    set details = jsonb_build_object('course', 'Gold Appraisal', 'fee', 'Rs. 15,000 including GST', 'duration', '4 days')
- where details = '{}'::jsonb and name !~* 'audit'
+ where details = '{}'::jsonb and name !~* 'audit' and name !~* 'gjsci'
    and (name ~* '\mgac\M' or name ~* 'gold\s*apprais' or name ~* 'chennai|vijayawada|hyderabad|\m(chn|vjw|hyd)\M');
 
 update public.campaigns
@@ -45,5 +45,17 @@ update public.campaigns
 update public.campaigns
    set details = jsonb_build_object('specimen', 'media/certificate-msme.jpg') || details
  where details->>'course' in ('Gold Appraisal', 'Gold Audit and Appraisal');
+
+-- GAC with the GJSCI certificate (Global Gold Foundation): any campaign with "GJSCI" in its name gets the GJSCI
+-- application form (web/forms/gjsci-application.html) and the GJSCI certificate sample. Fee, dates and venue:
+-- add them in Campaigns → Edit.
+update public.campaigns
+   set details = jsonb_build_object('course', 'Gold Appraisal – GJSCI',
+                                    'cert', 'Gem & Jewellery Skill Council of India (GJSCI), Ministry of Skill Development & Entrepreneurship, Govt of India',
+                                    'form', 'gjsci', 'specimen', 'media/certificate-gjsci.jpg') || details
+ where name ~* 'gjsci';
+update public.campaigns
+   set details = details || jsonb_build_object('form', 'gjsci', 'specimen', 'media/certificate-gjsci.jpg')
+ where name ~* 'gjsci' and (details->>'specimen' = 'media/certificate-msme.jpg' or coalesce(details->>'form', '') = '');
 
 notify pgrst, 'reload schema';

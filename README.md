@@ -301,6 +301,8 @@ timing, dates, venue), fills them in for the existing Gold Appraisal (GAC) campa
 - **Certificate given by** and **How to pay** (`{certificate}`, `{payment}`) and **Application form** (MSME form or none) are set
   per campaign too. A batch with another certificate, e.g. GAC with GJSCI, is its own course (e.g. "Gold Appraisal – GJSCI")
   with its own campaigns and scripts.
+- **GJSCI batches** (Global Gold Foundation application form, `web/forms/gjsci-application.html`): put "GJSCI" in the campaign
+  name and run `courses.sql` again, or set **Application form → GJSCI** and the specimen `media/certificate-gjsci.jpg` in the campaign.
 - **Certificate specimen**: put the sample certificate image in `web/media/` and enter its name (e.g. `media/certificate-msme-gac.jpg`)
   in the campaign. **Send certificate sample** on the lead (website and phone app) sends it on WhatsApp.
 - **Settings → Call scripts** can pick a **course** instead of one campaign, so one script covers every city of that course.
