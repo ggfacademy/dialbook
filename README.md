@@ -322,7 +322,7 @@ Set it up once:
 
 ## Everyday use
 
-**Training for telecallers:** a short video and step-by-step guide with screenshots is at `https://YOUR-NAME.github.io/dialbook/training/` (also linked from **Settings → Phone app**). Share the link with new telecallers.
+**Training:** two captioned videos are at `https://YOUR-NAME.github.io/dialbook/training/` (also linked from **Settings → Phone app**): one for telecallers (`training.mp4`) and one for admins and managers (`admin.mp4`), each with chapter buttons and screenshots. Share the link with new staff.
 
 - **Telecallers:** open the phone app → **My leads** → **Call**. After each call, tap the notification and pick the outcome. Overdue follow-ups are shown in red.
 - **Managers:** **Dashboard** for today's numbers, **Reports** for any date range (download CSV), **Team** for per-person performance, **Leads → Share out leads** to distribute new leads.
