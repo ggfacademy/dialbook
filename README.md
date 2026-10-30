@@ -282,6 +282,17 @@ proofs out of it. It works inside the 24-hour reply window. Providers: Meta and 
 For Interakt this format works (sends a real attachment):
 `{"countryCode":"+91","phoneNumber":"{{to_local}}","type":"{{media_type}}","data":{"message":"{{text}}","mediaUrl":"{{media_url}}","fileName":"{{file_name}}"}}`
 
+### Kumud Gemstones leads (separate from training)
+
+`supabase/functions/kumud-webhook` takes leads from the **Kumud** Facebook / Instagram Page, through Kumud's own Meta app
+and token, and forwards each one at once to the Kumud Order Desk (Google Apps Script) as the section 6 JSON. Kumud leads
+are **not** saved in Dialbook. `supabase/kumud.sql` creates a technical retry log (Meta lead id, status, attempts, Order
+Desk reply id; no customer details, kept 30 days). It also creates a retry job every 15 minutes. No Dialbook login can
+read these tables, and there is no Kumud screen in the CRM.
+
+Secrets go in Supabase → Edge Functions → Secrets only: `KUMUD_APP_SECRET`, `KUMUD_VERIFY_TOKEN`, `KUMUD_TOKEN`,
+`KUMUD_PAGE_ID`, `KUMUD_ORDER_URL`. Webhook address: `https://<project>.supabase.co/functions/v1/kumud-webhook` (Verify JWT off).
+
 ### Team chat
 
 Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team chat** (website menu, phone app **Chat** tab):
@@ -354,6 +365,7 @@ supabase/team-chat.sql               team chat between telecallers, managers and
 supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
 supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
 supabase/gjsci-scripts.sql           GAC with the GJSCI certificate: call scripts (English, Tamil, Telugu)
+supabase/kumud.sql                   Kumud lead forwarding: retry log (no customer data) and retry job
 supabase/wa-media.sql                files library for sending brochures and other files in WhatsApp chats
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules

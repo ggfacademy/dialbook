@@ -6,6 +6,6 @@
 - Some steps can't be done from GitHub and must be handed to the owner with exact clicks: SQL in the Supabase SQL editor, redeploying Supabase Edge Functions (`supabase/functions/*`, pasted by hand in the dashboard), and anything in Meta, Interakt or Bolna. Say which of these a change needs.
 
 ## Live setup
-- Supabase project: `yyrovakknsuanlolrlth`. Edge functions: ai, ai-webhook, whatsapp, whatsapp-webhook, leadsources, leads-webhook ("Verify JWT" off for all; each checks auth itself).
+- Supabase project: `yyrovakknsuanlolrlth`. Edge functions: ai, ai-webhook, whatsapp, whatsapp-webhook, leadsources, leads-webhook, kumud-webhook (Kumud Gemstones only, separate Meta app, forwards to the Kumud Order Desk, stores no leads) ("Verify JWT" off for all; each checks auth itself).
 - WhatsApp goes through Interakt, configured as the "Other WhatsApp API" provider.
 - Facebook lead ads: Pages Gold Appraisal Training and Skilldevelopmenttraining.
