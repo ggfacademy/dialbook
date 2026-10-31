@@ -91,9 +91,23 @@ export function toOrderDesk(lead: Obj, formName: string): Obj {
 }
 
 /* ---------------- Order Desk ---------------- */
+/** The saved link, cleaned of things copy-paste adds: spaces, line breaks, quotes, <>, "&amp;"; a "+" in the key is kept as "+". */
+function orderUrl(): string {
+  let u = env("KUMUD_ORDER_URL").replace(/\s+/g, "").replace(/^["'<`]+|["'>`]+$/g, "").replace(/&amp;/g, "&");
+  const q = u.indexOf("?");
+  if (q >= 0) u = u.slice(0, q + 1) + u.slice(q + 1).replace(/\+/g, "%2B");
+  return u;
+}
+/** The link's shape only (never the link or key), for {"action":"status"}. */
+function orderUrlCheck(): Obj {
+  const raw = env("KUMUD_ORDER_URL"), u = orderUrl();
+  let host = "", exec = false, key = 0, keys = 0;
+  try { const x = new URL(u); host = x.hostname; exec = /\/exec$/.test(x.pathname); keys = x.searchParams.getAll("key").length; key = (x.searchParams.get("key") || "").length; } catch { /* not a link */ }
+  return { set: !!raw, google: host === "script.google.com", ends_exec: exec, has_key: key > 0, key_length: key, key_count: keys, cleaned: raw !== u };
+}
 /** POST the lead. Google answers 302 after saving: that counts as delivered; the redirect is then read for the reply. */
 async function sendOrderDesk(body: Obj): Promise<{ status: string; http: number; reply: Obj }> {
-  const url = env("KUMUD_ORDER_URL");
+  const url = orderUrl();
   if (!url) return { status: "failed", http: 0, reply: { error: "KUMUD_ORDER_URL is not set" } };
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), redirect: "manual" });
   let http = r.status, txt = "";
@@ -151,7 +165,7 @@ Deno.serve(async (req) => {
       if (b.action === "status") {
         const { data } = await admin.from("kumud_log").select("status");
         const n: Obj = {}; for (const r of data || []) n[r.status] = (n[r.status] || 0) + 1;
-        return json({ ok: true, secrets: { app_secret: !!env("KUMUD_APP_SECRET"), verify_token: !!env("KUMUD_VERIFY_TOKEN"), token: !!env("KUMUD_TOKEN"), page_id: !!env("KUMUD_PAGE_ID"), order_url: !!env("KUMUD_ORDER_URL") }, log: n });
+        return json({ ok: true, secrets: { app_secret: !!env("KUMUD_APP_SECRET"), verify_token: !!env("KUMUD_VERIFY_TOKEN"), token: !!env("KUMUD_TOKEN"), page_id: !!env("KUMUD_PAGE_ID"), order_url: !!env("KUMUD_ORDER_URL") }, order_link: orderUrlCheck(), log: n });
       }
       if (b.action === "subscribe") {
         const page = env("KUMUD_PAGE_ID"); const tok = await kumudPageToken();

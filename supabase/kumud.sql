@@ -47,4 +47,8 @@ $cron$);
 --       headers := jsonb_build_object('Content-Type','application/json','x-kumud-cron',(select value from public.kumud_config where key='cron_token')),
 --       body := '{"action":"subscribe"}'::jsonb);
 --   Then read the answer:  select status_code, content from net._http_response order by id desc limit 1;
+--   Check the Order Desk link's shape (shows yes/no and the key's length, never the link):
+--     select net.http_post(url := 'https://yyrovakknsuanlolrlth.supabase.co/functions/v1/kumud-webhook',
+--       headers := jsonb_build_object('Content-Type','application/json','x-kumud-cron',(select value from public.kumud_config where key='cron_token')),
+--       body := '{"action":"status"}'::jsonb);
 --   Delivery log:          select leadgen_id, status, http, reply, attempts, updated_at from public.kumud_log order by updated_at desc limit 20;
