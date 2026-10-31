@@ -10,6 +10,10 @@
 //   KUMUD_TOKEN         a Kumud System User token (or Page token) with leads_retrieval etc. for the Kumud Page
 //   KUMUD_PAGE_ID       the Kumud Facebook Page id; leads from any other Page are ignored
 //   KUMUD_ORDER_URL     the Order Desk connection link (…/exec?key=…)
+//   KUMUD_INTERAKT_SECRET  the Secret Key typed into Kumud's Interakt → Developer Settings → Webhooks
+// Interakt (Kumud's WhatsApp account only): …/functions/v1/kumud-webhook/interakt receives message_received and
+// message_api_failed, checks the Interakt-Signature header, answers 200 at once and POSTs the same body, byte for
+// byte, to the Order Desk. Nothing from it is stored; the function log gets only the event type and the result.
 // Scheduler (supabase/kumud.sql): POST {"action":"retry"} with header x-kumud-cron every 15 minutes.
 // Admin checks, with the same header: {"action":"subscribe"} links the Page to the app; {"action":"status"} counts;
 //   {"action":"test","phone":"…"} sends one hand-made test lead (not logged).
@@ -107,10 +111,10 @@ function orderUrlCheck(): Obj {
   return { set: !!raw, google: host === "script.google.com", ends_exec: exec, has_key: key > 0, key_length: key, key_count: keys, cleaned: raw !== u };
 }
 /** POST the lead. Google answers 302 after saving: that counts as delivered; the redirect is then read for the reply. */
-async function sendOrderDesk(body: Obj): Promise<{ status: string; http: number; reply: Obj }> {
+async function sendOrderDesk(body: Obj | string): Promise<{ status: string; http: number; reply: Obj }> {
   const url = orderUrl();
   if (!url) return { status: "failed", http: 0, reply: { error: "KUMUD_ORDER_URL is not set" } };
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), redirect: "manual" });
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body), redirect: "manual" });
   let http = r.status, txt = "";
   if (http >= 300 && http < 400) {
     const loc = r.headers.get("location"); await r.body?.cancel();
@@ -139,6 +143,38 @@ async function processLead(leadId: string, formId: string, attempts: number): Pr
   return { lead: leadId, status: res.status, orderDesk: reply };
 }
 
+/* ---------------- Interakt (Kumud's WhatsApp account) ---------------- */
+/** Interakt-Signature: "sha256=" + hex HMAC-SHA256 of the raw body with the Secret Key set in Interakt. */
+async function interaktSigOk(sig: string, raw: string): Promise<boolean> {
+  const secret = env("KUMUD_INTERAKT_SECRET");
+  if (!secret || !sig) return false;
+  return same(sig.trim().replace(/^sha256=/i, "").toLowerCase(), await hmacHex(secret, raw));
+}
+/** Send Interakt's body unchanged; up to 3 tries if Google is unreachable or busy. Logs no content. */
+async function forwardInterakt(raw: string, event: string) {
+  for (let i = 0; i < 3; i++) {
+    let res: { status: string; http: number; reply: Obj };
+    try { res = await sendOrderDesk(raw); } catch (e) { res = { status: "failed", http: 0, reply: { error: scrub(e instanceof Error ? e.message : e) } }; }
+    const r = safeReply(res.reply);
+    console.log(`interakt ${event}: ${res.status} (HTTP ${res.http})${r.error ? " " + r.error : ""}`);
+    if (res.status !== "failed" || res.reply.ok === false) return; // done, or the Order Desk said no (retrying won't help)
+    if (i < 2) await new Promise((ok) => setTimeout(ok, i ? 8000 : 2000));
+  }
+}
+async function interakt(req: Request): Promise<Response> {
+  if (req.method === "GET") return new Response("ok", { status: 200 }); // a URL check when the webhook is saved
+  if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+  if (!env("KUMUD_INTERAKT_SECRET")) return new Response("not configured", { status: 503 });
+  const raw = await req.text();
+  if (raw.length > 2_000_000) return new Response("too large", { status: 413 });
+  if (!(await interaktSigOk(req.headers.get("interakt-signature") || "", raw))) return new Response("bad signature", { status: 401 });
+  let event = "event"; try { const t = JSON.parse(raw)?.type; if (typeof t === "string" && /^[a-z_]{1,40}$/.test(t)) event = t; } catch { /* forwarded as is */ }
+  const job = forwardInterakt(raw, event);
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(job); else await job; // reply at once; the forward finishes in the background
+  return new Response("ok", { status: 200 });
+}
+
 async function cronOk(req: Request): Promise<boolean> {
   const t = req.headers.get("x-kumud-cron") || "";
   if (!t) return false;
@@ -149,6 +185,7 @@ async function cronOk(req: Request): Promise<boolean> {
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   try {
+    if (/\/interakt\/?$/.test(url.pathname)) return await interakt(req);
     // Meta's one-time check when the webhook is added
     if (req.method === "GET") {
       const vt = env("KUMUD_VERIFY_TOKEN");
@@ -166,7 +203,7 @@ Deno.serve(async (req) => {
       if (b.action === "status") {
         const { data } = await admin.from("kumud_log").select("status");
         const n: Obj = {}; for (const r of data || []) n[r.status] = (n[r.status] || 0) + 1;
-        return json({ ok: true, secrets: { app_secret: !!env("KUMUD_APP_SECRET"), verify_token: !!env("KUMUD_VERIFY_TOKEN"), token: !!env("KUMUD_TOKEN"), page_id: !!env("KUMUD_PAGE_ID"), order_url: !!env("KUMUD_ORDER_URL") }, order_link: orderUrlCheck(), log: n });
+        return json({ ok: true, secrets: { app_secret: !!env("KUMUD_APP_SECRET"), verify_token: !!env("KUMUD_VERIFY_TOKEN"), token: !!env("KUMUD_TOKEN"), page_id: !!env("KUMUD_PAGE_ID"), order_url: !!env("KUMUD_ORDER_URL"), interakt_secret: !!env("KUMUD_INTERAKT_SECRET") }, order_link: orderUrlCheck(), log: n });
       }
       if (b.action === "subscribe") {
         const page = env("KUMUD_PAGE_ID"); const tok = await kumudPageToken();

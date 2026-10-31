@@ -293,6 +293,11 @@ read these tables, and there is no Kumud screen in the CRM.
 Secrets go in Supabase → Edge Functions → Secrets only: `KUMUD_APP_SECRET`, `KUMUD_VERIFY_TOKEN`, `KUMUD_TOKEN`,
 `KUMUD_PAGE_ID`, `KUMUD_ORDER_URL`. Webhook address: `https://<project>.supabase.co/functions/v1/kumud-webhook` (Verify JWT off).
 
+**Kumud's Interakt account** (not the training one): Interakt → Developer Settings → Webhooks, URL
+`https://<project>.supabase.co/functions/v1/kumud-webhook/interakt`, events `message_received` and `message_api_failed`, and a
+Secret Key that is also saved as the Supabase secret `KUMUD_INTERAKT_SECRET`. Each call is checked against the
+`Interakt-Signature` header, answered 200 at once, and its body is POSTed unchanged to the Order Desk (3 tries). Nothing is stored.
+
 ### Team chat
 
 Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team chat** (website menu, phone app **Chat** tab):
