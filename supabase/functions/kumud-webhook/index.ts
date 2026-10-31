@@ -32,11 +32,18 @@ const same = (a: string, b: string) => { if (a.length !== b.length) return false
 
 /* ---------------- Meta ---------------- */
 let pageToken = "";
+class Gone extends Error {}
+/** Meta says this lead does not exist (e.g. the sample event from the Webhooks "Test" button): nothing to retry. */
+const gone = (e: unknown) => e instanceof Gone;
 async function graph(path: string, token: string, init?: RequestInit): Promise<Obj> {
   const sep = path.includes("?") ? "&" : "?";
   const r = await fetch(`https://graph.facebook.com/${VER}/${path}${sep}access_token=${encodeURIComponent(token)}`, init);
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`Meta ${r.status}: ${scrub(j?.error?.message || "error")}`);
+  if (!r.ok) {
+    const msg = `Meta ${r.status}: ${scrub(j?.error?.message || "error")}`;
+    if (/Unsupported get request|does not exist/i.test(String(j?.error?.message || ""))) throw new Gone(msg);
+    throw new Error(msg);
+  }
   return j;
 }
 /** A Page token for the Kumud Page: KUMUD_TOKEN may already be one, or a System User token that can get it. */
@@ -51,8 +58,12 @@ const formNames: Obj = {};
 async function fetchLead(leadId: string): Promise<Obj> {
   const tok = await kumudPageToken();
   let lead: Obj;
-  try { lead = await graph(`${leadId}?fields=id,created_time,field_data,form_id,page_id,ad_name,campaign_name,platform`, tok); }
-  catch { lead = await graph(`${leadId}?fields=id,created_time,field_data,form_id,page_id,platform`, tok); } // ad names need ads_read
+  // (the Lead object has no page_id field; the Page is checked from the webhook itself)
+  try { lead = await graph(`${leadId}?fields=id,created_time,field_data,form_id,ad_name,campaign_name,platform`, tok); }
+  catch (e) {
+    if (gone(e)) throw e;
+    lead = await graph(`${leadId}?fields=id,created_time,field_data,form_id,platform`, tok); // ad names need ads_read
+  }
   if (lead.form_id && !formNames[lead.form_id]) { try { formNames[lead.form_id] = (await graph(`${lead.form_id}?fields=name`, tok)).name || ""; } catch { formNames[lead.form_id] = ""; } }
   return lead;
 }
@@ -106,9 +117,8 @@ async function processLead(leadId: string, formId: string, attempts: number): Pr
   let res: { status: string; http: number; reply: Obj };
   try {
     const lead = await fetchLead(leadId);
-    if (env("KUMUD_PAGE_ID") && lead.page_id && String(lead.page_id) !== env("KUMUD_PAGE_ID")) res = { status: "ignored", http: 0, reply: { error: "not the Kumud Page" } };
-    else { formId = String(lead.form_id || formId); res = await sendOrderDesk(toOrderDesk(lead, formNames[formId] || "")); }
-  } catch (e) { res = { status: "failed", http: 0, reply: { error: scrub(e instanceof Error ? e.message : e) } }; }
+    formId = String(lead.form_id || formId); res = await sendOrderDesk(toOrderDesk(lead, formNames[formId] || ""));
+  } catch (e) { res = { status: gone(e) ? "ignored" : "failed", http: 0, reply: { error: scrub(e instanceof Error ? e.message : e) } }; }
   const reply = safeReply(res.reply);
   await admin.from("kumud_log").upsert({ leadgen_id: leadId, form_id: formId || null, status: res.status, http: res.http, reply, attempts: attempts + 1, updated_at: new Date().toISOString() }, { onConflict: "leadgen_id" });
   return { lead: leadId, status: res.status, orderDesk: reply };
