@@ -11,7 +11,8 @@
 //   KUMUD_PAGE_ID       the Kumud Facebook Page id; leads from any other Page are ignored
 //   KUMUD_ORDER_URL     the Order Desk connection link (…/exec?key=…)
 // Scheduler (supabase/kumud.sql): POST {"action":"retry"} with header x-kumud-cron every 15 minutes.
-// Admin checks, with the same header: {"action":"subscribe"} links the Page to the app; {"action":"status"} counts.
+// Admin checks, with the same header: {"action":"subscribe"} links the Page to the app; {"action":"status"} counts;
+//   {"action":"test","phone":"…"} sends one hand-made test lead (not logged).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -171,6 +172,14 @@ Deno.serve(async (req) => {
         const page = env("KUMUD_PAGE_ID"); const tok = await kumudPageToken();
         const r = await graph(`${page}/subscribed_apps?subscribed_fields=leadgen`, tok, { method: "POST" });
         return json({ ok: !!r.success });
+      }
+      // A hand-made test lead, e.g. {"action":"test","phone":"98xxxxxxxx","name":"Test"}. Sent once, not logged.
+      if (b.action === "test") {
+        const phone = String(b.phone || "").replace(/[^\d+]/g, "").slice(0, 15), email = String(b.email || "").trim().slice(0, 120);
+        if (!phone && !email) return json({ ok: false, error: "phone or email needed" }, 400);
+        const res = await sendOrderDesk({ type: "lead", name: String(b.name || "Test lead").slice(0, 80), phone, email, city: String(b.city || "").slice(0, 60),
+          source: "fb", campaign: "Dialpro test", adName: "", form: "Dialpro test", interest: String(b.interest || "Test lead sent from Dialpro").slice(0, 200), leadgen_id: "" });
+        return json({ status: res.status, http: res.http, orderDesk: safeReply(res.reply) });
       }
       if (b.action === "retry") {
         const since = new Date(Date.now() - 30 * 864e5).toISOString();
