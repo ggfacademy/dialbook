@@ -29,9 +29,16 @@ async function fbConfig(): Promise<Obj> {
   const { data } = await admin.from("integration_secrets").select("value").eq("key", "facebook").maybeSingle();
   return data?.value || {};
 }
+/** Error text without any access token (network errors quote the whole link, token included). */
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/access_token=[^&\s"')]+/gi, "access_token=(hidden)");
+/** fetch, tried once more after a short pause if the connection itself fails (e.g. "error sending request"). */
+async function fetchRetry(url: string, init?: RequestInit): Promise<Response> {
+  try { return await fetch(url, init); }
+  catch { await new Promise((ok) => setTimeout(ok, 1500)); return await fetch(url, init); }
+}
 async function graph(path: string, token: string, ver: string, method = "GET"): Promise<Obj> {
   const sep = path.includes("?") ? "&" : "?";
-  const r = await fetch(`https://graph.facebook.com/${ver}/${path}${sep}access_token=${encodeURIComponent(token)}`, { method });
+  const r = await fetchRetry(`https://graph.facebook.com/${ver}/${path}${sep}access_token=${encodeURIComponent(token)}`, { method });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new UserError(j?.error?.message || `Facebook answered ${r.status}`);
   return j;
@@ -84,7 +91,7 @@ async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
     const filtering = encodeURIComponent(JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]));
     let next: string | null = `https://graph.facebook.com/${ver}/${f.id}/leads?fields=id,created_time,field_data,ad_name,campaign_name,platform&limit=100&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
     while (next) {
-      const r: Response = await fetch(next);
+      const r: Response = await fetchRetry(next);
       const j = await r.json();
       if (!r.ok) throw new UserError(`${f.name}: ${j?.error?.message || "could not read leads"}`);
       for (const lead of j.data || []) {
@@ -117,9 +124,11 @@ async function cronFetch(): Promise<Obj> {
     try {
       const c = await fetchSource(src, 2, ver);
       out.created += c.created || 0; out.existing += c.existing || 0;
+      if (String(src.last_error || "").startsWith("Automatic check:"))      // it works again: clear the old problem
+        await admin.from("lead_sources").update({ last_error: null }).eq("id", src.id);
     } catch (e) {
       out.failed++;
-      await admin.from("lead_sources").update({ last_error: `Automatic check: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) }).eq("id", src.id);
+      await admin.from("lead_sources").update({ last_error: `Automatic check: ${errText(e)}`.slice(0, 300) }).eq("id", src.id);
     }
   }
   return out;
@@ -192,7 +201,7 @@ Deno.serve(async (req) => {
             await admin.from("lead_source_secrets").upsert({ source_id: id, data: { page_token: p.access_token } });
             results.push({ page: p.name, ok: true });
           } catch (e) {
-            results.push({ page: p.name, ok: false, error: e instanceof Error ? e.message : String(e) });
+            results.push({ page: p.name, ok: false, error: errText(e) });
           }
         }
         return json({ results });
@@ -251,7 +260,7 @@ Deno.serve(async (req) => {
     }
     return json({ error: "Unknown action" }, 400);
   } catch (e) {
-    if (e instanceof UserError) return json({ error: e.message }, 400);
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    if (e instanceof UserError) return json({ error: errText(e) }, 400);
+    return json({ error: errText(e) }, 500);
   }
 });

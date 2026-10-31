@@ -47,6 +47,7 @@ async function ingest(p: Obj) {
   return data;
 }
 async function sourceError(id: string, msg: string) {
+  msg = msg.replace(/access_token=[^&\s"')]+/gi, "access_token=(hidden)");  // network errors quote the link with its token
   await admin.from("lead_sources").update({ last_error: msg.slice(0, 300) }).eq("id", id);
 }
 
