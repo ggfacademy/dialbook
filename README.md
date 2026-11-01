@@ -371,6 +371,7 @@ supabase/courses.sql                 course details per campaign (fee, duration,
 supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
 supabase/gjsci-scripts.sql           GAC with the GJSCI certificate: call scripts (English, Tamil, Telugu)
 supabase/kumud.sql                   Kumud lead forwarding: retry log (no customer data) and retry job
+supabase/rename-posters.sql           one-time: GAC poster links without "-oct26"
 supabase/wa-media.sql                files library for sending brochures and other files in WhatsApp chats
 supabase/nurture.sql                 nurture sequences (automatic WhatsApp follow-ups) and their schedule
 supabase/whatsapp.sql                WhatsApp tables and access rules
