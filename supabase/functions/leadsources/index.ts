@@ -43,6 +43,19 @@ async function graph(path: string, token: string, ver: string, method = "GET"): 
   if (!r.ok) throw new UserError(j?.error?.message || `Facebook answered ${r.status}`);
   return j;
 }
+/** All lead forms of a Page (Meta gives at most a few hundred per page of results), newest first. */
+async function pageForms(pageId: string, token: string, ver: string, fields = "id,name"): Promise<Obj[]> {
+  const out: Obj[] = [];
+  let next: string | null = `https://graph.facebook.com/${ver}/${pageId}/leadgen_forms?fields=${fields},created_time&limit=200&access_token=${encodeURIComponent(token)}`;
+  for (let n = 0; next && n < 25; n++) {
+    const r: Response = await fetchRetry(next);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new UserError(j?.error?.message || `Facebook answered ${r.status}`);
+    out.push(...(j.data || []));
+    next = j?.paging?.next || null;
+  }
+  return out.sort((a, b) => String(b.created_time || "").localeCompare(String(a.created_time || "")));
+}
 async function allPages(fb: Obj): Promise<Obj[]> {
   if (!fb.user_token) throw new UserError("Add your Facebook access token first.");
   const out: Obj[] = [];
@@ -84,7 +97,8 @@ async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
   const { data: s } = await admin.from("lead_source_secrets").select("data").eq("source_id", src.id).maybeSingle();
   const token = s?.data?.page_token || "";
   const since = Math.floor(Date.now() / 1000) - Math.min(90, Math.max(1, days || 7)) * 86400;
-  const forms = (await graph(`${src.config.page_id}/leadgen_forms?fields=id,name&limit=200`, token, ver)).data || [];
+  // archived or deleted forms get no new leads: skip them so big Pages stay quick
+  const forms = (await pageForms(src.config.page_id, token, ver, "id,name,status")).filter((f) => !/ARCHIVED|DELETED/i.test(f.status || ""));
   const counts: Obj = { created: 0, existing: 0, duplicate: 0, skipped: 0 };
   const cfg = src.config || {};
   for (const f of forms) {
@@ -210,8 +224,7 @@ Deno.serve(async (req) => {
       case "fb_forms": {
         const { data: src } = await admin.from("lead_sources").select("*").eq("id", b.source_id).single();
         const { data: s } = await admin.from("lead_source_secrets").select("data").eq("source_id", src.id).maybeSingle();
-        const j = await graph(`${src.config.page_id}/leadgen_forms?fields=id,name,status,locale&limit=200`, s?.data?.page_token || "", ver);
-        return json({ forms: j.data || [] });
+        return json({ forms: await pageForms(src.config.page_id, s?.data?.page_token || "", ver, "id,name,status,locale") });
       }
 
       case "fb_fetch": {
