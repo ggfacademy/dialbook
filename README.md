@@ -237,7 +237,7 @@ Settings → **My WhatsApp** → **Link my WhatsApp**. On the phone, open WhatsA
 3. In Dialbook: **Settings → Lead sources → Set up Facebook**. Paste the App secret and the token, then **Save**. Dialbook then shows a **Callback URL** and a **Verify token**.
 4. In your app: **Webhooks** (or "Use cases → Webhooks") → pick **Page** → paste the Callback URL and the Verify token → **Verify and save** → subscribe to **leadgen**. Switch the app to **Live** mode.
 5. In **Meta Business Suite → Settings → Integrations → Leads access**, make sure this app (the CRM) is allowed for each Page.
-6. Back in Dialbook: **Add Pages** → tick every Page you want → **Add selected Pages**. Each Page gets its own row where you set a default language and campaign. Press **Forms** to give individual forms their own language or campaign.
+6. Back in Dialbook: **Add Pages** → tick every Page you want → **Add selected Pages**. Each Page gets its own row where you set a default language and campaign. Press **Forms** to give individual forms their own language or campaign. Several forms can go to the same campaign. A new form nobody has linked yet is linked automatically when all the words of one of a campaign's **Keywords** (Campaigns → Edit, e.g. “Gold Audit Mumbai”) appear in the form's name or its ad campaign's name; the most specific keyword wins and a tie links nothing.
 7. Test it with Meta's **Lead Ads Testing Tool** (developers.facebook.com/tools/lead-ads-testing). The lead appears in Leads within seconds, already assigned. Press **Fetch last 7 days** on any Page to pull in leads from before the setup, or from a period when the connection was down. Duplicates are skipped.
 
 ### 9d. Google Ads lead forms
