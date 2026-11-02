@@ -46,6 +46,39 @@ async function ingest(p: Obj) {
   if (error) throw new Error(error.message);
   return data;
 }
+/* ---- A lead form not linked to a campaign: link it by the campaign's keywords (Campaigns → Edit → Keywords) ---- */
+const kwWords = (s: string) => String(s || "").toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim().split(" ").filter(Boolean);
+/** The campaign one of whose keywords has all its words in the form name or the ad campaign name. The keyword with
+ *  the most words wins (“Gold Audit Mumbai” beats “Mumbai”); two campaigns equally specific → none (ambiguous). */
+export function campaignByFormKeywords(map: Record<string, string>, text: string): { id: string; kw: string } | null {
+  const t = " " + kwWords(text).join(" ") + " ";
+  if (!t.trim()) return null;
+  const best: Record<string, { n: number; kw: string }> = {};
+  for (const [cid, list] of Object.entries(map || {})) for (const raw of String(list || "").split(",")) {
+    const w = kwWords(raw);
+    if (!w.length || w.join("").length < 3 || !w.every((x) => t.includes(` ${x} `))) continue;
+    if (!best[cid] || w.length > best[cid].n) best[cid] = { n: w.length, kw: raw.trim() };
+  }
+  const ranked = Object.entries(best).sort((a, b) => b[1].n - a[1].n);
+  if (!ranked.length || (ranked[1] && ranked[1][1].n === ranked[0][1].n)) return null;
+  return { id: ranked[0][0], kw: ranked[0][1].kw };
+}
+/** Finds the campaign for an unlinked form and saves the link on the lead source, so the Forms window shows it. */
+async function linkFormByKeywords(srcId: string, formId: string, formName: string, adCampaign: string): Promise<string | null> {
+  if (!formId) return null;
+  const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
+  const hit = campaignByFormKeywords(st?.data?.waKeywords || {}, `${formName} ${adCampaign || ""}`);
+  if (!hit) return null;
+  const { data: c } = await admin.from("campaigns").select("id,active").eq("id", hit.id).maybeSingle();
+  if (!c || c.active === false) return null;
+  const { data: cur } = await admin.from("lead_sources").select("config").eq("id", srcId).single();
+  const cfg = cur?.config || {}; const forms = { ...(cfg.forms || {}) };
+  if (forms[formId]?.campaign_id) return forms[formId].campaign_id;   // linked by hand meanwhile
+  forms[formId] = { ...(forms[formId] || {}), name: formName || forms[formId]?.name || "", campaign_id: c.id, linked_by: `keyword “${hit.kw}”` };
+  await admin.from("lead_sources").update({ config: { ...cfg, forms } }).eq("id", srcId);
+  return c.id;
+}
+
 async function sourceError(id: string, msg: string) {
   msg = msg.replace(/access_token=[^&\s"')]+/gi, "access_token=(hidden)");  // network errors quote the link with its token
   await admin.from("lead_sources").update({ last_error: msg.slice(0, 300) }).eq("id", id);
@@ -79,7 +112,7 @@ async function fbLead(fb: Obj, src: Obj, pageToken: string, v: Obj) {
     name: m.name, phone: m.phone, email: m.email, city: m.city,
     language: m.language || fcfg.language || cfg.default_language || "",
     source: src.name, source_id: src.id, ref: `fb:${lead.id || v.leadgen_id}`,
-    campaign_id: fcfg.campaign_id || cfg.campaign_id || null,
+    campaign_id: fcfg.campaign_id || (await linkFormByKeywords(src.id, formId, formName, lead.campaign_name || "")) || cfg.campaign_id || null,
     tags: [formName, lead.platform === "ig" ? "Instagram" : ""].filter(Boolean),
     note: [lead.campaign_name ? `Ad campaign: ${lead.campaign_name}` : "", m.note].filter(Boolean).join("\n"), extra,
   });

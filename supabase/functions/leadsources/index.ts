@@ -56,6 +56,39 @@ async function pageForms(pageId: string, token: string, ver: string, fields = "i
   }
   return out.sort((a, b) => String(b.created_time || "").localeCompare(String(a.created_time || "")));
 }
+/* ---- A lead form not linked to a campaign: link it by the campaign's keywords (Campaigns → Edit → Keywords) ---- */
+const kwWords = (s: string) => String(s || "").toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim().split(" ").filter(Boolean);
+/** The campaign one of whose keywords has all its words in the form name or the ad campaign name. The keyword with
+ *  the most words wins (“Gold Audit Mumbai” beats “Mumbai”); two campaigns equally specific → none (ambiguous). */
+export function campaignByFormKeywords(map: Record<string, string>, text: string): { id: string; kw: string } | null {
+  const t = " " + kwWords(text).join(" ") + " ";
+  if (!t.trim()) return null;
+  const best: Record<string, { n: number; kw: string }> = {};
+  for (const [cid, list] of Object.entries(map || {})) for (const raw of String(list || "").split(",")) {
+    const w = kwWords(raw);
+    if (!w.length || w.join("").length < 3 || !w.every((x) => t.includes(` ${x} `))) continue;
+    if (!best[cid] || w.length > best[cid].n) best[cid] = { n: w.length, kw: raw.trim() };
+  }
+  const ranked = Object.entries(best).sort((a, b) => b[1].n - a[1].n);
+  if (!ranked.length || (ranked[1] && ranked[1][1].n === ranked[0][1].n)) return null;
+  return { id: ranked[0][0], kw: ranked[0][1].kw };
+}
+/** Finds the campaign for an unlinked form and saves the link on the lead source, so the Forms window shows it. */
+async function linkFormByKeywords(srcId: string, formId: string, formName: string, adCampaign: string): Promise<string | null> {
+  if (!formId) return null;
+  const { data: st } = await admin.from("settings").select("data").eq("id", 1).single();
+  const hit = campaignByFormKeywords(st?.data?.waKeywords || {}, `${formName} ${adCampaign || ""}`);
+  if (!hit) return null;
+  const { data: c } = await admin.from("campaigns").select("id,active").eq("id", hit.id).maybeSingle();
+  if (!c || c.active === false) return null;
+  const { data: cur } = await admin.from("lead_sources").select("config").eq("id", srcId).single();
+  const cfg = cur?.config || {}; const forms = { ...(cfg.forms || {}) };
+  if (forms[formId]?.campaign_id) return forms[formId].campaign_id;   // linked by hand meanwhile
+  forms[formId] = { ...(forms[formId] || {}), name: formName || forms[formId]?.name || "", campaign_id: c.id, linked_by: `keyword “${hit.kw}”` };
+  await admin.from("lead_sources").update({ config: { ...cfg, forms } }).eq("id", srcId);
+  return c.id;
+}
+
 async function allPages(fb: Obj): Promise<Obj[]> {
   if (!fb.user_token) throw new UserError("Add your Facebook access token first.");
   const out: Obj[] = [];
@@ -101,6 +134,7 @@ async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
   const forms = (await pageForms(src.config.page_id, token, ver, "id,name,status")).filter((f) => !/ARCHIVED|DELETED/i.test(f.status || ""));
   const counts: Obj = { created: 0, existing: 0, duplicate: 0, skipped: 0 };
   const cfg = src.config || {};
+  const tried = new Set<string>();   // forms already looked up by keyword in this run
   for (const f of forms) {
     const filtering = encodeURIComponent(JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]));
     let next: string | null = `https://graph.facebook.com/${ver}/${f.id}/leads?fields=id,created_time,field_data,ad_name,campaign_name,platform&limit=100&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
@@ -111,6 +145,7 @@ async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
       for (const lead of j.data || []) {
         const m = mapAnswers((lead.field_data || []).map((x: Obj) => [x.name, (x.values || []).join(", ")]));
         const fc = cfg.forms?.[f.id] || {};
+        if (!fc.campaign_id && !tried.has(f.id)) { tried.add(f.id); const cid = await linkFormByKeywords(src.id, f.id, f.name, lead.campaign_name || ""); if (cid) { fc.campaign_id = cid; cfg.forms = { ...(cfg.forms || {}), [f.id]: { ...fc } }; } }
         const { data: res, error } = await admin.rpc("ingest_lead", { p: {
           name: m.name, phone: m.phone, email: m.email, city: m.city,
           language: m.language || fc.language || cfg.default_language || "",
