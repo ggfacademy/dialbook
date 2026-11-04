@@ -36,11 +36,37 @@ object TeamChat {
     fun title(channel: String, me: String, names: Map<String, String>) =
         if (channel == "team") "Everyone" else names[other(channel, me)] ?: "Colleague"
 
-    fun send(ctx: Context, channel: String, body: String, leadId: String? = null) {
+    fun send(ctx: Context, channel: String, body: String, leadId: String? = null, file: JSONObject? = null) {
         val o = JSONObject().put("channel", channel).put("sender_id", Prefs(ctx).userId).put("body", body)
         if (leadId != null) o.put("lead_id", leadId)
+        if (file != null) o.put("file", file)
         Api.post(ctx, "/rest/v1/team_messages", o.toString())
     }
+
+    /** Uploads a photo or file into the conversation's folder (supabase/team-files.sql) and returns its details. */
+    fun uploadFile(ctx: Context, channel: String, uri: android.net.Uri): JSONObject {
+        val cr = ctx.contentResolver
+        var name = "file"; var size = -1L
+        cr.query(uri, null, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val ni = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (ni >= 0) name = c.getString(ni) ?: name
+                val si = c.getColumnIndex(android.provider.OpenableColumns.SIZE); if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
+            }
+        }
+        if (size > MAX_FILE) throw ApiError("That file is over 10 MB. Send a smaller one.", 413)
+        val bytes = cr.openInputStream(uri)?.use { inp ->
+            val out = java.io.ByteArrayOutputStream(); val buf = ByteArray(64 * 1024); var n = 0
+            while (inp.read(buf).also { n = it } > 0) { out.write(buf, 0, n); if (out.size() > MAX_FILE) throw ApiError("That file is over 10 MB. Send a smaller one.", 413) }
+            out.toByteArray()
+        } ?: throw ApiError("Could not read that file.", 0)
+        val type = cr.getType(uri) ?: "application/octet-stream"
+        val safe = name.replace(Regex("[^\\w.\\- ]+"), "_").takeLast(80).ifEmpty { "file" }
+        val path = channel.replace(":", "_") + "/" + java.util.UUID.randomUUID() + "-" + safe
+        try { Api.uploadTo(ctx, "team-files", path, bytes, type) }
+        catch (e: ApiError) { throw if (e.code == 400 || e.code == 404) ApiError("Photos and files need a one-time setup: ask your admin to run supabase/team-files.sql.", e.code) else e }
+        return JSONObject().put("path", path).put("name", name).put("type", type).put("size", bytes.size)
+    }
+    const val MAX_FILE = 10L * 1024 * 1024
 
     /** Background check (every sync): a notification for new messages from colleagues. */
     fun notifyNew(ctx: Context) {
@@ -79,6 +105,8 @@ class ChatActivity : BaseActivity() {
     private lateinit var scroll: ScrollView
     private var names: Map<String, String> = emptyMap()
     private var lastId = ""
+    private var msgBox: EditText? = null
+    private val PICK_FILE = 71
     private val handler = Handler(Looper.getMainLooper())
     private val poll = object : Runnable { override fun run() { load(); handler.postDelayed(this, 4000) } }
 
@@ -98,7 +126,18 @@ class ChatActivity : BaseActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val bar = row().apply { setBackgroundColor(SURFACE); setPadding(dp(10), dp(8), dp(10), dp(10)); elevation = dp(6).toFloat() }
+        val attach = text("📎", 22f, FG).apply {
+            gravity = Gravity.CENTER; contentDescription = "Attach a photo or file"; isClickable = true
+            setOnClickListener {
+                val pick = Intent(Intent.ACTION_GET_CONTENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE)
+                    .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/plain", "text/csv"))
+                try { startActivityForResult(Intent.createChooser(pick, "Attach a photo or file"), PICK_FILE) } catch (e: Exception) { toast("No app to pick files") }
+            }
+        }
+        bar.addView(attach, LinearLayout.LayoutParams(dp(40), dp(48)).apply { marginEnd = dp(4) })
         val box = input("Type a message", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE).apply { maxLines = 5 }
+        msgBox = box
         if (share != null) box.setText(intent.getStringExtra("share_text") ?: "")
         bar.add(box, 0, 1f)
         val send = FrameLayout(this).apply {
@@ -121,6 +160,24 @@ class ChatActivity : BaseActivity() {
             }, { e -> send.isEnabled = true; toast(if (e is ApiError && e.code == 404) "Ask your admin to run supabase/team-chat.sql" else (e.message ?: "Not sent")) })
         }
         io({ TeamChat.people(this) }, { names = it; lastId = ""; load() }, { load() })
+    }
+
+    @Deprecated("Activity result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (requestCode != PICK_FILE || resultCode != RESULT_OK || uri == null) return
+        val caption = msgBox?.text?.toString()?.trim() ?: ""
+        toast("Sending…")
+        io({ val f = TeamChat.uploadFile(this, channel, uri); TeamChat.send(this, channel, caption.ifEmpty { "📎 " + f.optString("name") }, null, f) },
+            { msgBox?.setText(""); lastId = ""; load() },
+            { e -> toast(if (e is ApiError && e.code == 400 && e.message?.contains("file") == true) "Ask your admin to run supabase/team-files.sql" else (e.message ?: "Not sent")) })
+    }
+
+    private fun openFile(path: String) {
+        io({ Api.signedUrl(this, "team-files", path) }, { url ->
+            try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (e: Exception) { toast("No app to open this file") }
+        })
     }
 
     override fun onResume() { super.onResume(); if (::channel.isInitialized) handler.post(poll) }
@@ -156,7 +213,13 @@ class ChatActivity : BaseActivity() {
                 }
                 if (!mine && channel == "team") b.add(text(names[m.optString("sender_id")] ?: "Colleague", 12f, ACCENT, true))
                 val body = m.optString("body")
-                if (body.isNotEmpty()) b.add(text(body, 15f, FG), 2)
+                val file = m.optJSONObject("file")
+                if (file != null && file.optString("path").isNotEmpty()) {
+                    val img = file.optString("type").startsWith("image/")
+                    val fp = file.optString("path")
+                    b.add(chip((if (img) "🖼 " else "📄 ") + file.optString("name").ifEmpty { "File" }, false) { openFile(fp) }, 4)
+                }
+                if (body.isNotEmpty() && !(file != null && body == "📎 " + file.optString("name"))) b.add(text(body, 15f, FG), 2)
                 val lead = m.optJSONObject("lead")
                 if (lead != null) {
                     val lid = lead.optString("id")

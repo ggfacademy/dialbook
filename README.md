@@ -300,6 +300,8 @@ Secret Key that is also saved as the Supabase secret `KUMUD_INTERAKT_SECRET`. Ea
 
 ### Team chat
 
+For photos and files in team chat (📎 button on the website and in the phone app; on the website you can also paste a screenshot), also run `supabase/team-files.sql`. Files are private to the conversation, up to 10 MB.
+
 Run `supabase/team-chat.sql` once in the SQL Editor. Everyone then has **Team chat** (website menu, phone app **Chat** tab):
 **Everyone** for the whole team, and a private chat with each colleague. **Share in team chat** on a lead sends it so the
 colleague can open it in one tap. On the website new messages arrive at once; the phone app shows them every few seconds
@@ -367,6 +369,7 @@ supabase/conversion.sql              hot leads from form answers, new enquiries 
 supabase/auto-messages.sql           automatic WhatsApp after a not-connected call and on stage changes (e.g. Payment pending)
 supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
 supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
+supabase/team-files.sql              photos and files in team chat (private storage bucket, up to 10 MB)
 supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
 supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
 supabase/gjsci-scripts.sql           GAC with the GJSCI certificate: call scripts (English, Tamil, Telugu)

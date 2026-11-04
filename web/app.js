@@ -582,12 +582,14 @@ V.chat={live:false,mount(){
   return `<div class="tc-page">`+head('Team chat','Quick messages between telecallers, managers and admins. Share a lead so a colleague can open it in one tap.')+
   `<div class="wa-wrap tc" id="tcWrap"><div class="wa-list"><div id="tcList" style="overflow:auto;flex:1">${loadingHTML}</div></div>
    <div class="wa-thread"><div class="wa-head" id="tcHead"></div><div class="wa-msgs" id="tcMsgs">${loadingHTML}</div>
-   <div class="wa-comp"><div id="tcShare"></div><form id="tcForm" class="row" style="align-items:flex-end;flex-wrap:nowrap"><textarea class="input" id="tcText" rows="1" placeholder="Type a message" style="min-height:42px;max-height:140px;flex:1"></textarea><button class="btn primary" type="submit">${ic('msg')}Send</button></form></div></div></div></div>`;
+   <div class="wa-comp"><div id="tcShare"></div><form id="tcForm" class="row" style="align-items:flex-end;flex-wrap:nowrap"><input type="file" id="tcFile" hidden accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"><button class="btn" type="button" data-act="tcAttach" title="Attach a photo or file (up to 10 MB)" aria-label="Attach a photo or file" style="min-height:42px">📎</button><textarea class="input" id="tcText" rows="1" placeholder="Type a message" style="min-height:42px;max-height:140px;flex:1"></textarea><button class="btn primary" type="submit">${ic('msg')}Send</button></form></div></div></div></div>`;
 },async load(){
   try{await tcLoadInbox()}catch(e){const b=$('#tcList');if(b)b.innerHTML=`<div class="empty" style="margin:12px"><h3>Not switched on yet</h3><p>Ask your admin to run <b>supabase/team-chat.sql</b> in Supabase.</p></div>`;const m=$('#tcMsgs');if(m)m.innerHTML='';return}
   if(S.tc.share)$('#tcWrap')?.classList.add('wa-open');
   tcList();await tcThread();
-  const f=$('#tcForm');if(f){f.onsubmit=e=>{e.preventDefault();tcSend()};$('#tcText').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();tcSend()}}}
+  const f=$('#tcForm');if(f){f.onsubmit=e=>{e.preventDefault();tcSend()};$('#tcText').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();tcSend()}}
+    $('#tcFile').onchange=e=>{tcPickFile(e.target.files[0]);e.target.value=''};
+    $('#tcText').onpaste=e=>{const fl=[...(e.clipboardData?.files||[])][0];if(fl){e.preventDefault();tcPickFile(fl)}}}   // paste a screenshot
 }};
 function tcList(){const b=$('#tcList');if(!b)return;const by={};for(const x of S.tc.inbox)by[x.channel]=x;
   const people=agents().filter(m=>m.id!==S.me.id).map(m=>({ch:tcDm(m.id),name:m.name,sub:m.role}));
@@ -598,22 +600,46 @@ function tcList(){const b=$('#tcList');if(!b)return;const by={};for(const x of S
 }
 async function tcThread(keep){const ch=S.tc.ch;const h=$('#tcHead');if(!h)return;
   h.innerHTML=`<button class="btn sm ghost wa-back" data-act="tcBack" aria-label="Back">←</button>${ch==='team'?`<span class="av sm" style="background:var(--side)">${ic('team')}</span>`:avatar(tcName(ch),'sm')}<div class="grow"><b>${esc(tcName(ch))}</b><div class="small muted">${ch==='team'?'Everyone in the team sees these messages':'Private chat'}</div></div>`;
-  const sh=$('#tcShare');if(sh)sh.innerHTML=S.tc.share?`<div class="row small" style="margin-bottom:8px"><span class="tag">Lead: ${esc(S.tc.share.name)}</span><button class="btn sm ghost" data-act="tcUnshare">Remove</button></div>`:'';
+  tcShareBar();
   if(keep)return;
   const {data,error}=await sb.from('team_messages').select('*, lead:leads(id,name,phone)').eq('channel',ch).order('created_at',{ascending:false}).limit(300);
   const box=$('#tcMsgs');if(!box||S.tc.ch!==ch)return;if(error){box.innerHTML=`<p class="small muted">${esc(error.message)}</p>`;return}
   const ms=(data||[]).reverse();let last='';
   box.innerHTML=ms.length?ms.map(m=>{const me=m.sender_id===S.me.id;const day=new Date(ts(m.created_at)).toDateString();const sep=day!==last?`<div class="small muted" style="text-align:center;margin:8px 0">${esc(new Date(ts(m.created_at)).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}))}</div>`:'';last=day;
-    return sep+`<div class="bub ${me?'out':''}">${!me&&ch==='team'?`<span style="margin-right:6px">${avatar(nameOf(m.sender_id),'sm')}</span>`:''}<div class="bub-in">${!me&&ch==='team'?`<div class="small" style="font-weight:600;color:var(--accent)">${esc(nameOf(m.sender_id))}</div>`:''}${m.body?`<div class="bub-t">${esc(m.body)}</div>`:''}
+    return sep+`<div class="bub ${me?'out':''}">${!me&&ch==='team'?`<span style="margin-right:6px">${avatar(nameOf(m.sender_id),'sm')}</span>`:''}<div class="bub-in">${!me&&ch==='team'?`<div class="small" style="font-weight:600;color:var(--accent)">${esc(nameOf(m.sender_id))}</div>`:''}${m.file?.path?(/^image\//.test(m.file.type||'')?`<a data-tcf="${esc(m.file.path)}" target="_blank" rel="noopener" style="display:block;margin:2px 0 4px"><img data-tcf="${esc(m.file.path)}" alt="${esc(m.file.name||'Photo')}" style="display:block;max-width:240px;max-height:240px;border-radius:10px;background:var(--surface2);min-width:80px;min-height:60px;object-fit:cover"></a>`:`<a class="btn sm" data-tcf="${esc(m.file.path)}" target="_blank" rel="noopener" style="margin:2px 0 4px">📄 ${esc(m.file.name||'File')} <span class="muted">${m.file.size?fileSize(m.file.size):''}</span></a>`):''}${m.body&&!(m.file&&m.body==='📎 '+m.file.name)?`<div class="bub-t">${esc(m.body)}</div>`:''}
       ${m.lead?`<button class="btn sm" style="margin-top:6px" data-act="lead" data-id="${m.lead.id}">${ic('leads')}${esc(m.lead.name||m.lead.phone)}</button>`:m.lead_id?'<div class="small muted">Lead not available to you</div>':''}
       <div class="bub-meta">${esc(new Date(ts(m.created_at)).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}))}${me||isAdmin()?` · <button class="btn sm ghost" style="padding:0 4px;font-size:.7rem" data-act="tcDel" data-id="${m.id}">delete</button>`:''}</div></div></div>`}).join(''):`<div class="empty" style="margin:16px"><div class="em-ic">${ic('msg')}</div><h3>No messages yet</h3><p>${ch==='team'?'Say hello to the team.':'Start the conversation.'}</p></div>`;
-  box.scrollTop=box.scrollHeight;
+  box.scrollTop=box.scrollHeight;S.tc.files={};for(const m of ms)if(m.file?.path)S.tc.files[m.id]=m.file.path;
+  tcSignFiles(box).then(()=>{box.querySelectorAll('img[data-tcf]').forEach(i=>i.addEventListener('load',()=>{if(box.scrollHeight-box.scrollTop-box.clientHeight<400)box.scrollTop=box.scrollHeight},{once:true}))}).catch(()=>{});
   const before=S.tc.inbox.find(x=>x.channel===ch)?.unread;
   try{await rpc('team_mark_read',{p_channel:ch});const x=S.tc.inbox.find(x=>x.channel===ch);if(x)x.unread=0;if(before)tcList();tcBadge()}catch(e){}
 }
-async function tcSend(){const t=$('#tcText');const body=(t?.value||'').trim();if(!body&&!S.tc.share)return;
-  const row={channel:S.tc.ch,sender_id:S.me.id,body,lead_id:S.tc.share?.id||null};t.value='';
-  try{await R(sb.from('team_messages').insert(row));S.tc.share=null;await tcThread();await tcLoadInbox();tcList()}catch(e){t.value=body;fail(e)}}
+function tcShareBar(){const sh=$('#tcShare');if(!sh)return;const f=S.tc.file;
+  sh.innerHTML=(S.tc.share?`<div class="row small" style="margin-bottom:8px"><span class="tag">Lead: ${esc(S.tc.share.name)}</span><button class="btn sm ghost" data-act="tcUnshare">Remove</button></div>`:'')+
+    (f?`<div class="row small" style="margin-bottom:8px;flex-wrap:nowrap">${f.prev?`<img src="${f.prev}" alt="" style="height:44px;width:44px;object-fit:cover;border-radius:6px">`:'<span style="font-size:1.4rem">📄</span>'}<span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.file.name)} <span class="muted">· ${fileSize(f.file.size)}</span></span><button class="btn sm ghost" data-act="tcUnfile">Remove</button></div>`:'')}
+const fileSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+function tcPickFile(file){if(!file)return;if(file.size>10485760)return toast('That file is over 10 MB. Send a smaller one.');
+  if(S.tc.file?.prev)URL.revokeObjectURL(S.tc.file.prev);S.tc.file={file,prev:/^image\//.test(file.type)?URL.createObjectURL(file):''};tcShareBar();$('#tcText')?.focus()}
+const tcFolder=ch=>ch.replace(/:/g,'_');   // "dm:a:b" → folder "dm_a_b" (supabase/team-files.sql)
+async function tcSend(){const t=$('#tcText');let body=(t?.value||'').trim();const att=S.tc.file;if(!body&&!S.tc.share&&!att)return;
+  const btn=$('#tcForm button[type=submit]');if(btn)btn.disabled=true;
+  try{let file=null;
+    if(att){const f=att.file,name=(f.name||'photo.png').replace(/[^\w.\- ]+/g,'_').slice(-80)||'file';
+      const path=`${tcFolder(S.tc.ch)}/${crypto.randomUUID()}-${name}`;
+      const up=await sb.storage.from('team-files').upload(path,f,{contentType:f.type||'application/octet-stream'});
+      if(up.error)throw new Error(/bucket|not found/i.test(up.error.message)?'Photos and files need a one-time setup: ask your admin to run supabase/team-files.sql in Supabase.':up.error.message);
+      file={path,name:f.name||name,type:f.type||'',size:f.size};if(!body)body='📎 '+file.name}
+    const row={channel:S.tc.ch,sender_id:S.me.id,body,lead_id:S.tc.share?.id||null,...(file?{file}:{})};t.value='';
+    const ins=await sb.from('team_messages').insert(row);
+    if(ins.error){if(file)sb.storage.from('team-files').remove([file.path]).catch(()=>{});throw new Error(/file/.test(ins.error.message)?'Photos and files need a one-time setup: ask your admin to run supabase/team-files.sql in Supabase.':ins.error.message)}
+    S.tc.share=null;if(att?.prev)URL.revokeObjectURL(att.prev);S.tc.file=null;tcShareBar();await tcThread();await tcLoadInbox();tcList()}
+  catch(e){if(t&&!t.value)t.value=body.startsWith('📎 ')&&att?'':body;fail(e)}finally{if(btn)btn.disabled=false}}
+/* Files in the thread: private, so each gets a link that works for an hour */
+async function tcSignFiles(box){const els=[...box.querySelectorAll('[data-tcf]')];if(!els.length)return;
+  const paths=[...new Set(els.map(e=>e.dataset.tcf))];const {data}=await sb.storage.from('team-files').createSignedUrls(paths,3600);
+  const url={};for(const d of data||[])if(d.signedUrl)url[d.path]=d.signedUrl;
+  for(const e of els){const u=url[e.dataset.tcf];if(!u){e.classList.add('muted');e.title='This file is no longer available';continue}
+    if(e.tagName==='IMG')e.src=u;else e.href=u}}
 
 /* AI CALLING */
 V.ai={mount(){
@@ -1086,7 +1112,9 @@ document.addEventListener('click',async e=>{
     case'tcPick':S.tc.ch=v;$('#tcWrap')?.classList.add('wa-open');tcList();tcThread();break;
     case'tcBack':$('#tcWrap')?.classList.remove('wa-open');break;
     case'tcUnshare':S.tc.share=null;tcThread(true);break;
-    case'tcDel':arm(t,async()=>{await R(sb.from('team_messages').delete().eq('id',id));tcThread()},'Delete?');break;
+    case'tcDel':arm(t,async()=>{await R(sb.from('team_messages').delete().eq('id',id));const fp=S.tc.files?.[id];if(fp)sb.storage.from('team-files').remove([fp]).catch(()=>{});tcThread()},'Delete?');break;
+    case'tcAttach':$('#tcFile')?.click();break;
+    case'tcUnfile':{if(S.tc.file?.prev)URL.revokeObjectURL(S.tc.file.prev);S.tc.file=null;tcShareBar();break}
     case'fltTog':{S.fltOpen=!S.fltOpen;const tb=t.closest('.toolbar');tb.classList.toggle('open',S.fltOpen);t.setAttribute('aria-expanded',String(S.fltOpen));break}
     case'setTab':{S.setTab=v;const b=$('.set-body');if(b)b.dataset.cur=v;$$('.set-tabs button').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.v===v)));window.scrollTo(0,0);break}
     case'moreNav':modal(`<h2>More</h2><div class="list" style="margin-top:12px">${NAV.filter(([k])=>!TABS.includes(k)).map(([k,l,i])=>`<button class="li btn" style="justify-content:flex-start" data-act="nav" data-v="${k}">${ic(i)}${l}</button>`).join('')}<button class="li btn" style="justify-content:flex-start" data-act="logout">Sign out</button></div>`);break;
