@@ -685,7 +685,7 @@ V.settings={live:false,mount(){
 
 V.settings.load=async()=>{waSettings();if(isAdmin()){lsSettings();nuSettings()}};
 /* ---------- modal & drawer ---------- */
-function modal(html){$('#md').innerHTML=`<div class="overlay modal-ov" data-act="closeMd"></div><div class="modal" role="dialog" aria-modal="true"><button class="btn sm ghost x" data-act="closeMd" aria-label="Close">${ic('x')}</button>${html}</div>`;setTimeout(()=>$('#md .modal input:not([type=checkbox]),#md .modal select')?.focus(),30)}
+function modal(html){histMark('md');$('#md').innerHTML=`<div class="overlay modal-ov" data-act="closeMd"></div><div class="modal" role="dialog" aria-modal="true"><button class="btn sm ghost x" data-act="closeMd" aria-label="Close">${ic('x')}</button>${html}</div>`;setTimeout(()=>$('#md .modal input:not([type=checkbox]),#md .modal select')?.focus(),30)}
 function closeModal(){$('#md').innerHTML='';if(S.lostRes){const f=S.lostRes;S.lostRes=null;f(null)}}
 function fuTime(v){const d=new Date();const at11=n=>{d.setDate(d.getDate()+n);d.setHours(11,0,0,0);return d.getTime()};return v==='1h'?now()+36e5:v==='3h'?now()+3*36e5:v==='tmr'?at11(1):v==='2d'?at11(2):v==='7d'?at11(7):null}
 function outcomeForm(p,noTimer){return `<div class="field"><span>Call outcome</span><div class="dispo-grid">${S.cfg.dispositions.map(d=>`<button type="button" class="dispo" data-act="pick" data-p="${p}" data-v="${d.id}" aria-pressed="false">${esc(d.name)}<small>${d.connected?'Connected':'Not connected'}${d.stage?' · to '+esc(stage(d.stage)?.name||''):''}</small></button>`).join('')}</div></div>
@@ -697,7 +697,7 @@ function tStart(p){const t=S.tm[p]||(S.tm[p]={});if(t.iv)return;t.start=now()-pa
 function tStop(p){const t=S.tm[p];if(t&&t.iv){clearInterval(t.iv);t.iv=null}const b=$('#'+p+'TBtn');if(b)b.textContent='Start timer';$('#'+p+'Big')?.classList.remove('live')}
 function readOutcome(p){const fv=$('#'+p+'Fu').value;return{outcome:S.pick[p],secs:$('#'+p+'Dur')?parseDur($('#'+p+'Dur').value):0,note:$('#'+p+'Note').value.trim(),fu:fv?new Date(fv).getTime():null}}
 
-function openLead(id){S.openLead=id;S.pick.dw=null;tStop('dw');
+function openLead(id){histMark('dw');S.openLead=id;S.pick.dw=null;tStop('dw');
   $('#dw').innerHTML=`<div class="overlay" data-act="closeDw"></div><div class="drawer" role="dialog" aria-modal="true" aria-label="Lead details">
     <button class="btn sm ghost x" data-act="closeDw" aria-label="Close">${ic('x')}</button><div id="dwHead">${loadingHTML}</div><div id="dwScript"></div>
     <div class="card" style="margin-top:14px"><h2>Log a call</h2><p class="small muted" style="margin-top:-6px">Calls made with the phone app are logged on their own. Use this for calls from other phones.</p>${outcomeForm('dw')}<div class="row" style="margin-top:12px"><button class="btn primary" data-act="saveCall" data-p="dw">Save call</button></div></div>
@@ -971,7 +971,19 @@ function renderNav(){
   $('#brandName').textContent=S.cfg.company||'Dialbook';$('#meName').innerHTML=S.me?`${avatar(S.me.name,'sm')}<span>${esc(S.me.name||'')}</span>`:'';$('#meRole').textContent=role()[0].toUpperCase()+role().slice(1);
 }
 let animT;function render(){const v=V[S.view]||V.home;S.rv++;const mn=$('#main');mn.classList.add('anim');clearTimeout(animT);animT=setTimeout(()=>mn.classList.remove('anim'),3500);mn.innerHTML=v.mount();renderNav();if(v.load)v.load().catch(fail)}
-function go(v){if(v!=='settings'){S.sd=null;S.sdirty=false}if(v!=='leads')S.sel.clear();S.view=v;render();window.scrollTo(0,0);try{history.replaceState(null,'','#'+v)}catch(e){}}
+function go(v,o={}){if(v!=='settings'){S.sd=null;S.sdirty=false}if(v!=='leads')S.sel.clear();S.view=v;render();window.scrollTo(0,0);
+  // each page is a step in the browser history, so the phone's Back button goes to the previous page instead of leaving
+  if(!o.back)try{const h='#'+v,st=history.state||{};if(location.hash!==h&&!st.md&&!st.dw)history.pushState({v},'',h);else history.replaceState({v},'',h)}catch(e){}}
+/* Back button: close an open window or lead first, then go to the previous page */
+const histMark=k=>{try{if(!(history.state||{})[k])history.pushState({...(history.state||{}),v:S.view,[k]:1},'',location.hash)}catch(e){}};
+const histUnmark=k=>{try{if((history.state||{})[k])history.back()}catch(e){}};
+window.addEventListener('popstate',e=>{if(!S.me)return;const st=e.state||{};
+  if($('#md')?.innerHTML&&!st.md)closeModal();
+  if($('#dw')?.innerHTML&&!st.dw)closeDrawer();
+  const h=(location.hash||'').slice(1),v=V[h]?h:h.startsWith('wa:')?'wa':'home';
+  if(v===S.view)return;
+  if(S.view==='settings'&&S.sdirty&&!confirm('Leave Settings without saving your changes?')){try{history.pushState({v:'settings'},'','#settings')}catch(_){}return}
+  go(v,{back:true})});
 let liveT;
 function onLive(){clearTimeout(liveT);liveT=setTimeout(()=>{const v=V[S.view];if(v&&v.live!==false&&v.load&&!$('#md').innerHTML)v.load().catch(()=>{});if(S.openLead)loadDrawer().catch(()=>{});updateBadge();waBadge()},1500)}
 async function loadBase(){
@@ -1092,8 +1104,8 @@ document.addEventListener('click',async e=>{
       S.page=0;S.sel.clear();S.fltOpen=true;go('leads');break}
     case'reload':V[S.view].load().catch(fail);break;
     case'lead':openLead(id);break;
-    case'closeDw':closeDrawer();break;
-    case'closeMd':closeModal();break;
+    case'closeDw':closeDrawer();histUnmark('dw');break;
+    case'closeMd':closeModal();histUnmark('md');break;
     case'scriptTog':setTimeout(()=>{S.scriptOpen=!!t.open},0);break;
     case'import':importModal();break;
     case'impPaste':{const r=parseCSV($('#impPaste').value);if(r.length<2)return toast('Paste a header row and at least one lead');mapStep(r);break}
@@ -1212,7 +1224,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.sp){const v=t.type==='checkbox'?t.checked:t.value;setPath(S.sd,t.dataset.sp,v);S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false}
   }catch(err){fail(err)}
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#md').innerHTML)closeModal();else if(S.openLead)closeDrawer()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#md').innerHTML){closeModal();histUnmark('md')}else if(S.openLead){closeDrawer();histUnmark('dw')}}});
 let dragId=null;
 document.addEventListener('dragstart',e=>{const c=e.target.closest&&e.target.closest('.kcard');if(!c)return;dragId=c.dataset.id;try{e.dataTransfer.setData('text/plain',dragId);e.dataTransfer.effectAllowed='move'}catch(_){}});
 document.addEventListener('dragover',e=>{const c=e.target.closest&&e.target.closest('.col');if(!c||!dragId)return;e.preventDefault();$$('.col.over').forEach(x=>x!==c&&x.classList.remove('over'));c.classList.add('over')});
