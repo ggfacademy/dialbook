@@ -114,7 +114,7 @@ begin
   if not exists (select 1 from public.leads where phone_key = k) then
     insert into public.leads(name, phone, source, assigned_to, created_by)
     values (coalesce(nullif(trim(p_name), ''), 'New caller ' || right(k, 4)), p_phone,
-            case when p_direction = 'outgoing' then 'Phone call' else 'Incoming call' end, auth.uid(), auth.uid())
+            case when p_direction = 'outgoing' then 'PHONE CALL' else 'Incoming call' end, auth.uid(), auth.uid())
     returning id into lid;
     insert into public.activities(lead_id, actor_id, kind, text) values (lid, auth.uid(), 'created', 'Added by the telecaller after a phone call');
   end if;
