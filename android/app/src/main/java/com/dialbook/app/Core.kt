@@ -219,6 +219,28 @@ object Api {
         }
     }
 
+    private fun objUrl(path: String) = path.split("/").joinToString("/") { android.net.Uri.encode(it) }
+
+    /** Uploads a file to a storage bucket (team chat photos and files: bucket "team-files"). */
+    fun uploadTo(ctx: Context, bucket: String, objectPath: String, bytes: ByteArray, contentType: String) {
+        val p = Prefs(ctx)
+        val req = Request.Builder().url("${p.url}/storage/v1/object/$bucket/${objUrl(objectPath)}")
+            .header("apikey", p.anonKey)
+            .header("Authorization", "Bearer " + token(ctx))
+            .post(bytes.toRequestBody(contentType.toMediaType())).build()
+        http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw ApiError(errorText(r.body?.string() ?: "", r.code), r.code)
+        }
+    }
+
+    /** A link to a private file that works for [seconds]. */
+    fun signedUrl(ctx: Context, bucket: String, objectPath: String, seconds: Int = 3600): String {
+        val t = send(ctx, "POST", "/storage/v1/object/sign/$bucket/${objUrl(objectPath)}", JSONObject().put("expiresIn", seconds).toString())
+        val rel = JSONObject(t).optString("signedURL").ifEmpty { JSONObject(t).optString("signedUrl") }
+        if (rel.isEmpty()) throw ApiError("This file is no longer available.", 404)
+        return Prefs(ctx).url + "/storage/v1" + (if (rel.startsWith("/")) rel else "/$rel")
+    }
+
     /** Loads the signed-in person's profile; returns null when not approved yet. */
     fun profile(ctx: Context): JSONObject? {
         val p = Prefs(ctx)
