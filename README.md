@@ -370,7 +370,7 @@ supabase/auto-messages.sql           automatic WhatsApp after a not-connected ca
 supabase/sales-tools.sql             lost reasons, daily targets, contact-list batches, Facebook check every 15 minutes
 supabase/team-chat.sql               team chat between telecallers, managers and admins (website and phone app)
 supabase/team-files.sql              photos and files in team chat (private storage bucket, up to 10 MB)
-supabase/phone-call-caps.sql         one-time: lead source "Phone call" written as "PHONE CALL"
+supabase/sources-caps.sql            lead sources always saved in CAPITAL letters
 supabase/courses.sql                 course details per campaign (fee, duration, timing, dates, venue) and the Gold Audit campaign
 supabase/gold-audit-scripts.sql      Gold Audit and Appraisal call scripts (English, Hindi, Tamil, Telugu)
 supabase/gjsci-scripts.sql           GAC with the GJSCI certificate: call scripts (English, Tamil, Telugu)

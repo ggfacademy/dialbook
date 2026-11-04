@@ -131,7 +131,7 @@ begin
   select * into l from public.leads where id = p_lead;
   if not found then raise exception 'lead not found'; end if;
   if not (l.assigned_to = auth.uid() or l.created_by = auth.uid() or public.is_mgr()) then raise exception 'not your lead'; end if;
-  if l.source <> 'Incoming call' then
+  if upper(l.source) <> 'INCOMING CALL' then
     raise exception 'only leads added from an unknown incoming call can be marked personal';
   end if;
   insert into public.personal_numbers(owner_id, phone_key)
@@ -145,9 +145,9 @@ notify pgrst, 'reload schema';
 
 -- Optional clean-up of personal calls already added. Look first:
 --   select name, phone, created_at from public.leads
---    where source = 'Incoming call' and name like 'New caller %' and stage = 'new' order by created_at desc;
+--    where upper(source) = 'INCOMING CALL' and name like 'New caller %' and stage = 'new' order by created_at desc;
 -- Then delete the ones nobody has worked on (no outcome, note or WhatsApp yet):
 --   delete from public.leads l
---    where l.source = 'Incoming call' and l.name like 'New caller %' and l.stage = 'new'
+--    where upper(l.source) = 'INCOMING CALL' and l.name like 'New caller %' and l.stage = 'new'
 --      and not exists (select 1 from public.calls c where c.lead_id = l.id and (c.outcome is not null or coalesce(c.note,'') <> ''))
 --      and not exists (select 1 from public.activities a where a.lead_id = l.id and a.kind <> 'created');
