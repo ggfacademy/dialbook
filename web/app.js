@@ -144,7 +144,7 @@ const opt=(v,l,sel)=>`<option value="${esc(v)}"${String(v)===String(sel??'')?' s
 const stageOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.cfg.stages.map(s=>opt(s.id,s.name,sel)).join('');
 const campOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.campaigns.map(c=>opt(c.id,c.name,sel)).join('');
 const agentOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+agents().map(m=>opt(m.id,m.name,sel)).join('');
-const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp',...(sel?[sel]:[])])].map(s=>opt(s,s,sel)).join('');
+const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp',...(sel?[sel]:[])].map(x=>String(x).toUpperCase()))].map(s=>opt(s,s,String(sel||'').toUpperCase())).join('');   // sources are saved in capitals (supabase/sources-caps.sql)
 const prioOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+opt('hot','Hot',sel)+opt('warm','Warm',sel)+opt('cold','Cold',sel);
 const head=(title,sub,actions='')=>`<div class="page-head"><div><h1>${esc(title)}</h1>${sub?`<p class="muted">${sub}</p>`:''}</div><div class="row">${actions}</div></div>`;
 const endToday=()=>sod(now())+DAY;
@@ -220,7 +220,7 @@ async function lrFetch(agent){const [from,to,label]=lrRange();
 async function lrLoad(){const c=$('#lrCard');if(!c)return;const seq=S.lr.seq=(S.lr.seq||0)+1;const agent=isMgr()?(S.hAgent||null):S.me.id;
   c.style.opacity='.6';try{const d=await lrFetch(agent);if(seq===S.lr.seq)lrShow(d)}catch(e){fail(e)}finally{if(seq===S.lr.seq)c.style.opacity=''}}
 function lrShow(d){const c=$('#lrCard');if(!c)return;S.lr.data=d;const L=S.lr,camp_=L.by==='camp';
-  const by={},key={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim()||'Source not set');by[k]=(by[k]||0)+1;
+  const by={},key={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim().toUpperCase()||'Source not set');by[k]=(by[k]||0)+1;
     if(!(k in key))key[k]=camp_?(l.campaign_id&&camp(l.campaign_id)?l.campaign_id:'_none'):((l.source||'').trim()?l.source:null)}
   const pal=['#3a7bd5','var(--call)','var(--warn)','var(--accent)','#8e5bd0','#c8644f','#2f9e9e'];
   const col=(k,i)=>camp_?(k==='No campaign'?'var(--muted)':pal[i%pal.length]):/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
@@ -289,7 +289,7 @@ function leadQuery(select='*',opts){
   if(f.stage)q=q.eq('stage',f.stage);
   if(f.camp)q=f.camp==='_none'?q.is('campaign_id',null):q.eq('campaign_id',f.camp);
   if(f.agent)q=f.agent==='_none'?q.is('assigned_to',null):q.eq('assigned_to',f.agent);
-  if(f.source)q=q.eq('source',f.source);
+  if(f.source)q=q.ilike('source',f.source.replace(/[\\%_]/g,'\\$&'));   // same source in any letter case
   if(f.prio)q=q.eq('priority',f.prio);
   if(f.lang)q=f.lang==='_none'?q.eq('language',''):q.eq('language',f.lang);
   if(f.fu==='due')q=q.lt('next_follow_up_at',iso(endToday())).not('stage','in','(won,lost)');
@@ -745,7 +745,7 @@ async function loadDrawer(){
   $('#dwHead').innerHTML=`<div style="padding-right:44px"><h1>${esc(l.name||'Unnamed')}</h1><div class="row" style="margin-top:6px">${stagePill(l.stage)}${prioLabel(l.priority)}${l.campaign_id?`<span class="tag">${esc(camp(l.campaign_id)?.name||'')}</span>`:''}${l.dnd?'<span class="tag">Do not contact</span>':''}${l.contact_only?'<span class="tag">Contact list</span>':''}</div>${l.stage==='lost'&&l.lost_reason?`<div class="small muted" style="margin-top:6px">Lost: ${esc(l.lost_reason)}</div>`:''}</div>
     <div class="dial-phone" style="margin-top:12px;font-size:1.3rem">${esc(l.phone)}</div>
     <div class="row" style="margin-top:10px"><a class="btn call" href="tel:${esc(normPhone(l.phone))}" data-act="dial" data-p="dw">${ic('phone')}Call</a><button class="btn" data-act="wa">${ic('msg')}WhatsApp / SMS</button><button class="btn" data-act="copy" data-v="${esc(l.phone)}">${ic('copy')}Copy</button><button class="btn" data-act="editLead">${ic('edit')}Edit</button>${aiBtn}</div>`;
-  if(l.source==='Incoming call')$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
+  if(/^incoming call$/i.test(l.source||''))$('#dwHead').insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:12px;padding:10px 12px"><div class="row"><span class="small grow">Added from an incoming call. Personal call, not a customer?</span><button class="btn sm" data-act="markPersonal">This is a personal number</button></div></div>`);
   {const sc=scriptFor(l),b=$('#dwScript');if(b)b.innerHTML=sc?`<details class="card" style="margin-top:14px" ${S.scriptOpen?'open':''} data-act="scriptTog"><summary><b>Call script</b> <span class="small muted">· ${esc(sc.title)}</span></summary><div class="script" style="margin-top:8px">${esc(fillTpl(sc.body,l))}</div></details>`:''}
   const f=(k,v)=>`<div><div class="small muted">${k}</div><div>${v||'<span class="muted">—</span>'}</div></div>`;
   $('#dwInfo').innerHTML=`<div class="grid2">
