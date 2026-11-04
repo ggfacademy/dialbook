@@ -131,7 +131,8 @@ function barChart(b){
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Calls over time">${g}</svg><div class="legend"><span><i style="background:var(--call)"></i>Connected</span><span><i style="background:var(--warn);opacity:.75"></i>Not connected</span></div></div>`;
 }
 function hbars(rows){const mx=Math.max(1,...rows.map(r=>r.v));
-  return rows.map((r,i)=>`<div class="hbar" style="--d:${Math.min(i*60,600)}ms"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.label)}">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}</span></div>`).join('')||'<p class="muted small">No data yet.</p>'}
+  return rows.map((r,i)=>{const tag=r.act?'button':'div',at=r.act?` type="button" data-act="${esc(r.act)}" data-v="${esc(r.key)}" title="Show these ${r.v} leads"`:` title="${esc(r.label)}"`;
+    return `<${tag} class="hbar${r.act?' hbar-btn':''}"${at} style="--d:${Math.min(i*60,600)}ms"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}</span></${tag}>`}).join('')||'<p class="muted small">No data yet.</p>'}
 function buckets(st,from,to){
   if(to-from<=DAY){const out=[];for(let h=8;h<=21;h++){const v=st.by_hour?.[h]||{a:0,b:0};out.push({label:(h%12||12)+(h<12?'a':'p'),a:v.a,b:v.b})}
     Object.entries(st.by_hour||{}).forEach(([h,v])=>{h=+h;if(h<8){out[0].a+=v.a;out[0].b+=v.b}if(h>21){out[13].a+=v.a;out[13].b+=v.b}});return out}
@@ -143,7 +144,7 @@ const opt=(v,l,sel)=>`<option value="${esc(v)}"${String(v)===String(sel??'')?' s
 const stageOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.cfg.stages.map(s=>opt(s.id,s.name,sel)).join('');
 const campOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.campaigns.map(c=>opt(c.id,c.name,sel)).join('');
 const agentOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+agents().map(m=>opt(m.id,m.name,sel)).join('');
-const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp'])].map(s=>opt(s,s,sel)).join('');
+const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp',...(sel?[sel]:[])])].map(s=>opt(s,s,sel)).join('');
 const prioOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+opt('hot','Hot',sel)+opt('warm','Warm',sel)+opt('cold','Cold',sel);
 const head=(title,sub,actions='')=>`<div class="page-head"><div><h1>${esc(title)}</h1>${sub?`<p class="muted">${sub}</p>`:''}</div><div class="row">${actions}</div></div>`;
 const endToday=()=>sod(now())+DAY;
@@ -213,21 +214,23 @@ function lrRange(){const L=S.lr,d=new Date(),y=d.getFullYear(),m=d.getMonth(),t0
 const fmtDay=t=>new Date(t).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
 async function lrFetch(agent){const [from,to,label]=lrRange();
   // new leads that arrived in the period (the contact list of imported old data is not counted)
-  const rows=await fetchAll(()=>{let q=sb.from('leads').select('source,campaign_id').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q});
-  return {rows,label,agent}}
+  const dcol=S.hasEnq?'last_enquiry_at':'created_at';   // the same date as the Leads page filter: added, or enquired again
+  const rows=await fetchAll(()=>{let q=sb.from('leads').select('source,campaign_id').gte(dcol,iso(from)).lt(dcol,iso(to)).order(dcol);if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q});
+  return {rows,label,agent,from,to}}
 async function lrLoad(){const c=$('#lrCard');if(!c)return;const seq=S.lr.seq=(S.lr.seq||0)+1;const agent=isMgr()?(S.hAgent||null):S.me.id;
   c.style.opacity='.6';try{const d=await lrFetch(agent);if(seq===S.lr.seq)lrShow(d)}catch(e){fail(e)}finally{if(seq===S.lr.seq)c.style.opacity=''}}
 function lrShow(d){const c=$('#lrCard');if(!c)return;S.lr.data=d;const L=S.lr,camp_=L.by==='camp';
-  const by={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim()||'Source not set');by[k]=(by[k]||0)+1}
+  const by={},key={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim()||'Source not set');by[k]=(by[k]||0)+1;
+    if(!(k in key))key[k]=camp_?(l.campaign_id&&camp(l.campaign_id)?l.campaign_id:'_none'):((l.source||'').trim()?l.source:null)}
   const pal=['#3a7bd5','var(--call)','var(--warn)','var(--accent)','#8e5bd0','#c8644f','#2f9e9e'];
   const col=(k,i)=>camp_?(k==='No campaign'?'var(--muted)':pal[i%pal.length]):/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
-  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,color:col(label,i)}));
+  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,color:col(label,i),...(key[label]!=null?{act:'lrOpen',key:(camp_?'c:':'s:')+key[label]}:{})}));
   const dates=L.p==='c'?`<label class="field" style="flex:0 1 150px"><span>From</span><input class="input" type="date" id="lrFrom" value="${toDateInput(L.from??sod(now()))}" max="${toDateInput(now())}"></label><label class="field" style="flex:0 1 150px"><span>To</span><input class="input" type="date" id="lrTo" value="${toDateInput(L.to??sod(now()))}" max="${toDateInput(now())}"></label>`:'';
-  c.innerHTML=`<div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${d.rows.length}">${d.rows.length}</div><div class="small muted">${esc(d.label)}${d.agent?' · assigned to '+esc(nameOf(d.agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
+  c.innerHTML=`<div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${d.rows.length}">${d.rows.length}</div><div class="small muted">${esc(d.label)}${d.agent?' · assigned to '+esc(nameOf(d.agent)):''}</div><button class="btn sm" data-act="lrOpen" data-v="" style="margin-top:10px" title="Open these leads in Leads">Open these leads</button></div>
     <div class="hbar-wide" style="flex:1;min-width:260px"><div class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
       <label class="field" style="flex:0 1 180px"><span>Period</span><select class="input" id="lrP">${LR_P.map(([v,l])=>opt(v,l,L.p)).join('')}</select></label>${dates}
       <span class="spacer"></span><div class="row" style="gap:4px"><button class="chip-toggle" data-act="lrBy" data-v="src" aria-pressed="${!camp_}">By source</button><button class="chip-toggle" data-act="lrBy" data-v="camp" aria-pressed="${camp_}">By campaign</button></div></div>
-    ${rows.length?hbars(rows):'<p class="muted small">No new leads in this period.</p>'}</div></div>`;countUp(c)}
+    ${rows.length?hbars(rows)+'<p class="small muted" style="margin:6px 0 0">Click a line to see those leads.</p>':'<p class="muted small">No new leads in this period.</p>'}</div></div>`;countUp(c)}
 
 /* HOME */
 V.home={mount(){
@@ -1083,6 +1086,10 @@ document.addEventListener('click',async e=>{
     case'logout':closeModal();closeDrawer();await sb.auth.signOut();S.me=null;showAuth();break;
     case'range':S.range=v;render();break;
     case'lrBy':S.lr.by=v;if(S.lr.data)lrShow(S.lr.data);break;
+    case'lrOpen':{const d=S.lr.data;if(!d)break;// the Leads page with the same period, caller and the campaign or source clicked
+      S.lf={...S.lf,q:'',stage:'',prio:'',lang:'',fu:'',camp:'',source:'',agent:isMgr()?(d.agent||''):S.lf.agent,from:toDateInput(d.from),to:toDateInput(d.to-DAY)};
+      if(v.startsWith('c:'))S.lf.camp=v.slice(2);else if(v.startsWith('s:'))S.lf.source=v.slice(2);
+      S.page=0;S.sel.clear();S.fltOpen=true;go('leads');break}
     case'reload':V[S.view].load().catch(fail);break;
     case'lead':openLead(id);break;
     case'closeDw':closeDrawer();break;
