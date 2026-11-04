@@ -156,19 +156,26 @@ async function forwardInterakt(raw: string, event: string) {
     let res: { status: string; http: number; reply: Obj };
     try { res = await sendOrderDesk(raw); } catch (e) { res = { status: "failed", http: 0, reply: { error: scrub(e instanceof Error ? e.message : e) } }; }
     const r = safeReply(res.reply);
-    console.log(`interakt ${event}: ${res.status} (HTTP ${res.http})${r.error ? " " + r.error : ""}`);
+    console.log(`interakt ${event}: forwarded to the Order Desk, try ${i + 1}: ${res.status} (HTTP ${res.http}), Order Desk replied ok=${r.ok}${r.lead ? `, lead ${r.lead}` : ""}${r.error ? `, error: ${r.error}` : ""}`);
     if (res.status !== "failed" || res.reply.ok === false) return; // done, or the Order Desk said no (retrying won't help)
     if (i < 2) await new Promise((ok) => setTimeout(ok, i ? 8000 : 2000));
   }
 }
 async function interakt(req: Request): Promise<Response> {
-  if (req.method === "GET") return new Response("ok", { status: 200 }); // a URL check when the webhook is saved
+  // A URL check when the webhook is saved; opening the link in a browser also shows that this version is live
+  if (req.method === "GET") return new Response("ok – Kumud Interakt forwarder v2", { status: 200 });
   if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
-  if (!env("KUMUD_INTERAKT_SECRET")) return new Response("not configured", { status: 503 });
+  if (!env("KUMUD_INTERAKT_SECRET")) { console.log("interakt: refused – the secret KUMUD_INTERAKT_SECRET is not set in Supabase"); return new Response("not configured", { status: 503 }); }
   const raw = await req.text();
   if (raw.length > 2_000_000) return new Response("too large", { status: 413 });
-  if (!(await interaktSigOk(req.headers.get("interakt-signature") || "", raw))) return new Response("bad signature", { status: 401 });
+  const sig = req.headers.get("interakt-signature") || "";
+  if (!(await interaktSigOk(sig, raw))) {
+    console.log(sig ? "interakt: refused – the Interakt-Signature does not match KUMUD_INTERAKT_SECRET (the Secret Key in Interakt and in Supabase must be the same)"
+                    : "interakt: refused – the call has no Interakt-Signature header (no Secret Key set in Interakt?)");
+    return new Response("bad signature", { status: 401 });
+  }
   let event = "event"; try { const t = JSON.parse(raw)?.type; if (typeof t === "string" && /^[a-z_]{1,40}$/.test(t)) event = t; } catch { /* forwarded as is */ }
+  console.log(`interakt ${event}: received from Interakt, signature OK (${raw.length} bytes)`);
   const job = forwardInterakt(raw, event);
   const rt = (globalThis as any).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(job); else await job; // reply at once; the forward finishes in the background
