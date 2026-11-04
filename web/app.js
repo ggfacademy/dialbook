@@ -72,7 +72,7 @@ const CFG=window.DIALBOOK_CONFIG||{};
 let sb=null;
 const S={me:null,team:[],campaigns:[],cfg:clone(DEF),view:'home',
   lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},sel:new Set(),page:0,PS:(()=>{try{const v=+localStorage.getItem('dialbook.ps');return [50,100,250,500,1000].includes(v)?v:100}catch(e){return 100}})(),
-  range:'7',hAgent:'',pf:{camp:'',agent:''},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
+  range:'7',hAgent:'',lr:{p:'',by:'src'},pf:{camp:'',agent:''},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
   fuAgent:'',openLead:null,dialer:null,dialSetup:{camp:'',queue:'fresh',order:'hot',who:'me'},
   pick:{},tm:{},rv:0,badge:0,sd:null,sdirty:false,ai:{camp:'',queue:'fresh',n:10}};
 
@@ -198,6 +198,37 @@ function countUp(root){if(matchMedia('(prefers-reduced-motion: reduce)').matches
   (root||document).querySelectorAll('[data-count]').forEach(el=>{const end=+el.dataset.count||0;if(end<2)return;const t0=performance.now(),D=900;
     const step=t=>{const k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(end*e);if(k<1)requestAnimationFrame(step)};el.textContent='0';requestAnimationFrame(step)})}
 
+/* Dashboard "Leads received" card: its own period (Today, Yesterday, … or any dates) and By source / By campaign */
+const LR_P=[['','Dashboard period'],['d0','Today'],['d1','Yesterday'],['d7','Last 7 days'],['d30','Last 30 days'],['m0','This month'],['m1','Last month'],['c','Choose dates…']];
+function lrRange(){const L=S.lr,d=new Date(),y=d.getFullYear(),m=d.getMonth(),t0=sod(now());
+  switch(L.p){
+    case'd0':return [t0,t0+DAY,'today'];
+    case'd1':return [t0-DAY,t0,'yesterday'];
+    case'd7':return [t0-6*DAY,t0+DAY,'in the last 7 days'];
+    case'd30':return [t0-29*DAY,t0+DAY,'in the last 30 days'];
+    case'm0':return [new Date(y,m,1).getTime(),t0+DAY,'this month'];
+    case'm1':return [new Date(y,m-1,1).getTime(),new Date(y,m,1).getTime(),new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'})];
+    case'c':{const a=L.from??t0,b=Math.max(L.to??t0,a);return [a,sod(b)+DAY,a===sod(b)?'on '+fmtDay(a):`${fmtDay(a)} – ${fmtDay(b)}`]}
+    default:{const from=S.range==='0'?t0:t0-(+S.range-1)*DAY;return [from,t0+DAY,S.range==='0'?'today':`in the last ${S.range} days`]}}}
+const fmtDay=t=>new Date(t).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+async function lrFetch(agent){const [from,to,label]=lrRange();
+  // new leads that arrived in the period (the contact list of imported old data is not counted)
+  const rows=await fetchAll(()=>{let q=sb.from('leads').select('source,campaign_id').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q});
+  return {rows,label,agent}}
+async function lrLoad(){const c=$('#lrCard');if(!c)return;const seq=S.lr.seq=(S.lr.seq||0)+1;const agent=isMgr()?(S.hAgent||null):S.me.id;
+  c.style.opacity='.6';try{const d=await lrFetch(agent);if(seq===S.lr.seq)lrShow(d)}catch(e){fail(e)}finally{if(seq===S.lr.seq)c.style.opacity=''}}
+function lrShow(d){const c=$('#lrCard');if(!c)return;S.lr.data=d;const L=S.lr,camp_=L.by==='camp';
+  const by={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim()||'Source not set');by[k]=(by[k]||0)+1}
+  const pal=['#3a7bd5','var(--call)','var(--warn)','var(--accent)','#8e5bd0','#c8644f','#2f9e9e'];
+  const col=(k,i)=>camp_?(k==='No campaign'?'var(--muted)':pal[i%pal.length]):/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
+  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,color:col(label,i)}));
+  const dates=L.p==='c'?`<label class="field" style="flex:0 1 150px"><span>From</span><input class="input" type="date" id="lrFrom" value="${toDateInput(L.from??sod(now()))}" max="${toDateInput(now())}"></label><label class="field" style="flex:0 1 150px"><span>To</span><input class="input" type="date" id="lrTo" value="${toDateInput(L.to??sod(now()))}" max="${toDateInput(now())}"></label>`:'';
+  c.innerHTML=`<div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${d.rows.length}">${d.rows.length}</div><div class="small muted">${esc(d.label)}${d.agent?' · assigned to '+esc(nameOf(d.agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
+    <div class="hbar-wide" style="flex:1;min-width:260px"><div class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+      <label class="field" style="flex:0 1 180px"><span>Period</span><select class="input" id="lrP">${LR_P.map(([v,l])=>opt(v,l,L.p)).join('')}</select></label>${dates}
+      <span class="spacer"></span><div class="row" style="gap:4px"><button class="chip-toggle" data-act="lrBy" data-v="src" aria-pressed="${!camp_}">By source</button><button class="chip-toggle" data-act="lrBy" data-v="camp" aria-pressed="${camp_}">By campaign</button></div></div>
+    ${rows.length?hbars(rows):'<p class="muted small">No new leads in this period.</p>'}</div></div>`;countUp(c)}
+
 /* HOME */
 V.home={mount(){
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -209,21 +240,15 @@ V.home={mount(){
 },async load(){
   const rv=S.rv;const to=endToday(),from=S.range==='0'?sod(now()):sod(now())-(+S.range-1)*DAY;
   const agent=isMgr()?(S.hAgent||null):S.me.id;
-  const [st,ls,fu,inl,tp]=await Promise.all([
+  const lrP=lrFetch(agent);   // the Leads received card has its own period
+  const [st,ls,fu,tp]=await Promise.all([
     rpc('dashboard_stats',{p_from:iso(from),p_to:iso(to),p_agent:agent,p_campaign:null,p_tz:TZ}),
     rpc('lead_summary',{p_agent:agent,p_campaign:null,p_tz:TZ}),
     (()=>{let q=sb.from('leads').select('*').not('stage','in','(won,lost)').not('next_follow_up_at','is',null).lt('next_follow_up_at',iso(now()+7*DAY)).order('next_follow_up_at').limit(6);if(agent)q=q.eq('assigned_to',agent);return R(q)})(),
-    // new leads that arrived in the period (the contact list of imported old data is not counted)
-    fetchAll(()=>{let q=sb.from('leads').select('source').gte('created_at',iso(from)).lt('created_at',iso(to)).order('created_at');if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);return q}),
     sb.rpc('today_progress',{p_tz:TZ,p_all:isMgr()}).then(r=>r.data||[],()=>[])]);
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
   const t=st.totals||{};heroRings(tp,agent,ls);let html=agent?'':targetsCard(tp,null);
-  {const by={};for(const l of inl){const k=(l.source||'').trim()||'Source not set';by[k]=(by[k]||0)+1}
-   const col=k=>/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
-   const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v,color:col(label)}));
-   const per=S.range==='0'?'today':`in the last ${S.range} days`;
-   html+=`<div class="card" style="margin-bottom:16px"><div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${inl.length}">${inl.length}</div><div class="small muted">${per}${agent?' · assigned to '+esc(nameOf(agent)):''}</div><button class="btn sm" data-act="nav" data-v="leads" style="margin-top:10px">Open Leads</button></div>
-     <div class="hbar-wide" style="flex:1;min-width:260px"><div class="small muted" style="margin-bottom:6px">By source</div>${rows.length?hbars(rows):'<p class="muted small">No new leads in this period.</p>'}</div></div></div>`}
+  html+=`<div class="card" id="lrCard" style="margin-bottom:16px">${loadingHTML}</div>`;
   if(!ls.total&&isMgr())html+=`<div class="card" style="margin-bottom:16px"><h2>Get your calling team started</h2><div class="grid3">
     <div><b>1. Invite your team</b><p class="muted small">Send them this website's link. They create an account and you approve them in Team.</p><button class="btn" data-act="nav" data-v="team">${ic('team')}Open Team</button></div>
     <div><b>2. Import leads</b><p class="muted small">Upload an Excel or CSV file and share the leads out to callers automatically.</p><button class="btn primary" data-act="import">${ic('up')}Import leads</button></div>
@@ -245,7 +270,7 @@ V.home={mount(){
     const rows=[...agents().map(m=>({name:m.name,sub:m.role,s:st.by_agent?.[m.id]||{}})),...(st.by_agent?.ai?[{name:'AI agent',sub:'voice AI',s:st.by_agent.ai}]:[])].sort((a,b)=>(b.s.n||0)-(a.s.n||0));
     html+=`<div class="card wide"><h2>Team leaderboard</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th class="r">Calls</th><th class="r">Connected</th><th class="r hide-sm">Connect %</th><th class="r">Talk time</th><th class="r hide-sm">Interested</th><th class="r">Converted</th></tr></thead><tbody>${rows.map(({name,sub,s})=>`<tr><td><b>${esc(name)}</b> <span class="small muted">${esc(sub)}</span></td><td class="r num">${s.n||0}</td><td class="r num">${s.conn||0}</td><td class="r num hide-sm">${pct(s.n?s.conn/s.n:0)}</td><td class="r num">${dur(s.talk)}</td><td class="r num hide-sm">${s.intr||0}</td><td class="r num">${s.conv||0}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
-  vb.innerHTML=html+'</div>';countUp(vb);
+  vb.innerHTML=html+'</div>';countUp(vb);lrP.then(d=>{if(rv===S.rv)lrShow(d)}).catch(()=>{const c=$('#lrCard');if(c)c.innerHTML='<p class="muted small">Could not load the leads received.</p>'});
 }};
 function fuList(list,compact){
   if(!list||!list.length)return '<p class="muted small">Nothing scheduled.</p>';
@@ -1057,6 +1082,7 @@ document.addEventListener('click',async e=>{
     case'recheck':afterLogin();break;
     case'logout':closeModal();closeDrawer();await sb.auth.signOut();S.me=null;showAuth();break;
     case'range':S.range=v;render();break;
+    case'lrBy':S.lr.by=v;if(S.lr.data)lrShow(S.lr.data);break;
     case'reload':V[S.view].load().catch(fail);break;
     case'lead':openLead(id);break;
     case'closeDw':closeDrawer();break;
@@ -1150,6 +1176,8 @@ document.addEventListener('change',async e=>{
   const t=e.target,id=t.id;
   try{
   if(id==='hAgent'){S.hAgent=t.value;return V.home.load()}
+  if(id==='lrP'){S.lr.p=t.value;if(t.value==='c'&&S.lr.from==null){S.lr.from=sod(now());S.lr.to=sod(now())}return lrLoad()}
+  if(id==='lrFrom'||id==='lrTo'){if(!t.value)return;const v=new Date(t.value+'T00:00').getTime();if(id==='lrFrom'){S.lr.from=v;if((S.lr.to??v)<v)S.lr.to=v}else{S.lr.to=v;if((S.lr.from??v)>v)S.lr.from=v}return lrLoad()}
   if(id&&id.startsWith('lf-')){S.lf[id.slice(3)]=t.value;S.page=0;S.sel.clear();return id==='lf-from'||id==='lf-to'?render():V.leads.load()}
   if(id==='selAll'){(S.pageLeads||[]).forEach(l=>t.checked?S.sel.add(l.id):S.sel.delete(l.id));return V.leads.load()}
   if(t.classList.contains('selOne')){t.checked?S.sel.add(t.dataset.id):S.sel.delete(t.dataset.id);return V.leads.load()}
