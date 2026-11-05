@@ -89,6 +89,20 @@ async function linkFormByKeywords(srcId: string, formId: string, formName: strin
   return c.id;
 }
 
+/* Meta's Lead Ads Testing Tool fills the form with "<test lead: dummy data for …>", so there is no real phone number.
+ * Such a lead is still added, tagged "Test lead", with a number that cannot belong to anyone (+91 0000…). */
+function metaTestLead(fieldData: Obj[], m: Obj, formName: string): boolean {
+  const isTest = (fieldData || []).some((f: Obj) => (f.values || []).some((x: unknown) => /test lead|dummy data/i.test(String(x))));
+  if (!isTest) return false;
+  const t = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+  if (!m.name || /test lead|dummy data/i.test(m.name)) m.name = `Facebook test lead ${t}`;
+  if (String(m.phone || "").replace(/\D/g, "").length < 6) m.phone = "+910000" + String(Math.floor(100000 + Math.random() * 899999));
+  if (/test lead|dummy data/i.test(m.email || "") || !/@/.test(m.email || "")) m.email = "";
+  if (/test lead|dummy data/i.test(m.city || "")) m.city = "";
+  m.note = [`Test lead from Meta's Lead Ads Testing Tool${formName ? ` (form “${formName}”)` : ""}. Delete it after checking.`, m.note].filter(Boolean).join("\n");
+  return true;
+}
+
 async function allPages(fb: Obj): Promise<Obj[]> {
   if (!fb.user_token) throw new UserError("Add your Facebook access token first.");
   const out: Obj[] = [];
@@ -144,10 +158,11 @@ async function fetchSource(src: Obj, days: number, ver: string): Promise<Obj> {
       if (!r.ok) throw new UserError(`${f.name}: ${j?.error?.message || "could not read leads"}`);
       for (const lead of j.data || []) {
         const m = mapAnswers((lead.field_data || []).map((x: Obj) => [x.name, (x.values || []).join(", ")]));
+        const test = metaTestLead(lead.field_data || [], m, f.name);
         const fc = cfg.forms?.[f.id] || {};
         if (!fc.campaign_id && !tried.has(f.id)) { tried.add(f.id); const cid = await linkFormByKeywords(src.id, f.id, f.name, lead.campaign_name || ""); if (cid) { fc.campaign_id = cid; cfg.forms = { ...(cfg.forms || {}), [f.id]: { ...fc } }; } }
         const { data: res, error } = await admin.rpc("ingest_lead", { p: {
-          name: m.name, phone: m.phone, email: m.email, city: m.city,
+          name: m.name, phone: m.phone, email: m.email, city: m.city, test,
           language: m.language || fc.language || cfg.default_language || "",
           source: src.name, source_id: src.id, ref: `fb:${lead.id}`, campaign_id: fc.campaign_id || cfg.campaign_id || null,
           tags: [f.name, lead.platform === "ig" ? "Instagram" : ""].filter(Boolean),
