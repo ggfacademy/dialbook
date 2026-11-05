@@ -84,6 +84,20 @@ async function sourceError(id: string, msg: string) {
   await admin.from("lead_sources").update({ last_error: msg.slice(0, 300) }).eq("id", id);
 }
 
+/* Meta's Lead Ads Testing Tool fills the form with "<test lead: dummy data for …>", so there is no real phone number.
+ * Such a lead is still added, tagged "Test lead", with a number that cannot belong to anyone (+91 0000…). */
+function metaTestLead(fieldData: Obj[], m: Obj, formName: string): boolean {
+  const isTest = (fieldData || []).some((f: Obj) => (f.values || []).some((x: unknown) => /test lead|dummy data/i.test(String(x))));
+  if (!isTest) return false;
+  const t = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+  if (!m.name || /test lead|dummy data/i.test(m.name)) m.name = `Facebook test lead ${t}`;
+  if (String(m.phone || "").replace(/\D/g, "").length < 6) m.phone = "+910000" + String(Math.floor(100000 + Math.random() * 899999));
+  if (/test lead|dummy data/i.test(m.email || "") || !/@/.test(m.email || "")) m.email = "";
+  if (/test lead|dummy data/i.test(m.city || "")) m.city = "";
+  m.note = [`Test lead from Meta's Lead Ads Testing Tool${formName ? ` (form “${formName}”)` : ""}. Delete it after checking.`, m.note].filter(Boolean).join("\n");
+  return true;
+}
+
 /* ---------------- Facebook / Instagram lead ads ---------------- */
 async function fbLead(fb: Obj, src: Obj, pageToken: string, v: Obj) {
   const ver = fb.api_version || "v23.0";
@@ -106,16 +120,20 @@ async function fbLead(fb: Obj, src: Obj, pageToken: string, v: Obj) {
     if (formName) { forms[formId] = { ...(forms[formId] || {}), name: formName }; await admin.from("lead_sources").update({ config: { ...cfg, forms } }).eq("id", src.id); }
   }
   const m = mapAnswers((lead.field_data || []).map((f: Obj) => [f.name, (f.values || []).join(", ")]));
+  const test = metaTestLead(lead.field_data || [], m, formName);
   const fcfg = forms[formId] || {};
   const extra = { ...m.extra, form: formName, ad: lead.ad_name, campaign: lead.campaign_name, adset: lead.adset_name, platform: lead.platform };
-  return ingest({
-    name: m.name, phone: m.phone, email: m.email, city: m.city,
+  const res = await ingest({
+    name: m.name, phone: m.phone, email: m.email, city: m.city, test,
     language: m.language || fcfg.language || cfg.default_language || "",
     source: src.name, source_id: src.id, ref: `fb:${lead.id || v.leadgen_id}`,
     campaign_id: fcfg.campaign_id || (await linkFormByKeywords(src.id, formId, formName, lead.campaign_name || "")) || cfg.campaign_id || null,
     tags: [formName, lead.platform === "ig" ? "Instagram" : ""].filter(Boolean),
     note: [lead.campaign_name ? `Ad campaign: ${lead.campaign_name}` : "", m.note].filter(Boolean).join("\n"), extra,
   });
+  // A lead without a phone number or email cannot be added: say so on the Page's card instead of dropping it silently
+  if (res?.status === "skipped") await sourceError(src.id, `A lead from the form “${formName || formId}” was not added: it has no phone number or email.`);
+  return res;
 }
 
 async function handleFacebook(req: Request, url: URL): Promise<Response> {
