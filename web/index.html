@@ -317,6 +317,11 @@ details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;b
 .bub-in{max-width:72%;padding:7px 10px 5px;border-radius:4px 12px 12px 12px;background:var(--surface);border:1px solid var(--line);overflow-wrap:anywhere;box-shadow:0 1px 1.5px rgba(20,24,40,.08);line-height:1.4}
 .bub-t{white-space:pre-wrap}
 .bub.out .bub-in{background:color-mix(in srgb,var(--call) 16%,var(--surface));border-color:transparent;border-radius:12px 4px 12px 12px}
+.wa-err{margin-top:6px;padding:6px 8px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:.8rem;display:flex;flex-direction:column;gap:2px}
+.wa-err b{font-size:.78rem}
+.wa-err span{color:var(--fg)}
+.wa-err details{color:var(--muted);font-size:.72rem}.wa-err summary{cursor:pointer;color:var(--danger)}
+.bub.out .bub-in:has(.wa-err){background:var(--surface);border:1px solid var(--danger-soft)}
 .bub-meta{font-size:.68rem;color:var(--muted);margin-top:2px;text-align:right;white-space:nowrap}
 .wa-comp{padding:8px 12px 12px;border-top:1px solid var(--line);background:var(--surface)}
 .wa-tbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}

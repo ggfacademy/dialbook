@@ -1370,6 +1370,16 @@ async function waBadge(){try{S.wa.unread=await rpc('wa_unread_count',{})||0;rend
 const waUsable=()=>S.wa.accounts.filter(a=>(a.shared||a.owner_id===S.me.id)&&a.status==='connected');
 const waNeedsTemplate=(acc,lastIn)=>acc&&(acc.provider==='meta'||acc.provider==='twilio')&&(!lastIn||now()-ts(lastIn)>24*36e5);
 function openChat(leadId){S.wa.lead=leadId;closeDrawer();closeModal();go('wa')}
+/* A failed WhatsApp message: a plain-language reason, with the provider's own words under "Details" */
+function waErrHTML(err){const e=String(err||'');let why='The provider did not accept this message.';
+  let t=e.match(/no approved template found with name '([^']+)' and language '([^']+)'/i);
+  if(t)why=`Template “${t[1]}” (${t[2]}) is not approved in Interakt under this exact name and language. Check Interakt → Templates, then Settings → WhatsApp → Templates here.`;
+  else if(/re-?engagement|24.?hour|outside.*window|131047/i.test(e))why='More than 24 hours since the customer last wrote: only an approved template can be sent.';
+  else if(/not.*(a )?whatsapp|invalid.*(number|phone)|131026|incapable/i.test(e))why='This number does not seem to be on WhatsApp.';
+  else if(/balance|credit|wallet|insufficient/i.test(e))why='Not enough balance in the WhatsApp provider account.';
+  else if(/param|variable|placeholder/i.test(e))why='The template values do not match the template (number of {{1}}, {{2}}… values).';
+  else if(/unauth|token|api key|401|403/i.test(e))why='The WhatsApp provider rejected the API key. Check Settings → WhatsApp.';
+  return `<div class="wa-err"><b>⚠ Not delivered</b><span>${esc(why)}</span><details><summary>Details</summary>${esc(e)}</details></div>`}
 function tick(s){return s==='read'?'<span title="Read" style="color:var(--accent)">✓✓</span>':s==='delivered'?'<span title="Delivered">✓✓</span>':s==='failed'?'<span title="Not sent" class="prio-hot">!</span>':s==='queued'?'<span title="Sending">…</span>':'<span title="Sent">✓</span>'}
 function fmtWhen(t){t=ts(t);if(!t)return'';return sod(t)===sod(now())?new Date(t).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):fmtD(t)}
 
@@ -1404,7 +1414,7 @@ async function waThread(rv,keepComposer){
   const acc=S.wa.accounts.find(a=>a.id===S.wa.sendAcc);
   let lastDay='';const bubbles=msgs.map(m=>{const a=S.wa.accounts.find(x=>x.id===m.account_id);const dd=new Date(ts(m.created_at));const day=dd.toDateString();
     const sep=day!==lastDay?`<div class="wa-day"><span>${esc(day===new Date().toDateString()?'Today':day===new Date(now()-DAY).toDateString()?'Yesterday':dd.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}))}</span></div>`:'';lastDay=day;
-    return sep+`<div class="bub ${m.direction}"><div class="bub-in">${m.template_name?`<span class="tag" style="margin-bottom:4px">Template · ${esc(m.template_name)}</span><br>`:''}<span class="bub-t">${esc(m.body)||'<i>(empty)</i>'}</span>${m.error?`<div class="small prio-hot">${esc(m.error)}</div>`:''}
+    return sep+`<div class="bub ${m.direction}"><div class="bub-in">${m.template_name?`<span class="tag" style="margin-bottom:4px">Template · ${esc(m.template_name)}</span><br>`:''}<span class="bub-t">${esc(m.body)||'<i>(empty)</i>'}</span>${m.error?waErrHTML(m.error):''}
     <div class="bub-meta" title="${esc((a?a.name+' · ':'')+fmtDT(m.created_at))}">${m.direction==='out'?esc(m.sender_id?nameOf(m.sender_id).split(' ')[0]:'Automatic')+' · ':''}${esc(dd.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}))} ${m.direction==='out'?tick(m.status):''}</div></div></div>`}).join('')||'<p class="muted small" style="text-align:center">No messages yet. Say hello, or send an approved template.</p>';
   const needT=waNeedsTemplate(acc,lastIn);
   if(!keepComposer||!$('#waMsgs')){
