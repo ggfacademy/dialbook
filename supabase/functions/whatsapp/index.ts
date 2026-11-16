@@ -7,7 +7,7 @@
 //   set_gateway   { url, api_key }          admin: address + key of the WhatsApp gateway (for QR login)
 //   save_account  { id?, name, provider, shared, phone, config, secrets }   admin
 //   delete_account{ id }                    admin, or the owner of a QR account
-//   sync_templates{ account_id }            admin: fetch approved templates (Meta, Twilio)
+//   sync_templates{ account_id }            admin: fetch approved templates (Meta, Twilio, Interakt)
 //   send          { lead_id, account_id, text? | template_id + params[] + header_url? }
 //   qr_start      { }                       any user: link their own WhatsApp, returns QR
 //   qr_status     { account_id }
@@ -249,6 +249,28 @@ async function syncTemplates(acc: Obj, sec: Obj): Promise<number> {
       }
       url = j?.meta?.next_page_url || null;
     }
+  } else if (acc.provider === "custom" && /api\.interakt\.ai/i.test(String(acc.config.url || ""))) {
+    // Interakt: its public API lists the approved templates (name, language, body, header) with the same key used for sending
+    if (!sec.token) throw new UserError("Save the Interakt API key as the secret \"token\" in Settings → WhatsApp first.");
+    const kinds: Obj = { IMAGE: "image", VIDEO: "video", DOCUMENT: "document" };
+    const { data: had } = await admin.from("wa_templates").select("name,language,header_url").eq("account_id", acc.id);
+    const keep: Obj = Object.fromEntries((had || []).map((t: Obj) => [`${t.name}|${t.language}`, t.header_url || ""]));
+    for (let offset = 0, page = 0; page < 20; page++) {
+      const r = await fetch(`https://api.interakt.ai/v1/public/track/organization/templates?offset=${offset}&autosubmitted_for=all&approval_status=APPROVED&language=all`,
+        { headers: { Authorization: `Basic ${sec.token}`, "Content-Type": "application/json" } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new UserError(`Interakt answered ${r.status}: ${String(j?.message || "").slice(0, 160)}`);
+      const list: Obj[] = j?.results?.templates || [];
+      for (const t of list) {
+        const body = String(t.body || "");
+        const hType = kinds[String(t.header_format || "").toUpperCase()] || "";
+        const key = `${t.name}|${t.language || "en"}`;
+        rows.push({ account_id: acc.id, name: t.name, language: t.language || "en", category: t.category || "", status: t.approval_status || "APPROVED", body, params: countParams(body),
+          external_id: t.id || "", header_type: hType, header_url: hType ? (keep[key] || t.header_handle_file_url || "") : "" });
+      }
+      offset += list.length;
+      if (!j?.has_next || !list.length) break;
+    }
   } else {
     throw new UserError("For this kind of number, add templates by hand in Settings → WhatsApp.");
   }
@@ -267,8 +289,10 @@ async function deliver(acc: Obj, sec: Obj, lead: Obj, o: { template?: Obj; param
   const headerUrl = String(o.headerUrl || template?.header_url || "").trim();
   if (template?.header_type && !/^https:\/\//i.test(headerUrl)) throw new UserError(`This template needs a public https link to its ${template.header_type}.`);
   const header = template?.header_type ? { type: String(template.header_type), url: headerUrl } : undefined;
-  const m: SendReq = { to: digits(lead.phone), text: String(o.text || ""), template, params: o.params, header, media: template ? undefined : o.media };
-  const shown = template ? renderTemplate(template.body || template.name, o.params)
+  // WhatsApp rejects a template whose {{1}}, {{2}}… value is empty ("variable value can not be null or empty"): never send one empty
+  const params = template ? o.params.map((p) => String(p ?? "").replace(/\s+/g, " ").trim() || "-") : o.params;
+  const m: SendReq = { to: digits(lead.phone), text: String(o.text || ""), template, params, header, media: template ? undefined : o.media };
+  const shown = template ? renderTemplate(template.body || template.name, params)
     : m.media ? [`📎 ${m.media.name}`, m.text, m.media.url].filter(Boolean).join("\n") : m.text!;
   let providerId = "", status = "sent", error: string | null = null;
   try {

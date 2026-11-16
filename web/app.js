@@ -1554,9 +1554,9 @@ function waHookModal(id,fresh){
 }
 function waTemplatesModal(id){
   const a=S.wa.accounts.find(x=>x.id===id);if(!a)return;const list=S.wa.templates.filter(t=>t.account_id===id);
-  const manual=a.provider==='custom'||a.provider==='qr';
+  const manual=a.provider==='custom'||a.provider==='qr',canSync=!manual||(a.provider==='custom'&&/api\.interakt\.ai/i.test(a.config?.url||''));
   modal(`<h2>Templates · ${esc(a.name)}</h2>${manual?'<p class="small muted">Add the templates approved with your provider (or, for your own WhatsApp, ready-made messages). Use {{1}}, {{2}} for values filled in when sending.</p>':'<p class="small muted">Templates are created and approved in your provider. Press Sync to fetch the latest.</p>'}
-    <div class="row" style="margin:10px 0">${!manual?`<button class="btn primary sm" data-act="waSync" data-id="${id}">Sync templates</button>`:''}</div>
+    <div class="row" style="margin:10px 0">${canSync?`<button class="btn primary sm" data-act="waSync" data-id="${id}">Sync approved templates from ${a.provider==='custom'?'Interakt':'the provider'}</button>`:''}</div>
     <div class="list">${list.map(t=>`<div class="li" style="align-items:flex-start"><div class="grow"><b>${esc(t.name)}</b> <span class="small muted">${esc(t.language)} · ${esc(t.status)}${t.category?' · '+esc(t.category):''}${t.header_type?' · '+esc(t.header_type)+' header':''}</span><div class="small" style="white-space:pre-wrap">${esc(t.body)}</div></div><button class="btn sm ghost" data-act="waTplDel" data-id="${t.id}" data-v="${id}" aria-label="Delete">${ic('x')}</button></div>`).join('')||'<p class="muted small">No templates yet.</p>'}</div>
     ${manual?`<h3 style="margin-top:16px">Add a template</h3><div class="grid2" style="margin-top:8px"><label class="field"><span>Template name</span><input class="input mono" id="ntName" placeholder="e.g. followup_1"></label><label class="field"><span>Language code</span><input class="input mono" id="ntLang" value="en"></label></div>
       <label class="field" style="margin-top:8px"><span>Message</span><textarea class="input" id="ntBody" rows="3" placeholder="Hi {{1}}, thanks for your interest in {{2}}."></textarea></label>
