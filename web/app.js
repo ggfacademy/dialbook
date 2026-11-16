@@ -323,7 +323,9 @@ const thSort=(k,label)=>{const on=S.lsort.k===k;return `<button class="th-sort${
 function cameIn(l){const t=ts(l.last_enquiry_at||l.created_at);if(!t)return '<span class="muted">—</span>';const age=now()-t;
   const flag=!l.call_count&&isOpen(l)&&!l.dnd&&!l.contact_only?(age>30*6e4?'<b class="ci late">Not called</b>':'<b class="ci new">New</b>'):'';
   return `${flag}<span class="${flag&&age>30*6e4?'ci-late':''}">${esc(rel(t))}</span>${l.source?`<div class="ci-src" title="${esc(l.source)}">${esc(l.source)}</div>`:''}`}
-function rowMenu(btn,id){$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)return;
+const rmLead=id=>[...(S.pageLeads||[]),...(S.fuLeads||[])].find(x=>x.id===id);
+const rmReload=()=>(V[S.view]?.load?V[S.view].load():Promise.resolve()).catch(fail);
+function rowMenu(btn,id){$('#rowMenu')?.remove();const l=rmLead(id);if(!l)return;
   const m=document.createElement('div');m.id='rowMenu';m.className='row-menu';m.setAttribute('role','menu');m.dataset.id=id;
   const d0=new Date();const at=(days,h,mi=0)=>{const d=new Date(d0);d.setDate(d.getDate()+days);d.setHours(h,mi,0,0);return d.getTime()};
   const fus=[['In 2 hours',now()+2*36e5],['Today 5 pm',at(0,17)],['Tomorrow 11 am',at(1,11)],['In 3 days, 11 am',at(3,11)]].filter(([,t])=>t>now());
@@ -383,15 +385,41 @@ V.leads={mount(){const f=S.lf;
 
 /* FOLLOW-UPS */
 V.followups={mount(){
-  return head('Follow-ups','Callbacks you promised, sorted by time.',`${isMgr()?`<select class="input" id="fuAgent" style="width:auto" aria-label="Caller">${agentOpts(S.fuAgent,'Whole team')}</select>`:''}<button class="btn call" data-act="fuDial">${ic('phone')}Call all due now</button>`)+`<div id="vb">${loadingHTML}</div>`;
+  return head('Follow-ups','Callbacks you promised. Call the overdue ones first.',`<select class="input" id="fuCamp" style="width:auto" aria-label="Campaign">${campOpts(S.fuCamp||'','All campaigns')}</select>${isMgr()?`<select class="input" id="fuAgent" style="width:auto" aria-label="Caller">${agentOpts(S.fuAgent,'Whole team')}</select>`:''}<button class="btn call" data-act="fuDial">${ic('phone')}Call all due now</button>`)+
+  `<div class="fu-tabs" id="fuTabs" role="tablist" aria-label="When">${loadingHTML}</div><div id="vb">${loadingHTML}</div>`;
 },async load(){
   const rv=S.rv;const agent=isMgr()?S.fuAgent:S.me.id;
-  const base=()=>{let q=sb.from('leads').select('*').not('stage','in','(won,lost)').not('next_follow_up_at','is',null).order('next_follow_up_at').limit(200);if(agent)q=q.eq('assigned_to',agent);return q};
-  const n=iso(now()),e=iso(endToday()),w=iso(endToday()+7*DAY);
-  const [o,t,u]=await Promise.all([R(base().lt('next_follow_up_at',n)),R(base().gte('next_follow_up_at',n).lt('next_follow_up_at',e)),R(base().gte('next_follow_up_at',e).lt('next_follow_up_at',w))]);
-  if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
-  vb.innerHTML=`<div class="fu-sec"><h2>Overdue <span class="badge">${o.data.length}</span></h2>${fuList(o.data)}</div><div class="fu-sec"><h2>Today <span class="pill">${t.data.length}</span></h2>${fuList(t.data)}</div><div class="fu-sec"><h2>Next 7 days <span class="pill">${u.data.length}</span></h2>${fuList(u.data)}</div>`;
+  const b0=sod(now()),e=endToday(),tm=e+DAY,w=e+7*DAY;
+  const R5=[['over','Overdue',null,now()],['today','Later today',now(),e],['tom','Tomorrow',e,tm],['week','Next 7 days',tm,w]];
+  const base=(cnt)=>{let q=sb.from('leads').select('*',cnt?{count:'exact'}:undefined).not('stage','in','(won,lost)').not('next_follow_up_at','is',null);if(agent)q=q.eq('assigned_to',agent);if(S.fuCamp)q=q.eq('campaign_id',S.fuCamp);return q};
+  const rng=(q,a,b)=>{if(a!=null)q=q.gte('next_follow_up_at',iso(a));return q.lt('next_follow_up_at',iso(b))};
+  const counts=await Promise.all(R5.map(([,,a,b])=>rng(base(true),a,b).limit(1).then(r=>r.count||0,()=>0)));
+  if(rv!==S.rv)return;
+  if(!S.fuTab)S.fuTab=counts[0]?'over':'today';
+  const cur=R5.find(r=>r[0]===S.fuTab)||R5[0];const lim=S.fuLim||200;
+  const {data}=await R(rng(base(),cur[2],cur[3]).order('next_follow_up_at',{ascending:true}).limit(lim));
+  if(rv!==S.rv)return;S.fuLeads=data;
+  const tb=$('#fuTabs');if(tb)tb.innerHTML=R5.map(([id,l],k)=>`<button class="fu-tab ${id}${S.fuTab===id?' on':''}" role="tab" aria-selected="${S.fuTab===id}" data-act="fuTab" data-v="${id}"><span class="fu-tab-n num">${counts[k]}</span><span>${l}</span></button>`).join('');
+  const vb=$('#vb');if(!vb)return;const total=counts[R5.indexOf(cur)];
+  if(!data.length){vb.innerHTML=`<div class="empty"><div class="em-ic">${ic('clock')}</div><h3>${cur[0]==='over'?'No overdue follow-ups 🎉':'Nothing scheduled'}</h3><p>${cur[0]==='over'?'Every promised callback is on time.':'Follow-ups you set after a call show up here.'}</p></div>`;return}
+  // overdue: grouped by how late; others: by day
+  const grp=l=>{const f=ts(l.next_follow_up_at);if(cur[0]==='over'){const d=Math.floor((b0-sod(f))/DAY);return d>=7?'More than a week late':d>=2?'2 to 7 days late':d===1?'Yesterday':'Earlier today'}
+    return cur[0]==='week'?new Date(f).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'}):cur[0]==='tom'?'Tomorrow':'Later today'};
+  let last='',html='';for(const l of data){const g=grp(l);if(g!==last){html+=`<div class="fu-grp">${esc(g)}</div>`;last=g}html+=fuRow(l,cur[0])}
+  vb.innerHTML=`<div class="fu-list">${html}</div>${total>data.length?`<div class="pager"><span class="small muted">Showing ${data.length} of ${total}</span><button class="btn sm" data-act="fuMore">Show more</button></div>`:''}`;
 }};
+/* One follow-up row: when, who, last call, and quick actions */
+function fuRow(l,tab){const f=ts(l.next_follow_up_at),d=dispo(l.last_outcome),late=f<now();
+  const lateBy=late?(()=>{const m=Math.round((now()-f)/6e4);return m<60?m+' min late':m<1440?Math.round(m/60)+' h late':(Math.round(m/1440)===1?'1 day late':Math.round(m/1440)+' days late')})():'';
+  const c=camp(l.campaign_id);
+  return `<div class="fu-row${late?' late':''}" data-act="lead" data-id="${l.id}">
+   <div class="fu-when"><b>${esc(new Date(f).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}))}</b><span>${late?esc(lateBy):esc(sod(f)===sod(now())?'Today':new Date(f).toLocaleDateString('en-IN',{day:'numeric',month:'short'}))}</span>${late&&sod(f)!==sod(now())?`<span class="fu-date">${esc(new Date(f).toLocaleDateString('en-IN',{day:'numeric',month:'short'}))}</span>`:''}</div>
+   ${avatar(l.name)}
+   <div class="fu-main"><div class="lead-name"><span class="ln">${esc(l.name||'Unnamed')}</span>${l.priority?`<span class="prio-chip ${esc(l.priority)}">${esc(l.priority[0].toUpperCase()+l.priority.slice(1))}</span>`:''}${stagePill(l.stage)}</div>
+     <div class="fu-sub"><span class="lead-phone">${esc(l.phone)}</span>${c?`<span><span class="fu-dot">· </span>${esc(c.name)}</span>`:''}${l.language?`<span class="chip-lang">${esc(l.language)}</span>`:''}</div>
+     <div class="fu-sub">${l.last_call_at?`<span class="oc ${d?d.connected?'ok':'no':'unk'}">${esc(d?.name||'Called')}</span><span class="muted">${esc(rel(l.last_call_at))} · ${l.call_count||0} call${l.call_count===1?'':'s'}</span>`:'<span class="muted">Not called yet</span>'}</div></div>
+   ${isMgr()&&l.assigned_to?`<span class="fu-agent hide-sm">${avatar(nameOf(l.assigned_to),'xs')}<span>${esc(nameOf(l.assigned_to))}</span></span>`:''}
+   <div class="row-acts">${l.dnd?'':`<a class="btn call" href="tel:${esc(normPhone(l.phone))}" title="Call ${esc(l.name)}" aria-label="Call ${esc(l.name)}">${ic('phone')}</a><button class="btn wa" data-act="waOpen" data-id="${l.id}" title="WhatsApp" aria-label="WhatsApp ${esc(l.name)}">${ic('msg')}</button>`}<button class="btn rm-btn" data-act="rowMenu" data-id="${l.id}" title="Reschedule, stage, priority" aria-label="Quick actions for ${esc(l.name)}" aria-haspopup="menu">⋮</button></div></div>`}
 
 /* PIPELINE */
 V.pipeline={mount(){const by=S.pf.by||'stage';
@@ -1248,10 +1276,12 @@ document.addEventListener('click',async e=>{
     case'lSort':{const so=S.lsort;S.lsort=so.k!==v?{k:v,asc:v==='name'}:so.asc===(v==='name')?{k:v,asc:!so.asc}:{k:'',asc:false};S.page=0;V.leads.load().catch(fail);break}
     case'moreF':S.moreF=!S.moreF;render();break;
     case'rowMenu':rowMenu(t,id);break;
-    case'rmStage':{$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)break;if(await changeStage(l,v)===false)break;toast(`${l.name||'Lead'} moved to ${stage(v)?.name||v}`);V.leads.load().catch(fail);break}
-    case'rmFu':{$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)break;const tt=+v;
-      await R(sb.from('leads').update({next_follow_up_at:tt?iso(tt):null}).eq('id',id));await addActivity(id,'note',tt?'Follow-up set for '+fmtDT(tt):'Follow-up cleared');toast(tt?'Follow-up '+fmtDT(tt):'Follow-up cleared');V.leads.load().catch(fail);break}
-    case'rmPrio':{$('#rowMenu')?.remove();await R(sb.from('leads').update({priority:v}).eq('id',id));toast(v?'Marked '+v[0].toUpperCase()+v.slice(1):'Priority cleared');V.leads.load().catch(fail);break}
+    case'fuTab':S.fuTab=v;S.fuLim=200;V.followups.load().catch(fail);break;
+    case'fuMore':S.fuLim=(S.fuLim||200)+200;V.followups.load().catch(fail);break;
+    case'rmStage':{$('#rowMenu')?.remove();const l=rmLead(id);if(!l)break;if(await changeStage(l,v)===false)break;toast(`${l.name||'Lead'} moved to ${stage(v)?.name||v}`);rmReload();break}
+    case'rmFu':{$('#rowMenu')?.remove();const l=rmLead(id);if(!l)break;const tt=+v;
+      await R(sb.from('leads').update({next_follow_up_at:tt?iso(tt):null}).eq('id',id));await addActivity(id,'note',tt?'Follow-up set for '+fmtDT(tt):'Follow-up cleared');toast(tt?'Follow-up '+fmtDT(tt):'Follow-up cleared');rmReload();break}
+    case'rmPrio':{$('#rowMenu')?.remove();await R(sb.from('leads').update({priority:v}).eq('id',id));toast(v?'Marked '+v[0].toUpperCase()+v.slice(1):'Priority cleared');rmReload();break}
     case'lfClear':S.lf={...S.lf,q:'',stage:'',camp:'',agent:'',source:'',prio:'',lang:'',fu:'',from:'',to:''};S.page=0;S.sel.clear();render();break;
     case'campLeads':S.lf={q:'',stage:'',camp:id,agent:'',source:'',prio:'',fu:''};S.page=0;go('leads');break;
     case'campDial':S.dialSetup.camp=id;S.dialer=null;go('dialer');break;
@@ -1264,7 +1294,7 @@ document.addEventListener('click',async e=>{
     case'approve':{await R(sb.from('profiles').update({active:true,role:$('#ap-'+id).value}).eq('id',id));toast('Approved');render();break}
     case'distribute':distributeModal();break;
     case'dsRun':{const ids=$$('.dsA:checked').map(x=>x.value);if(!ids.length)return toast('Pick at least one person');t.disabled=true;const n=await rpc('distribute_leads',{p_which:$('#dsWhich').value,p_campaign:$('#dsCamp').value||null,p_agents:ids});closeModal();toast(`${n} leads shared out`);render();break}
-    case'fuDial':{const agent=isMgr()?S.fuAgent:S.me.id;let q=sb.from('leads').select('id').not('stage','in','(won,lost)').eq('dnd',false).lt('next_follow_up_at',iso(endToday())).order('next_follow_up_at').limit(500);if(agent)q=q.eq('assigned_to',agent);const {data}=await R(q);startDialer(data.map(x=>x.id));break}
+    case'fuDial':{const agent=isMgr()?S.fuAgent:S.me.id;let q=sb.from('leads').select('id').not('stage','in','(won,lost)').eq('dnd',false).lt('next_follow_up_at',iso(endToday())).order('next_follow_up_at').limit(500);if(agent)q=q.eq('assigned_to',agent);if(S.fuCamp)q=q.eq('campaign_id',S.fuCamp);const {data}=await R(q);startDialer(data.map(x=>x.id));break}
     case'dsQ':S.dialSetup.queue=v;render();break;
     case'dStart':{t.disabled=true;const d=S.dialSetup;let q=queueQuery('id');q=d.order==='new'?q.order('created_at',{ascending:false}):d.order==='hot'?(d.queue==='fresh'?q.order('priority_rank').order('created_at',{ascending:false}):q.order('priority_rank').order('next_follow_up_at',{nullsFirst:false})):d.queue==='due'?q.order('next_follow_up_at'):q.order('created_at');const {data}=await R(q.limit(500));startDialer(data.map(x=>x.id));break}
     case'dSkip':tStop('dc');S.dialer.skipped++;S.dialer.i++;S.pick.dc=null;render();break;
@@ -1298,7 +1328,8 @@ document.addEventListener('change',async e=>{
       for(const c of chunk(ids,200)){await R(sb.from('leads').update(d).in('id',c));await R(sb.from('activities').insert(c.map(x=>({lead_id:x,actor_id:S.me.id,kind:'stage',data:{to:v}}))))}toast(`${ids.length} leads moved`)}
     if(id==='bk-camp'){for(const c of chunk(ids,200))await R(sb.from('leads').update({campaign_id:v==='_none'?null:v}).in('id',c));toast(`${ids.length} leads updated`)}
     S.sel.clear();return V.leads.load()}
-  if(id==='fuAgent'){S.fuAgent=t.value;return V.followups.load()}
+  if(id==='fuAgent'){S.fuAgent=t.value;S.fuTab='';return V.followups.load()}
+  if(id==='fuCamp'){S.fuCamp=t.value;S.fuTab='';return V.followups.load()}
   if(id==='pfCamp'){S.pf.camp=t.value;return V.pipeline.load()}
   if(id==='pfAgent'){S.pf.agent=t.value;return V.pipeline.load()}
   if(id==='rFrom'||id==='rTo'){if(!t.value)return;S.rep[id==='rFrom'?'from':'to']=new Date(t.value+'T00:00').getTime();if(S.rep.to<S.rep.from)S.rep.to=S.rep.from;S.rep.preset='';$$('[data-act=rRange]').forEach(x=>x.setAttribute('aria-pressed','false'));return V.reports.load()}
