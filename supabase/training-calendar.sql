@@ -4,7 +4,7 @@
 -- An admin pastes the calendar's "Secret address in iCal format" once (Training calendar page → Calendar link,
 -- or Google Calendar → Settings → the calendar → Integrate calendar). Every 30 minutes the database fetches it,
 -- keeps the events whose title matches the keywords (MSME, GAC, GAA, GJSCI, TRAINING, BATCH) and shows them on
--- the Training calendar page. Other events in that calendar (payments, reminders…) are never stored.
+-- the Training calendar page (titles with "cancelled" are skipped). Other events in that calendar (payments, reminders…) are never stored.
 -- The link itself is kept where no Dialbook login can read it.
 
 create extension if not exists pg_cron;
@@ -63,7 +63,7 @@ language sql immutable as $$
       status
     from f where uid is not null and ds is not null)
   select uid, title, starts, ends, location, notes from u
-   where status <> 'CANCELLED' and title ~* coalesce(nullif(p_keywords, ''), 'MSME|GAC|GAA|GJSCI|TRAINING|BATCH')
+   where status <> 'CANCELLED' and title !~* 'cancel' and title ~* coalesce(nullif(p_keywords, ''), 'MSME|GAC|GAA|GJSCI|TRAINING|BATCH')
 $$;
 
 -- Ask Google for the calendar (the answer arrives a few seconds later and is read by training_cal_apply)
