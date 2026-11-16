@@ -36,6 +36,7 @@ home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
 leads:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
 phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
 clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
 cols:'<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/>',
 flag:'<path d="M5 21V4h11l-2 4 2 4H5"/>',
 team:'<circle cx="12" cy="7" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/>',
@@ -451,6 +452,52 @@ function pfCard(l,by){const fu=ts(l.next_follow_up_at),open=isOpen(l),over=fu&&o
    <div class="kc-top">${avatar(l.name,'sm')}<div class="grow" style="min-width:0"><div class="kc-name">${esc(l.name||'Unnamed')}</div><div class="lead-phone">${esc(l.phone)}</div></div>${l.priority?`<span class="prio-chip ${esc(l.priority)}">${esc(l.priority[0].toUpperCase()+l.priority.slice(1))}</span>`:''}</div>
    ${by!=='stage'||sub?`<div class="kc-sub">${by!=='stage'?stagePill(l.stage):''}${sub?`<span class="kc-camp">${esc(sub)}</span>`:''}</div>`:''}
    <div class="kc-foot"><span class="grow">${fu&&open?`<span class="fu ${over?'over':today?'today':''}">${over?'<b>Overdue</b>':today?'<b>Today</b>':''}${esc(today?new Date(fu).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):fmtD(fu))}</span>`:l.last_call_at?`<span class="oc ${d?d.connected?'ok':'no':'unk'}">${esc(d?.name||'Called')}</span>`:'<span class="muted">Not called yet</span>'}</span>${isMgr()&&by!=='agent'&&l.assigned_to?`<span title="${esc(nameOf(l.assigned_to))}">${avatar(nameOf(l.assigned_to),'xs')}</span>`:''}${l.language?`<span class="chip-lang">${esc(l.language)}</span>`:''}</div></div>`}
+
+/* TRAINING CALENDAR: batches from the Google Calendar (supabase/training-calendar.sql) */
+const TB_CITY={chn:'Chennai',chennai:'Chennai',vjw:'Vijayawada',vijayawada:'Vijayawada',hyd:'Hyderabad',hyderabad:'Hyderabad',mum:'Mumbai',mumbai:'Mumbai',mys:'Mysuru',mysuru:'Mysuru',mysore:'Mysuru',blr:'Bengaluru',bangalore:'Bengaluru',bengaluru:'Bengaluru',cbe:'Coimbatore',coimbatore:'Coimbatore',madurai:'Madurai',delhi:'Delhi',pune:'Pune',kolkata:'Kolkata'};
+function tbInfo(b){const w=String(b.title||'').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const city=w.map(x=>TB_CITY[x]).find(Boolean)||'';const kind=w.includes('gjsci')?'gjsci':(w.includes('gaa')||w.includes('audit'))?'gaa':'gac';
+  const course=kind==='gaa'?'Gold Audit and Appraisal':kind==='gjsci'?'Gold Appraisal – GJSCI':'Gold Appraisal (GAC)';
+  const c=S.campaigns.find(c=>{const n=c.name.toLowerCase();return city&&n.includes(city.toLowerCase().slice(0,6))&&(kind==='gaa'?/audit/.test(n):kind==='gjsci'?/gjsci/.test(n):!/audit|gjsci/.test(n))});
+  return {city,kind,course,camp:c,color:kind==='gaa'?'var(--s6)':kind==='gjsci'?'var(--s5)':'var(--s2)'}}
+const tbDay=d=>new Date(d+'T00:00:00').getTime();
+const tbFmt=(a,b)=>{const A=new Date(tbDay(a)),B=new Date(tbDay(b));const m=x=>x.toLocaleDateString('en-IN',{month:'short'});
+  return a===b?`${A.getDate()} ${m(A)} ${A.getFullYear()}`:A.getMonth()===B.getMonth()?`${A.getDate()}–${B.getDate()} ${m(B)} ${B.getFullYear()}`:`${A.getDate()} ${m(A)} – ${B.getDate()} ${m(B)} ${B.getFullYear()}`};
+V.training={mount(){
+  return head('Training calendar','Upcoming batches from the training Google Calendar, for everyone to see while talking to leads.',isAdmin()?`<button class="btn" data-act="tbLink">${ic('cal')}Calendar link</button>`:'')+`<div id="vb">${loadingHTML}</div>`;
+},async load(){
+  const rv=S.rv;try{await sb.rpc('training_cal_apply')}catch(e){}
+  const [b,st]=await Promise.all([sb.from('training_batches').select('*').order('starts'),sb.rpc('training_cal_status')]);
+  if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
+  if(b.error){vb.innerHTML=`<div class="empty"><h3>Not switched on yet</h3><p>Ask your admin to run <b>supabase/training-calendar.sql</b> in Supabase.</p></div>`;return}
+  const t0=sod(now()),all=b.data||[];const up=all.filter(x=>tbDay(x.ends)>=t0);S.tb=all;
+  const ids=[...new Set(up.map(x=>tbInfo(x).camp?.id).filter(Boolean))];
+  const cnt={};await Promise.all(ids.map(async id=>{const {count}=await sb.from('leads').select('id',{count:'exact',head:true}).eq('campaign_id',id).not('stage','in','(won,lost)');cnt[id]=count||0}));
+  if(rv!==S.rv)return;
+  const s=st.data||{};
+  const bar=`<div class="tb-sync small muted">${s.linked?`Synced from Google Calendar${s.last_sync?' · '+esc(rel(s.last_sync)):''}${s.last_error?` · <span class="prio-hot">${esc(s.last_error)}</span>`:''}`:`Showing the batches copied from Google Calendar on 16 Nov.${isAdmin()?' Click <b>Calendar link</b> to keep it in step automatically.':''}`}</div>`;
+  const cards=up.length?up.map(x=>{const i=tbInfo(x),a=tbDay(x.starts),e=tbDay(x.ends),days=Math.round((e-a)/DAY)+1;
+    const when=a<=t0&&e>=t0?'<b class="tb-when live">Running now</b>':a-t0===DAY?'<b class="tb-when soon">Starts tomorrow</b>':`<b class="tb-when${a-t0<=7*DAY?' soon':''}">In ${Math.round((a-t0)/DAY)} days</b>`;
+    const d=new Date(a);
+    return `<div class="tb-card" style="--tc:${i.color}"><div class="tb-date"><span>${esc(d.toLocaleDateString('en-IN',{month:'short'}))}</span><b>${d.getDate()}</b><span>${esc(d.toLocaleDateString('en-IN',{weekday:'short'}))}</span></div>
+      <div class="tb-main"><div class="tb-title">${esc(i.course)}${i.city?` · <span>${esc(i.city)}</span>`:''}</div>
+      <div class="small muted">${esc(tbFmt(x.starts,x.ends))} · ${days} day${days>1?'s':''}${i.camp&&cDet(i.camp).timing?' · '+esc(cDet(i.camp).timing):''}</div>
+      ${x.location||(i.camp&&cDet(i.camp).venue)?`<div class="small">📍 ${esc(x.location||cDet(i.camp).venue)}</div>`:''}
+      <div class="small muted">Google Calendar: “${esc(x.title)}”</div></div>
+      <div class="tb-side">${when}${i.camp?`<button class="btn sm" data-act="campLeads" data-id="${i.camp.id}">${cnt[i.camp.id]??0} open leads</button>`:'<span class="small muted">No campaign yet</span>'}</div></div>`}).join(''):'<div class="empty"><h3>No upcoming batches</h3><p>Add them to the training Google Calendar; they show up here within 30 minutes.</p></div>';
+  // three months at a glance
+  const months=[0,1,2].map(k=>{const f=new Date(new Date(t0).getFullYear(),new Date(t0).getMonth()+k,1);const y=f.getFullYear(),m=f.getMonth(),dn=new Date(y,m+1,0).getDate(),lead=(f.getDay()+6)%7;
+    let cells='';for(let i=0;i<lead;i++)cells+='<i></i>';
+    for(let d=1;d<=dn;d++){const t=new Date(y,m,d).getTime();const hit=all.filter(x=>tbDay(x.starts)<=t&&tbDay(x.ends)>=t);const i=hit[0]?tbInfo(hit[0]):null;
+      cells+=`<span class="${t===t0?'today ':''}${hit.length?'on':''}" ${hit.length?`style="--tc:${i.color}" title="${esc(hit.map(h=>h.title).join(', '))}"`:''}>${d}</span>`}
+    return `<div class="tb-month"><b>${esc(f.toLocaleDateString('en-IN',{month:'long',year:'numeric'}))}</b><div class="tb-grid">${['M','T','W','T','F','S','S'].map(x=>`<em>${x}</em>`).join('')}${cells}</div></div>`}).join('');
+  vb.innerHTML=bar+`<div class="tb-wrap"><div class="tb-list">${cards}</div><div class="tb-months">${months}<div class="tb-legend small"><span style="--tc:var(--s2)">Gold Appraisal</span><span style="--tc:var(--s6)">Gold Audit</span><span style="--tc:var(--s5)">GJSCI</span></div></div></div>`;
+}};
+function tbLinkModal(){modal(`<h2>Training calendar link</h2><p class="small muted" style="margin-top:-6px">Dialpro reads the training dates from this Google Calendar every 30 minutes. Only events whose title has MSME, GAC, GAA, GJSCI, TRAINING or BATCH are shown; nothing else from the calendar is stored.</p>
+  <ol class="small" style="padding-left:18px;line-height:1.7"><li>Open <b>Google Calendar</b> on a computer (the account that owns the training calendar, e.g. sathishgold24@gmail.com).</li><li>⚙ <b>Settings</b> → on the left, click the calendar's name → <b>Integrate calendar</b>.</li><li>Copy <b>Secret address in iCal format</b> (ends with <i>.ics</i>) and paste it here.</li></ol>
+  <label class="field"><span>Secret address in iCal format</span><input class="input mono" id="tbUrl" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" autocomplete="off"></label>
+  <p class="small muted">Keep this link private: anyone with it can see that calendar. It is stored where no Dialpro login can read it.</p>
+  <div class="row" style="margin-top:10px"><button class="btn primary" data-act="tbSave">Save and sync now</button><button class="btn" data-act="closeMd">Cancel</button></div>`)}
 
 /* CAMPAIGNS */
 V.campaigns={mount(){
@@ -1067,7 +1114,7 @@ async function exportCalls(){toast('Preparing export…');try{
 function exportAgents(){const st=S.repStats;if(!st)return;saveCSV(`caller-summary-${toDateInput(S.rep.from)}-to-${toDateInput(S.rep.to)}.csv`,[['Caller','Calls','Connected','Connect %','Talk time (min)','Avg call (sec)','Interested','Converted','Follow-ups set'],...[...S.team.map(m=>[m.name,st.by_agent?.[m.id]]),['AI agent',st.by_agent?.ai]].filter(x=>x[1]).map(([n,s])=>[n,s.n,s.conn,Math.round(s.n?s.conn/s.n*100:0),Math.round(s.talk/60),Math.round(s.conn?s.talk/s.conn:0),s.intr,s.conv,s.fus])])}
 
 /* ---------- navigation & render ---------- */
-const NAV=[['home','Dashboard','home'],['leads','Leads','leads'],['dialer','Calling mode','phone'],['followups','Follow-ups','clock'],['wa','WhatsApp','msg'],['chat','Team chat','team'],['pipeline','Pipeline','cols'],['campaigns','Campaigns','flag'],['ai','AI calling','spark'],['team','Team','team'],['reports','Reports','chart'],['settings','Settings','gear']];
+const NAV=[['home','Dashboard','home'],['leads','Leads','leads'],['dialer','Calling mode','phone'],['followups','Follow-ups','clock'],['wa','WhatsApp','msg'],['chat','Team chat','team'],['pipeline','Pipeline','cols'],['campaigns','Campaigns','flag'],['training','Training calendar','cal'],['ai','AI calling','spark'],['team','Team','team'],['reports','Reports','chart'],['settings','Settings','gear']];
 const TABS=['home','leads','dialer','followups','wa'];
 const DAILY=[...TABS,'chat'];
 function renderNav(){
@@ -1276,6 +1323,9 @@ document.addEventListener('click',async e=>{
     case'lSort':{const so=S.lsort;S.lsort=so.k!==v?{k:v,asc:v==='name'}:so.asc===(v==='name')?{k:v,asc:!so.asc}:{k:'',asc:false};S.page=0;V.leads.load().catch(fail);break}
     case'moreF':S.moreF=!S.moreF;render();break;
     case'rowMenu':rowMenu(t,id);break;
+    case'tbLink':tbLinkModal();break;
+    case'tbSave':{const u=($('#tbUrl')?.value||'').trim();if(!u)return toast('Paste the link first');t.disabled=true;
+      try{await rpc('training_cal_set_url',{p_url:u});closeModal();toast('Saved. Reading the calendar…');setTimeout(()=>{if(S.view==='training')V.training.load().catch(fail)},6000)}catch(e){t.disabled=false;fail(e)}break}
     case'fuTab':S.fuTab=v;S.fuLim=200;V.followups.load().catch(fail);break;
     case'fuMore':S.fuLim=(S.fuLim||200)+200;V.followups.load().catch(fail);break;
     case'rmStage':{$('#rowMenu')?.remove();const l=rmLead(id);if(!l)break;if(await changeStage(l,v)===false)break;toast(`${l.name||'Lead'} moved to ${stage(v)?.name||v}`);rmReload();break}
