@@ -146,11 +146,24 @@ td.r,th.r{text-align:right}
 .bulk select{background:var(--bg);color:var(--fg);border:0;border-radius:6px;padding:5px}
 
 /* kanban */
-.kanban{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(230px,1fr);gap:12px;overflow-x:auto;padding-bottom:10px}
-.col{background:var(--surface2);border-radius:var(--r);padding:10px;min-height:200px;display:flex;flex-direction:column;gap:8px}
+.kanban{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:10px;overflow-x:auto;padding-bottom:10px;align-items:start}
+.col{--cc:var(--muted);background:color-mix(in srgb,var(--surface2) 70%,var(--bg));border-radius:var(--r);min-height:200px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line)}
+.col-body{padding:8px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 240px);overflow-y:auto}
 .col.over{outline:2px dashed var(--accent)}
-.col-head{display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:2px 4px}
-.kcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;cursor:grab;display:flex;flex-direction:column;gap:4px}
+.col-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-top:4px solid var(--cc);background:color-mix(in srgb,var(--cc) 14%,var(--surface))}
+.col-head b{font-size:.92rem}
+.col-n{min-width:26px;text-align:center;padding:2px 8px;border-radius:99px;font-size:.78rem;font-weight:700;background:var(--surface);color:var(--fg);border:1px solid var(--line)}
+.col-more{align-self:center}
+.pf-by{gap:6px;margin:-4px 0 14px}
+.kcard{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;cursor:pointer;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 2px rgba(20,24,40,.05)}
+.kcard[draggable=true]{cursor:grab}
+.kcard.over::after{content:"";position:absolute;top:0;right:0;border-style:solid;border-width:0 12px 12px 0;border-color:transparent var(--danger) transparent transparent;border-top-right-radius:7px}
+.kc-top{display:flex;align-items:center;gap:8px}
+.kc-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kc-top .lead-phone{font-size:.74rem}
+.kc-sub{display:flex;align-items:center;gap:6px;min-width:0}
+.kc-camp{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kc-foot{display:flex;align-items:center;gap:6px;font-size:.78rem;border-top:1px dashed var(--line);padding-top:6px}
 .kcard:hover{border-color:var(--muted)}
 
 /* drawer + modal */

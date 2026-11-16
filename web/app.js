@@ -72,7 +72,7 @@ const CFG=window.DIALBOOK_CONFIG||{};
 let sb=null;
 const S={me:null,team:[],campaigns:[],cfg:clone(DEF),view:'home',
   lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},sel:new Set(),page:0,PS:(()=>{try{const v=+localStorage.getItem('dialbook.ps');return [50,100,250,500,1000].includes(v)?v:100}catch(e){return 100}})(),
-  range:'7',hAgent:'',lr:{p:'',by:'src'},pf:{camp:'',agent:''},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
+  range:'7',hAgent:'',lr:{p:'',by:'src'},pf:{camp:'',agent:'',by:'stage'},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
   fuAgent:'',openLead:null,dialer:null,dialSetup:{camp:'',queue:'fresh',order:'hot',who:'me'},
   pick:{},tm:{},rv:0,badge:0,sd:null,sdirty:false,ai:{camp:'',queue:'fresh',n:10}};
 
@@ -361,18 +361,35 @@ V.followups={mount(){
 }};
 
 /* PIPELINE */
-V.pipeline={mount(){
-  return head('Pipeline','Drag a card to move the lead to another stage.',`<select class="input" id="pfCamp" style="width:auto" aria-label="Campaign">${campOpts(S.pf.camp,'All campaigns')}</select>${isMgr()?`<select class="input" id="pfAgent" style="width:auto" aria-label="Caller">${agentOpts(S.pf.agent,'Anyone')}</select>`:''}`)+`<div id="vb">${loadingHTML}</div>`;
+V.pipeline={mount(){const by=S.pf.by||'stage';
+  const g=[['stage','Stages'],['camp','Campaigns'],...(isMgr()?[['agent','Telecallers']]:[])];
+  return head('Pipeline',by==='stage'?'Leads grouped by stage. Drag a card to move the lead to another stage.':by==='camp'?'Open leads grouped by campaign.':'Open leads grouped by telecaller.',`<select class="input" id="pfCamp" style="width:auto" aria-label="Campaign">${campOpts(S.pf.camp,'All campaigns')}</select>${isMgr()?`<select class="input" id="pfAgent" style="width:auto" aria-label="Caller">${agentOpts(S.pf.agent,'Anyone')}</select>`:''}`)+
+  `<div class="row pf-by" role="group" aria-label="Group by"><span class="small muted">Group by</span>${g.map(([v,l])=>`<button class="chip-toggle" data-act="pfBy" data-v="${v}" aria-pressed="${by===v}">${l}</button>`).join('')}</div><div id="vb">${loadingHTML}</div>`;
 },async load(){
-  const rv=S.rv;const agent=isMgr()?(S.pf.agent||null):S.me.id;
-  const summ=await rpc('lead_summary',{p_agent:agent,p_campaign:S.pf.camp||null,p_tz:TZ});
-  const cols=await Promise.all(S.cfg.stages.map(s=>{let q=sb.from('leads').select('*').eq('stage',s.id).order('updated_at',{ascending:false}).limit(40);if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);if(S.pf.camp)q=q.eq('campaign_id',S.pf.camp);return R(q).then(r=>r.data)}));
+  const rv=S.rv;const agent=isMgr()?(S.pf.agent||null):S.me.id;const by=S.pf.by||'stage';
+  const base=()=>{let q=sb.from('leads').select('*',{count:'exact'}).order('updated_at',{ascending:false}).limit(40);if(S.hasContacts)q=q.eq('contact_only',false);if(agent)q=q.eq('assigned_to',agent);if(S.pf.camp)q=q.eq('campaign_id',S.pf.camp);return q};
+  const PAL=['var(--s1)','var(--s2)','var(--s6)','var(--s4)','var(--s5)','var(--s8)','var(--s3)','var(--s7)'];
+  let cols;
+  if(by==='stage'){const summ=await rpc('lead_summary',{p_agent:agent,p_campaign:S.pf.camp||null,p_tz:TZ});
+    const rs=await Promise.all(S.cfg.stages.map(st=>R(base().eq('stage',st.id))));
+    cols=S.cfg.stages.map((st,i)=>({key:st.id,name:st.name,color:stageColor(st.id),rows:rs[i].data,n:summ.stages?.[st.id]?.n??rs[i].count??0,val:summ.stages?.[st.id]?.value||0,drop:true}))}
+  else{const list=by==='camp'?[...S.campaigns.filter(c=>c.active!==false&&(!S.pf.camp||c.id===S.pf.camp)).map(c=>({key:c.id,name:c.name})),...(S.pf.camp?[]:[{key:'_none',name:'No campaign'}])]
+      :[...agents().filter(m=>!agent||m.id===agent).map(m=>({key:m.id,name:m.name})),...(agent?[]:[{key:'_none',name:'Unassigned'}])];
+    const rs=await Promise.all(list.map(c=>{let q=base().not('stage','in','(won,lost)');const col=by==='camp'?'campaign_id':'assigned_to';q=c.key==='_none'?q.is(col,null):q.eq(col,c.key);return R(q)}));
+    cols=list.map((c,i)=>({...c,color:c.key==='_none'?'var(--muted)':PAL[i%PAL.length],rows:rs[i].data,n:rs[i].count||0,val:0})).filter(c=>c.n||c.key!=='_none')}
   if(rv!==S.rv)return;const vb=$('#vb');if(!vb)return;
-  vb.innerHTML=`<div class="kanban">${S.cfg.stages.map((s,i)=>{const ls=cols[i],n=summ.stages?.[s.id]?.n||0,val=summ.stages?.[s.id]?.value||0;
-    return `<div class="col" data-stage="${s.id}"><div class="col-head"><span style="color:${stageColor(s.id)}">● <span style="color:var(--fg)">${esc(s.name)}</span></span><span class="small muted num">${n}${val?' · '+inr(val):''}</span></div>
-    ${ls.map(l=>`<div class="kcard" draggable="true" data-id="${l.id}" data-act="lead"><b>${esc(l.name||'Unnamed')}</b><span class="lead-phone">${esc(l.phone)}</span><span class="small muted">${isMgr()?esc(nameOf(l.assigned_to))+' · ':''}${l.next_follow_up_at&&isOpen(l)?'Follow-up '+esc(fmtD(l.next_follow_up_at)):l.last_call_at?'Called '+rel(l.last_call_at):'Not called'}</span>${+l.value?`<span class="small num">${inr(l.value)}</span>`:''}</div>`).join('')}
-    ${n>ls.length?`<button class="btn sm" data-act="stageLeads" data-v="${s.id}">+${n-ls.length} more in Leads</button>`:''}</div>`}).join('')}</div>`;
+  vb.innerHTML=cols.length?`<div class="kanban">${cols.map(c=>`<div class="col${c.drop?'':' nodrop'}" ${c.drop?`data-stage="${esc(c.key)}"`:''} style="--cc:${c.color}"><div class="col-head"><div class="grow"><b>${esc(c.name)}</b>${c.val?`<div class="small muted num">${inr(c.val)}</div>`:''}</div><span class="col-n num">${c.n}</span></div>
+    <div class="col-body">${c.rows.map(l=>pfCard(l,by)).join('')||'<p class="small muted" style="text-align:center;margin:18px 0">No leads</p>'}
+    ${c.n>c.rows.length?`<button class="btn sm col-more" data-act="stageLeads" data-v="${esc(by+':'+c.key)}">+${c.n-c.rows.length} more in Leads</button>`:''}</div></div>`).join('')}</div>`
+    :`<div class="empty"><h3>Nothing to show</h3><p>No campaigns or telecallers match these filters.</p></div>`;
 }};
+/* One lead card on the Pipeline board */
+function pfCard(l,by){const fu=ts(l.next_follow_up_at),open=isOpen(l),over=fu&&open&&fu<now(),today=fu&&open&&!over&&fu<endToday(),d=dispo(l.last_outcome);
+  const sub=by==='stage'?(camp(l.campaign_id)?.name||''):by==='camp'?'':(camp(l.campaign_id)?.name||'');
+  return `<div class="kcard${over?' over':''}" ${by==='stage'?'draggable="true"':''} data-id="${l.id}" data-act="lead" title="${esc(l.name||'')}">
+   <div class="kc-top">${avatar(l.name,'sm')}<div class="grow" style="min-width:0"><div class="kc-name">${esc(l.name||'Unnamed')}</div><div class="lead-phone">${esc(l.phone)}</div></div>${l.priority?`<span class="prio-chip ${esc(l.priority)}">${esc(l.priority[0].toUpperCase()+l.priority.slice(1))}</span>`:''}</div>
+   ${by!=='stage'||sub?`<div class="kc-sub">${by!=='stage'?stagePill(l.stage):''}${sub?`<span class="kc-camp">${esc(sub)}</span>`:''}</div>`:''}
+   <div class="kc-foot"><span class="grow">${fu&&open?`<span class="fu ${over?'over':today?'today':''}">${over?'<b>Overdue</b>':today?'<b>Today</b>':''}${esc(today?new Date(fu).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):fmtD(fu))}</span>`:l.last_call_at?`<span class="oc ${d?d.connected?'ok':'no':'unk'}">${esc(d?.name||'Called')}</span>`:'<span class="muted">Not called yet</span>'}</span>${isMgr()&&by!=='agent'&&l.assigned_to?`<span title="${esc(nameOf(l.assigned_to))}">${avatar(nameOf(l.assigned_to),'xs')}</span>`:''}${l.language?`<span class="chip-lang">${esc(l.language)}</span>`:''}</div></div>`}
 
 /* CAMPAIGNS */
 V.campaigns={mount(){
@@ -1154,7 +1171,8 @@ document.addEventListener('click',async e=>{
     case'bkDel':arm(t,async()=>{const ids=[...S.sel];for(const c of chunk(ids,200))await R(sb.from('leads').delete().in('id',c));S.sel.clear();toast(ids.length+' leads deleted');V.leads.load()},`Delete ${S.sel.size}? Click again`);break;
     case'bkDial':startDialer([...S.sel]);break;
     case'bkAI':{t.disabled=true;const r=await fn({action:'call',lead_ids:[...S.sel],limit:S.sel.size});toast(`${r.queued} AI calls started${r.errors.length?`, ${r.errors.length} failed`:''}`);S.sel.clear();V.leads.load();break}
-    case'stageLeads':S.lf={q:'',stage:v,camp:S.pf.camp,agent:S.pf.agent,source:'',prio:'',fu:''};S.page=0;go('leads');break;
+    case'stageLeads':{const [k,key]=v.includes(':')?v.split(':'):['stage',v];S.lf={q:'',stage:k==='stage'?key:'',camp:k==='camp'?key:S.pf.camp,agent:k==='agent'?key:S.pf.agent,source:'',prio:'',fu:''};S.page=0;go('leads');break}
+    case'pfBy':S.pf.by=v;render();break;
     case'copy':copyText(v);break;
     case'wa':if(waUsable().length)openChat(S.openLead);else msgModal();break;
     case'waDial':S.lead=S.dialLead;msgModal();break;
@@ -1260,8 +1278,8 @@ document.addEventListener('change',async e=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#md').innerHTML){closeModal();histUnmark('md')}else if(S.openLead){closeDrawer();histUnmark('dw')}}});
 let dragId=null;
 document.addEventListener('dragstart',e=>{const c=e.target.closest&&e.target.closest('.kcard');if(!c)return;dragId=c.dataset.id;try{e.dataTransfer.setData('text/plain',dragId);e.dataTransfer.effectAllowed='move'}catch(_){}});
-document.addEventListener('dragover',e=>{const c=e.target.closest&&e.target.closest('.col');if(!c||!dragId)return;e.preventDefault();$$('.col.over').forEach(x=>x!==c&&x.classList.remove('over'));c.classList.add('over')});
-document.addEventListener('drop',async e=>{const c=e.target.closest&&e.target.closest('.col');$$('.col.over').forEach(x=>x.classList.remove('over'));if(!c||!dragId)return;e.preventDefault();const lid=dragId;dragId=null;
+document.addEventListener('dragover',e=>{const c=e.target.closest&&e.target.closest('.col[data-stage]');if(!c||!dragId)return;e.preventDefault();$$('.col.over').forEach(x=>x!==c&&x.classList.remove('over'));c.classList.add('over')});
+document.addEventListener('drop',async e=>{const c=e.target.closest&&e.target.closest('.col[data-stage]');$$('.col.over').forEach(x=>x.classList.remove('over'));if(!c||!dragId)return;e.preventDefault();const lid=dragId;dragId=null;
   try{const {data:l}=await R(sb.from('leads').select('id,stage,name').eq('id',lid).single());if(l.stage!==c.dataset.stage){if(await changeStage(l,c.dataset.stage)===false)return;toast(`${l.name} moved to ${stage(c.dataset.stage)?.name}`);V.pipeline.load()}}catch(err){fail(err)}});
 document.addEventListener('dragend',()=>{dragId=null;$$('.col.over').forEach(x=>x.classList.remove('over'))});
 
