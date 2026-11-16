@@ -71,7 +71,7 @@ const langOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+(S.cfg.languages||[]).m
 const CFG=window.DIALBOOK_CONFIG||{};
 let sb=null;
 const S={me:null,team:[],campaigns:[],cfg:clone(DEF),view:'home',
-  lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},sel:new Set(),page:0,PS:(()=>{try{const v=+localStorage.getItem('dialbook.ps');return [50,100,250,500,1000].includes(v)?v:100}catch(e){return 100}})(),
+  lf:{q:'',stage:'',camp:'',agent:'',source:'',prio:'',fu:'',lang:''},lsort:{k:'',asc:false},moreF:false,sel:new Set(),page:0,PS:(()=>{try{const v=+localStorage.getItem('dialbook.ps');return [50,100,250,500,1000].includes(v)?v:100}catch(e){return 100}})(),
   range:'7',hAgent:'',lr:{p:'',by:'src'},pf:{camp:'',agent:'',by:'stage'},rep:{from:sod(now()-6*DAY),to:sod(now()),agent:'',camp:'',preset:'d7'},
   fuAgent:'',openLead:null,dialer:null,dialSetup:{camp:'',queue:'fresh',order:'hot',who:'me'},
   pick:{},tm:{},rv:0,badge:0,sd:null,sdirty:false,ai:{camp:'',queue:'fresh',n:10}};
@@ -283,8 +283,8 @@ function fuList(list,compact){
 }
 
 /* LEADS */
-function leadQuery(select='*',opts){
-  let q=sb.from('leads').select(select,opts);const f=S.lf;
+function leadQuery(select='*',opts,f=S.lf){
+  let q=sb.from('leads').select(select,opts);
   if(!isMgr())q=q.eq('assigned_to',S.me.id);
   if(f.stage)q=q.eq('stage',f.stage);
   if(f.camp)q=f.camp==='_none'?q.is('campaign_id',null):q.eq('campaign_id',f.camp);
@@ -308,21 +308,53 @@ function leadQuery(select='*',opts){
     q=q.or([`name.ilike.%${s}%`,`city.ilike.%${s}%`,`company.ilike.%${s}%`,`email.ilike.%${s}%`,`source.ilike.%${s}%`,`note.ilike.%${s}%`,...(S.hasTagsText?[`tags_text.ilike.%${s}%`]:[]),...(camps.length?[`campaign_id.in.(${camps.join(',')})`]:[]),...(d.length>=3?[`phone_key.like.%${d}%`]:[])].join(','))}
   return q;
 }
+/* Leads page: quick-view tabs, sorting, "came in", row menu */
+const LTABS=()=>{const pay=S.cfg.stages.find(x=>/pay/i.test(x.name));const has=id=>S.cfg.stages.some(x=>x.id===id);
+  return [['all','All',{}],['fresh','Never called',{fu:'fresh'}],['due','Due today',{fu:'due'}],['over','Overdue',{fu:'over'}],['hot','Hot',{prio:'hot'}],
+    ...(has('interested')?[['int','Interested',{stage:'interested'}]]:[]),...(pay?[['pay',pay.name,{stage:pay.id}]]:[])]};
+const ltabOn=set=>['fu','prio','stage'].every(k=>(S.lf[k]||'')===(set[k]||''));
+function ltabsHTML(){const c=S.ltc||{};return LTABS().map(([id,l,set])=>`<button class="ltab${ltabOn(set)?' on':''}${id==='over'?' red':''}" role="tab" aria-selected="${ltabOn(set)}" data-act="ltab" data-v="${id}">${esc(l)}<span class="num">${c[id]??'…'}</span></button>`).join('')}
+async function ltabsCount(rv){const base={...S.lf,fu:'',prio:'',stage:''};
+  const rs=await Promise.all(LTABS().map(([id,,set])=>leadQuery('id',{count:'exact',head:true},{...base,...set}).then(r=>[id,r.count??0],()=>[id,'–'])));
+  if(rv!==S.rv)return;S.ltc=Object.fromEntries(rs);const b=$('#ltabs');if(b)b.innerHTML=ltabsHTML()}
+const thSort=(k,label)=>{const on=S.lsort.k===k;return `<button class="th-sort${on?' on':''}" data-act="lSort" data-v="${k}" title="Sort by ${esc(label.toLowerCase())}">${esc(label)}<span aria-hidden="true">${on?(S.lsort.asc?'▲':'▼'):'↕'}</span></button>`};
+/* When the lead came in (added, or enquired again) and from where; never-called leads older than 30 minutes are flagged */
+function cameIn(l){const t=ts(l.last_enquiry_at||l.created_at);if(!t)return '<span class="muted">—</span>';const age=now()-t;
+  const flag=!l.call_count&&isOpen(l)&&!l.dnd&&!l.contact_only?(age>30*6e4?'<b class="ci late">Not called</b>':'<b class="ci new">New</b>'):'';
+  return `${flag}<span class="${flag&&age>30*6e4?'ci-late':''}">${esc(rel(t))}</span>${l.source?`<div class="ci-src" title="${esc(l.source)}">${esc(l.source)}</div>`:''}`}
+function rowMenu(btn,id){$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)return;
+  const m=document.createElement('div');m.id='rowMenu';m.className='row-menu';m.setAttribute('role','menu');m.dataset.id=id;
+  const d0=new Date();const at=(days,h,mi=0)=>{const d=new Date(d0);d.setDate(d.getDate()+days);d.setHours(h,mi,0,0);return d.getTime()};
+  const fus=[['In 2 hours',now()+2*36e5],['Today 5 pm',at(0,17)],['Tomorrow 11 am',at(1,11)],['In 3 days, 11 am',at(3,11)]].filter(([,t])=>t>now());
+  m.innerHTML=`<div class="rm-h">${esc(l.name||'Lead')}</div>
+   <div class="rm-sec">Move to stage</div><div class="rm-grid">${S.cfg.stages.filter(x=>x.id!==l.stage).map(x=>`<button role="menuitem" data-act="rmStage" data-id="${id}" data-v="${esc(x.id)}"><span class="dot" style="background:${stageColor(x.id)}"></span>${esc(x.name)}</button>`).join('')}</div>
+   <div class="rm-sec">Follow-up</div><div class="rm-grid">${fus.map(([lb,t])=>`<button role="menuitem" data-act="rmFu" data-id="${id}" data-v="${t}">${esc(lb)}</button>`).join('')}${l.next_follow_up_at?`<button role="menuitem" data-act="rmFu" data-id="${id}" data-v="0">Clear follow-up</button>`:''}</div>
+   <div class="rm-sec">Priority</div><div class="rm-row">${[['hot','Hot'],['warm','Warm'],['cold','Cold'],['','None']].map(([v,lb])=>`<button role="menuitem" class="${(l.priority||'')===v?'on':''}" data-act="rmPrio" data-id="${id}" data-v="${v}">${lb}</button>`).join('')}</div>`;
+  document.body.appendChild(m);const r=btn.getBoundingClientRect(),w=m.offsetWidth,h=m.offsetHeight;
+  m.style.left=Math.max(8,Math.min(innerWidth-w-8,r.right-w))+'px';m.style.top=(r.bottom+6+h>innerHeight?Math.max(8,r.top-h-6):r.bottom+6)+'px';
+  m.querySelector('button')?.focus()}
+document.addEventListener('click',e=>{const m=$('#rowMenu');if(m&&!m.contains(e.target)&&!e.target.closest('[data-act=rowMenu]'))m.remove()},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#rowMenu')?.remove()});
+window.addEventListener('scroll',()=>$('#rowMenu')?.remove(),{passive:true});
+
 V.leads={mount(){const f=S.lf;
   return head('Leads','<span id="lcount">&nbsp;</span>',`<button class="btn" data-act="import">${ic('up')}Import</button><button class="btn" data-act="exportLeads">${ic('down')}Export</button><button class="btn primary" data-act="addLead">${ic('plus')}Add lead</button>`)+
-  `<div class="toolbar flt${S.fltOpen?' open':''}"><input class="input" id="lq" type="search" placeholder="Search name, phone, city, course, notes" value="${esc(f.q)}" aria-label="Search leads"><button class="btn flt-btn" data-act="fltTog" aria-expanded="${!!S.fltOpen}">Filters${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length?` (${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length})`:''}</button>
-   <select class="input${f.stage?' on':''}" id="lf-stage" aria-label="Stage">${stageOpts(f.stage,'All stages')}</select>
+  `<div class="toolbar flt${S.fltOpen?' open':''}${S.moreF?' more':''}"><input class="input" id="lq" type="search" placeholder="Search name, phone, city, course, notes" value="${esc(f.q)}" aria-label="Search leads"><button class="btn flt-btn" data-act="fltTog" aria-expanded="${!!S.fltOpen}">Filters${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length?` (${['stage','camp','agent','source','prio','lang','fu','from','to'].filter(k=>f[k]).length})`:''}</button>
    <select class="input${f.camp?' on':''}" id="lf-camp" aria-label="Campaign">${campOpts(f.camp,'All campaigns')}${opt('_none','No campaign',f.camp)}</select>
    ${isMgr()?`<select class="input${f.agent?' on':''}" id="lf-agent" aria-label="Assigned to">${agentOpts(f.agent,'Anyone')}${opt('_none','Unassigned',f.agent)}</select>`:''}
-   <select class="input${f.source?' on':''}" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}</select>
-   <select class="input${f.prio?' on':''}" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
-   <select class="input${f.lang?' on':''}" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
-   <select class="input${f.fu?' on':''}" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select>
    <div class="flt-dates${f.from||f.to?' on':''}" title="Date the lead came in: added, or enquired again"><span class="muted">${S.hasEnq?'Enquired':'Added'}</span><input class="input" type="date" id="lf-from" value="${esc(f.from||'')}" aria-label="${S.hasEnq?'Enquired':'Added'} from"><span class="muted">to</span><input class="input" type="date" id="lf-to" value="${esc(f.to||'')}" aria-label="to">${f.from||f.to?`<button class="btn sm ghost" data-act="lfDates" title="Clear dates" aria-label="Clear dates">${ic('x')}</button>`:''}</div>
-   ${['stage','camp','agent','source','prio','lang','fu','from','to'].some(k=>f[k])||f.q?'<button class="btn sm ghost flt-clear" data-act="lfClear">Clear all filters</button>':''}</div><div id="vb">${loadingHTML}</div>`;
+   <select class="input xf${f.stage?' on':''}" id="lf-stage" aria-label="Stage">${stageOpts(f.stage,'All stages')}</select>
+   <select class="input xf${f.source?' on':''}" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}</select>
+   <select class="input xf${f.prio?' on':''}" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
+   <select class="input xf${f.lang?' on':''}" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
+   <select class="input xf${f.fu?' on':''}" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select>
+   <button class="btn sm ghost more-btn" data-act="moreF" aria-expanded="${!!S.moreF}">${S.moreF?'Fewer filters':'More filters'}${!S.moreF&&['stage','source','prio','lang','fu'].filter(k=>f[k]).length?` (${['stage','source','prio','lang','fu'].filter(k=>f[k]).length} on)`:''}</button>
+   ${['stage','camp','agent','source','prio','lang','fu','from','to'].some(k=>f[k])||f.q?'<button class="btn sm ghost flt-clear" data-act="lfClear">Clear all filters</button>':''}</div><div class="ltabs" id="ltabs" role="tablist" aria-label="Quick views">${ltabsHTML()}</div><div id="vb">${loadingHTML}</div>`;
 },async load(){
-  const rv=S.rv;const from=S.page*S.PS;
-  const {data,count}=await R(leadQuery('*',{count:'exact'}).order('updated_at',{ascending:false}).range(from,from+S.PS-1));
+  const rv=S.rv;const from=S.page*S.PS;ltabsCount(rv);
+  const so=S.lsort,sk=so.k==='came'?(S.hasEnq?'last_enquiry_at':'created_at'):so.k;
+  let lq=leadQuery('*',{count:'exact'});lq=sk?lq.order(sk,{ascending:so.asc,nullsFirst:false}).order('updated_at',{ascending:false}):lq.order('updated_at',{ascending:false});
+  const {data,count}=await R(lq.range(from,from+S.PS-1));
   if(rv!==S.rv)return;S.pageLeads=data;const vb=$('#vb');if(!vb)return;
   const lc=$('#lcount');if(lc)lc.textContent=`${count} ${S.lf.q||Object.values(S.lf).some(Boolean)?'matching leads':isMgr()?'leads in total':'leads assigned to you'}`;
   let html='';
@@ -333,7 +365,7 @@ V.leads={mount(){const f=S.lf;
     <span class="spacer"></span><button class="btn sm" data-act="bkAuto">Assign by rules</button><button class="btn sm" data-act="bkDial">${ic('phone')}Call these</button>${aiReady()?`<button class="btn sm" data-act="bkAI">${ic('spark')}AI call these</button>`:''}<button class="btn sm danger" data-act="bkDel" style="background:var(--surface)">Delete</button><button class="btn sm ghost" data-act="bkClear" style="color:var(--bg)">Clear</button></div>`;
   if(!data.length){vb.innerHTML=html+`<div class="empty"><div class="em-ic">${ic('leads')}</div><h3>${count===0&&!Object.values(S.lf).some(Boolean)?'No leads yet':'No leads match these filters'}</h3><p>${isMgr()?'Import an Excel or CSV file, or add a lead by hand.':'Your manager has not assigned leads to you yet, or none match.'}</p></div>`;return}
   const all=data.every(l=>S.sel.has(l.id));const pages=Math.ceil(count/S.PS);
-  html+=`<div class="tbl-wrap lt"><table><thead><tr>${isMgr()?`<th style="width:34px" class="sel-td"><input type="checkbox" id="selAll" aria-label="Select all on this page" ${all?'checked':''}></th>`:''}<th>Lead</th><th>Stage</th>${isMgr()?'<th class="hide-sm">Assigned</th>':''}<th class="hide-sm">Campaign</th><th>Last call</th><th>Follow-up</th><th class="r hide-sm hide-md" title="Calls made to or from this lead so far">Calls</th><th class="r"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+  html+=`<div class="tbl-wrap lt"><table><thead><tr>${isMgr()?`<th style="width:34px" class="sel-td"><input type="checkbox" id="selAll" aria-label="Select all on this page" ${all?'checked':''}></th>`:''}<th>${thSort('name','Lead')}</th><th>Stage</th><th class="hide-sm">${thSort('came','Came in')}</th>${isMgr()?'<th class="hide-sm">Assigned</th>':''}<th class="hide-sm">Campaign</th><th>${thSort('last_call_at','Last call')}</th><th>${thSort('next_follow_up_at','Follow-up')}</th><th class="r hide-sm hide-md" title="Calls made to or from this lead so far">${thSort('call_count','Calls')}</th><th class="r"><span class="sr-only">Actions</span></th></tr></thead><tbody>
   ${data.map(l=>{const fu=ts(l.next_follow_up_at),open=isOpen(l),d=dispo(l.last_outcome);
     const fuCls=!fu||!open?'':fu<now()?'over':fu<endToday()?'today':'';
     const tags=(l.tags||[]).filter(t=>t!=='Instagram'),ig=(l.tags||[]).includes('Instagram');
@@ -341,9 +373,9 @@ V.leads={mount(){const f=S.lf;
    <td class="lead-td"><div class="lead-cell">${avatar(l.name)}<div><div class="lead-name"><span class="ln">${esc(l.name||'Unnamed')}</span>${l.priority?`<span class="prio-chip ${esc(l.priority)}">${esc(l.priority[0].toUpperCase()+l.priority.slice(1))}</span>`:''}${l.dnd?'<span class="prio-chip hot">Do not contact</span>':''}</div>
      <div class="lead-phone">${esc(l.phone)}${l.city?`<span class="lead-city"> · ${esc(l.city)}</span>`:''}</div>
      ${l.language||tags.length||ig||l.contact_only?`<div class="lead-tags">${l.language?`<span class="chip-lang">${esc(l.language)}</span>`:''}${l.contact_only?'<span class="chip-form">Contact list</span>':''}${tags.slice(0,2).map(t=>`<span class="chip-form" title="${esc(t)}">${esc(t)}</span>`).join('')}${ig?'<span class="chip-ig">Instagram</span>':''}</div>`:''}</div></div></td>
-   <td class="st-td">${stagePill(l.stage)}</td>${isMgr()?`<td class="hide-sm"><span class="assignee">${l.assigned_to?avatar(nameOf(l.assigned_to),'xs'):''}<span>${l.assigned_to?esc(nameOf(l.assigned_to)):'<span class="muted">Unassigned</span>'}</span></span></td>`:''}<td class="hide-sm camp-td"><span title="${esc(camp(l.campaign_id)?.name||'')}">${camp(l.campaign_id)?esc(camp(l.campaign_id).name):'<span class="muted">—</span>'}</span></td>
+   <td class="st-td">${stagePill(l.stage)}</td><td class="hide-sm came-td">${cameIn(l)}</td>${isMgr()?`<td class="hide-sm"><span class="assignee">${l.assigned_to?avatar(nameOf(l.assigned_to),'xs'):''}<span>${l.assigned_to?esc(nameOf(l.assigned_to)):'<span class="muted">Unassigned</span>'}</span></span></td>`:''}<td class="hide-sm camp-td"><span title="${esc(camp(l.campaign_id)?.name||'')}">${camp(l.campaign_id)?esc(camp(l.campaign_id).name):'<span class="muted">—</span>'}</span></td>
    <td class="small hide-sm last-td">${l.last_call_at?`<span class="oc ${d?d.connected?'ok':'no':'unk'}">${esc(d?.name||(l.last_outcome?l.last_outcome:'Outcome not logged'))}</span><div class="muted">${rel(l.last_call_at)}</div>`:'<span class="muted">Not called yet</span>'}</td>
-   <td class="small fu-td">${fu&&open?`<span class="fu ${fuCls}">${fuCls==='over'?'<b>Overdue</b>':fuCls==='today'?'<b>Today</b>':'<span class="sm-only">Follow-up </span>'}${esc(fuCls==='today'?new Date(fu).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):fmtDT(fu))}</span>`:'<span class="muted hide-sm">—</span>'}</td><td class="r num hide-sm hide-md calls-td${l.call_count?'':' zero'}">${l.call_count||0}</td><td class="r acts-td"><div class="row-acts">${l.dnd?'':`<a class="btn call" href="tel:${esc(normPhone(l.phone))}" title="Call ${esc(l.name)}" aria-label="Call ${esc(l.name)}">${ic('phone')}</a><button class="btn wa" data-act="waOpen" data-id="${l.id}" title="Company WhatsApp" aria-label="WhatsApp ${esc(l.name)}">${ic('msg')}</button>`}</div></td></tr>`}).join('')}
+   <td class="small fu-td">${fu&&open?`<span class="fu ${fuCls}">${fuCls==='over'?'<b>Overdue</b>':fuCls==='today'?'<b>Today</b>':'<span class="sm-only">Follow-up </span>'}${esc(fuCls==='today'?new Date(fu).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):fmtDT(fu))}</span>`:'<span class="muted hide-sm">—</span>'}</td><td class="r num hide-sm hide-md calls-td${l.call_count?'':' zero'}">${l.call_count||0}</td><td class="r acts-td"><div class="row-acts"><button class="btn rm-btn" data-act="rowMenu" data-id="${l.id}" title="Quick actions" aria-label="Quick actions for ${esc(l.name)}" aria-haspopup="menu">⋮</button>${l.dnd?'':`<a class="btn call" href="tel:${esc(normPhone(l.phone))}" title="Call ${esc(l.name)}" aria-label="Call ${esc(l.name)}">${ic('phone')}</a><button class="btn wa" data-act="waOpen" data-id="${l.id}" title="Company WhatsApp" aria-label="WhatsApp ${esc(l.name)}">${ic('msg')}</button>`}</div></td></tr>`}).join('')}
   </tbody></table></div><div class="pager"><button class="btn sm" data-act="pg" data-v="-1" ${S.page?'':'disabled'}>Previous</button><span class="small muted">Page ${S.page+1} of ${pages} · showing ${count?from+1:0}–${Math.min(count,from+S.PS)} of ${count} leads</span><button class="btn sm" data-act="pg" data-v="1" ${S.page+1<pages?'':'disabled'}>Next</button><span class="spacer"></span><label class="row small" style="gap:6px"><span class="muted">Rows per page</span><select class="input" id="lPS" style="width:auto">${[50,100,250,500,1000].map(n=>opt(n,n,S.PS)).join('')}</select></label></div>`;
   vb.innerHTML=html;
 }};
@@ -1211,6 +1243,14 @@ document.addEventListener('click',async e=>{
     case'campEdit':campModal(id);break;
     case'campDel':arm(t,async()=>{await R(sb.from('campaigns').delete().eq('id',id));await loadBase();closeModal();toast('Campaign deleted. Its leads were kept.');render()});break;
     case'lfDates':S.lf.from='';S.lf.to='';S.page=0;S.sel.clear();render();break;
+    case'ltab':{const tb=LTABS().find(x=>x[0]===v);if(!tb)break;S.lf={...S.lf,fu:'',prio:'',stage:'',...tb[2]};S.page=0;S.sel.clear();render();break}
+    case'lSort':{const so=S.lsort;S.lsort=so.k!==v?{k:v,asc:v==='name'}:so.asc===(v==='name')?{k:v,asc:!so.asc}:{k:'',asc:false};S.page=0;V.leads.load().catch(fail);break}
+    case'moreF':S.moreF=!S.moreF;render();break;
+    case'rowMenu':rowMenu(t,id);break;
+    case'rmStage':{$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)break;if(await changeStage(l,v)===false)break;toast(`${l.name||'Lead'} moved to ${stage(v)?.name||v}`);V.leads.load().catch(fail);break}
+    case'rmFu':{$('#rowMenu')?.remove();const l=(S.pageLeads||[]).find(x=>x.id===id);if(!l)break;const tt=+v;
+      await R(sb.from('leads').update({next_follow_up_at:tt?iso(tt):null}).eq('id',id));await addActivity(id,'note',tt?'Follow-up set for '+fmtDT(tt):'Follow-up cleared');toast(tt?'Follow-up '+fmtDT(tt):'Follow-up cleared');V.leads.load().catch(fail);break}
+    case'rmPrio':{$('#rowMenu')?.remove();await R(sb.from('leads').update({priority:v}).eq('id',id));toast(v?'Marked '+v[0].toUpperCase()+v.slice(1):'Priority cleared');V.leads.load().catch(fail);break}
     case'lfClear':S.lf={...S.lf,q:'',stage:'',camp:'',agent:'',source:'',prio:'',lang:'',fu:'',from:'',to:''};S.page=0;S.sel.clear();render();break;
     case'campLeads':S.lf={q:'',stage:'',camp:id,agent:'',source:'',prio:'',fu:''};S.page=0;go('leads');break;
     case'campDial':S.dialSetup.camp=id;S.dialer=null;go('dialer');break;
