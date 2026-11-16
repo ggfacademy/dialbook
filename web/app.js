@@ -44,6 +44,7 @@ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9
 plus:'<path d="M12 5v14M5 12h14"/>',
 up:'<path d="M12 16V4M6 10l6-6 6 6M4 20h16"/>',
 down:'<path d="M12 4v12M6 10l6 6 6-6M4 20h16"/>',
+send:'<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
 msg:'<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/>',
 copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
 spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
@@ -1354,11 +1355,11 @@ V.wa={mount(){
   const f=S.wa.f;
   const convs=await rpc('wa_conversations',{p_agent:isMgr()?(f.agent||null):null,p_account:null,p_unread:f.unread,p_search:f.q.trim(),p_limit:200});
   if(rv!==S.rv)return;const box=$('#waConvs');if(!box)return;
-  box.innerHTML=convs.length?convs.map(c=>`<button class="wa-conv ${S.wa.lead===c.lead_id?'on':''}" data-act="waOpen" data-id="${c.lead_id}">
-    <span class="wa-av" style="background:${stageColor('new')}">${esc((c.lead_name||'?').trim()[0]||'?')}</span>
-    <span class="grow"><span class="row" style="gap:6px"><b class="wa-name">${esc(c.lead_name||c.phone)}</b><span class="spacer"></span><span class="small muted">${esc(fmtWhen(c.last_at))}</span></span>
-    <span class="row" style="gap:6px"><span class="small muted wa-snip">${c.last_dir==='out'?esc((c.last_sender===S.me.id?'You':c.last_sender?nameOf(c.last_sender).split(' ')[0]:'Auto'))+': ':''}${esc((c.last_body||'').slice(0,80))}</span><span class="spacer"></span>${c.unread?`<span class="badge" style="background:var(--call)">${c.unread}</span>`:''}</span>
-    ${isMgr()?`<span class="small muted">${esc(nameOf(c.assigned_to))}</span>`:''}</span></button>`).join(''):`<p class="muted small" style="padding:12px">${f.unread||f.q?'No chats match.':'No chats yet.'}</p>`;
+  box.innerHTML=convs.length?convs.map(c=>{const who=c.last_dir==='out'?(c.last_sender===S.me.id?'You':c.last_sender?nameOf(c.last_sender).split(' ')[0]:'Auto'):'';
+    return `<button class="wa-conv ${S.wa.lead===c.lead_id?'on':''}${c.unread?' unread':''}" data-act="waOpen" data-id="${c.lead_id}">${avatar(c.lead_name||c.phone)}
+    <span class="grow"><span class="wa-l1"><b class="wa-name">${esc(c.lead_name||c.phone)}</b><span class="wa-time">${esc(fmtWhen(c.last_at))}</span></span>
+    <span class="wa-l2"><span class="wa-snip">${who?`<span class="wa-who">${esc(who)}:</span> `:''}${esc((c.last_body||'').replace(/\s+/g,' ').slice(0,90))}</span>${c.unread?`<span class="wa-unread">${c.unread}</span>`:''}</span>
+    ${isMgr()&&c.assigned_to?`<span class="wa-agent">${avatar(nameOf(c.assigned_to),'xs')}${esc(nameOf(c.assigned_to))}</span>`:''}</span></button>`}).join(''):`<p class="muted small" style="padding:12px">${f.unread||f.q?'No chats match.':'No chats yet.'}</p>`;
   if(S.wa.lead)await waThread(rv);
 }};
 
@@ -1370,19 +1371,22 @@ async function waThread(rv,keepComposer){
   const usable=waUsable();
   if(!S.wa.sendAcc||!usable.find(a=>a.id===S.wa.sendAcc)){const lastAcc=[...msgs].reverse().find(m=>m.account_id&&usable.find(a=>a.id===m.account_id))?.account_id;S.wa.sendAcc=lastAcc||usable[0]?.id||''}
   const acc=S.wa.accounts.find(a=>a.id===S.wa.sendAcc);
-  const bubbles=msgs.map(m=>{const a=S.wa.accounts.find(x=>x.id===m.account_id);return `<div class="bub ${m.direction}"><div class="bub-in">${m.template_name?`<span class="tag" style="margin-bottom:4px">Template · ${esc(m.template_name)}</span><br>`:''}<span class="bub-t">${esc(m.body)||'<i>(empty)</i>'}</span>${m.error?`<div class="small prio-hot">${esc(m.error)}</div>`:''}
-    <div class="bub-meta">${m.direction==='out'?esc(m.sender_id?nameOf(m.sender_id):'Automatic message')+' · ':''}${a?esc(a.provider==='qr'?a.name:a.name)+' · ':''}${esc(fmtDT(m.created_at))} ${m.direction==='out'?tick(m.status):''}</div></div></div>`}).join('')||'<p class="muted small" style="text-align:center">No messages yet. Say hello, or send an approved template.</p>';
+  let lastDay='';const bubbles=msgs.map(m=>{const a=S.wa.accounts.find(x=>x.id===m.account_id);const dd=new Date(ts(m.created_at));const day=dd.toDateString();
+    const sep=day!==lastDay?`<div class="wa-day"><span>${esc(day===new Date().toDateString()?'Today':day===new Date(now()-DAY).toDateString()?'Yesterday':dd.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}))}</span></div>`:'';lastDay=day;
+    return sep+`<div class="bub ${m.direction}"><div class="bub-in">${m.template_name?`<span class="tag" style="margin-bottom:4px">Template · ${esc(m.template_name)}</span><br>`:''}<span class="bub-t">${esc(m.body)||'<i>(empty)</i>'}</span>${m.error?`<div class="small prio-hot">${esc(m.error)}</div>`:''}
+    <div class="bub-meta" title="${esc((a?a.name+' · ':'')+fmtDT(m.created_at))}">${m.direction==='out'?esc(m.sender_id?nameOf(m.sender_id).split(' ')[0]:'Automatic')+' · ':''}${esc(dd.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}))} ${m.direction==='out'?tick(m.status):''}</div></div></div>`}).join('')||'<p class="muted small" style="text-align:center">No messages yet. Say hello, or send an approved template.</p>';
   const needT=waNeedsTemplate(acc,lastIn);
   if(!keepComposer||!$('#waMsgs')){
-    th.innerHTML=`<div class="wa-head"><button class="btn sm ghost wa-back" data-act="waBack" aria-label="Back to chats">‹</button><div class="grow" style="min-width:0"><b>${esc(l.name||'Unnamed')}</b><div class="small muted">${esc(l.phone)}${isMgr()?' · '+esc(nameOf(l.assigned_to)):''}</div></div><button class="btn sm" data-act="lead" data-id="${l.id}">Lead</button><a class="btn sm call" href="tel:${esc(normPhone(l.phone))}">${ic('phone')}</a></div>
+    th.innerHTML=`<div class="wa-head"><button class="btn sm ghost wa-back" data-act="waBack" aria-label="Back to chats">‹</button>${avatar(l.name||l.phone)}<div class="grow" style="min-width:0"><div class="wa-hname"><b>${esc(l.name||'Unnamed')}</b>${stagePill(l.stage)}<span id="waWin"></span></div><div class="small muted wa-hsub">${esc(l.phone)}${camp(l.campaign_id)?' · '+esc(camp(l.campaign_id).name):''}${isMgr()&&l.assigned_to?' · '+esc(nameOf(l.assigned_to)):''}</div></div><button class="btn sm" data-act="lead" data-id="${l.id}">${ic('leads')}<span class="hide-sm">Open lead</span></button><a class="btn sm call" href="tel:${esc(normPhone(l.phone))}" aria-label="Call ${esc(l.name||'')}">${ic('phone')}</a></div>
       <div class="wa-msgs" id="waMsgs"></div>
       <div class="wa-comp" id="waComp"></div>`;
   }
   $('#waMsgs').innerHTML=bubbles;$('#waMsgs').scrollTop=$('#waMsgs').scrollHeight;
+  const win=$('#waWin');if(win){const left=lastIn?ts(lastIn)+DAY-now():0;win.innerHTML=!acc||acc.provider==='qr'?'':left>0?`<span class="wa-win ok" title="Free messages are allowed until ${esc(fmtDT(ts(lastIn)+DAY))}">Reply window · ${left>36e5?Math.floor(left/36e5)+'h':Math.max(1,Math.round(left/6e4))+'m'} left</span>`:'<span class="wa-win tpl" title="The customer has not messaged in the last 24 hours">Template only</span>'}
   const comp=$('#waComp');const typed=$('#waText')?.value||'';
-  comp.innerHTML=usable.length?`<div class="row" style="gap:6px;margin-bottom:6px"><select class="input" id="waAcc" style="width:auto;max-width:100%" aria-label="Send from">${usable.map(a=>opt(a.id,`${a.name} · ${a.provider==='qr'?'own WhatsApp':PROV[a.provider]}`,S.wa.sendAcc)).join('')}</select><button class="btn sm" data-act="waTpl">${ic('flag')}Template</button><button class="btn sm" data-act="waAttach" ${needT?'disabled title="Only templates can be sent until the customer replies"':''}>📎 Attach file</button><a class="btn sm ghost" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener">Open in WhatsApp app</a></div>
-    ${needT?`<p class="small" style="margin:0 0 6px;color:var(--warn)">This customer has not messaged this number in the last 24 hours, so WhatsApp only allows an approved template right now.</p>`:''}
-    <div class="row" style="align-items:flex-end;gap:6px"><textarea class="input" id="waText" rows="2" style="flex:1;min-height:44px" placeholder="${needT?'Pick a template to start the chat':'Type a message'}" ${needT?'disabled':''}>${esc(typed)}</textarea><button class="btn primary" data-act="waSend" ${needT?'disabled':''}>Send</button></div>`
+  comp.innerHTML=usable.length?`<div class="wa-tbar"><label class="wa-from"><span>From</span><select class="input" id="waAcc" aria-label="Send from">${usable.map(a=>opt(a.id,`${a.name} · ${a.provider==='qr'?'own WhatsApp':PROV[a.provider]}`,S.wa.sendAcc)).join('')}</select></label><button class="btn sm" data-act="waTpl">${ic('flag')}Template</button><button class="btn sm" data-act="waAttach" ${needT?'disabled title="Only templates can be sent until the customer replies"':''}>📎 File</button><span class="spacer"></span><a class="btn sm ghost wa-ext" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener" title="Open in the WhatsApp app">↗<span> Open in WhatsApp app</span></a></div>
+    ${needT?`<p class="wa-note">This customer has not messaged this number in the last 24 hours, so WhatsApp only allows an approved <b>template</b> right now.</p>`:''}
+    <div class="wa-input"><textarea class="input" id="waText" rows="1" placeholder="${needT?'Pick a template to start the chat':'Type a message'}" ${needT?'disabled':''}>${esc(typed)}</textarea><button class="btn primary wa-send" data-act="waSend" ${needT?'disabled':''} aria-label="Send">${ic('send')}</button></div>`
     :`<p class="small muted" style="margin:0">No WhatsApp number is ready to send from. <button class="btn sm" data-act="nav" data-v="settings">Connect one</button> <a class="btn sm ghost" href="${esc(waLink(l.phone))}" target="_blank" rel="noopener">Open in WhatsApp app</a></p>`;
   S.wa.threadLead=l;
   if(msgs.some(m=>m.direction==='in'&&!m.read_at)){rpc('wa_mark_read',{p_lead:id}).then(waBadge).catch(()=>{})}
