@@ -1836,10 +1836,21 @@ async function lsSettings(){
     ${fb.configured?`<p class="small">Connected as <b>${esc(fb.account||'your Facebook account')}</b>. <button class="btn sm" data-act="fbSetup">Facebook settings</button> <button class="btn sm primary" data-act="fbPages">${ic('plus')}Add Pages</button></p>`
       :`<p class="small muted">Connect any number of Facebook Pages. Leads from their Facebook and Instagram lead forms come in automatically.</p><button class="btn primary sm" data-act="fbSetup">Set up Facebook</button>`}
     <div class="list" style="margin-top:8px">${by('facebook').map(lsRow).join('')||(fb.configured?'<p class="small muted">No Pages added yet.</p>':'')}</div>
+    <div id="capiSt" class="small muted" style="margin-top:8px"></div>
     <h3 style="margin-top:18px">Google Ads lead forms</h3><div class="list" style="margin-top:8px">${by('google').map(lsRow).join('')}</div>
     <button class="btn sm" data-act="lsAdd" data-v="google" style="margin-top:8px">${ic('plus')}Add a Google Ads lead form</button>
     <h3 style="margin-top:18px">Website forms, IndiaMART, JustDial, Zapier and others</h3><div class="list" style="margin-top:8px">${by('webhook').map(lsRow).join('')}</div>
     <button class="btn sm" data-act="lsAdd" data-v="webhook" style="margin-top:8px">${ic('plus')}Add a website or other source</button></div>`;
+  capiStatus();
+}
+/* Meta conversion tracking (supabase/meta-capi.sql): what Dialbook has reported back to Meta about Facebook / Instagram leads */
+async function capiStatus(){
+  const box=$('#capiSt');if(!box)return;
+  let st;try{const{data,error}=await sb.rpc('meta_capi_status');if(error)throw error;st=data}catch(e){return}
+  if(!st)return;
+  const n=(ev,stt='sent')=>st.counts?.[ev+':'+stt]||0, err=Object.entries(st.counts||{}).filter(([k])=>k.endsWith(':error')).reduce((a,[,v])=>a+v,0);
+  box.innerHTML=st.dataset_id&&st.enabled?`<b>Conversion tracking to Meta: on</b> (dataset ${esc(st.dataset_id)}). Sent so far: ${n('LeadSubmitted')} LeadSubmitted · ${n('QualifiedLead')} QualifiedLead (moved to Interested or later) · ${n('RegistrationPaid')} RegistrationPaid (Converted). Only Meta's lead ID is sent, never names or numbers.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}${err?` <span class="prio-hot">${err} not accepted by Meta${st.last_error?': '+esc(st.last_error):''}</span>`:''}`
+    :'Conversion tracking to Meta is off.';
 }
 function fbSetupModal(){
   const fb=S.ls.fb||{};
