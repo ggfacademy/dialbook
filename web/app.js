@@ -1840,8 +1840,17 @@ async function lsSettings(){
     <h3 style="margin-top:18px">Google Ads lead forms</h3><div class="list" style="margin-top:8px">${by('google').map(lsRow).join('')}</div>
     <button class="btn sm" data-act="lsAdd" data-v="google" style="margin-top:8px">${ic('plus')}Add a Google Ads lead form</button>
     <h3 style="margin-top:18px">Website forms, IndiaMART, JustDial, Zapier and others</h3><div class="list" style="margin-top:8px">${by('webhook').map(lsRow).join('')}</div>
-    <button class="btn sm" data-act="lsAdd" data-v="webhook" style="margin-top:8px">${ic('plus')}Add a website or other source</button></div>`;
-  capiStatus();
+    <button class="btn sm" data-act="lsAdd" data-v="webhook" style="margin-top:8px">${ic('plus')}Add a website or other source</button>
+    <div id="oaiSt" class="small muted" style="margin-top:8px"></div></div>`;
+  capiStatus();oaiStatus();
+}
+/* ChatGPT Ads Conversions API (supabase/openai-capi.sql): lead_created events for new CHATGPT leads */
+async function oaiStatus(){
+  const box=$('#oaiSt');if(!box)return;
+  let st;try{const{data,error}=await sb.rpc('openai_capi_status');if(error)throw error;st=data}catch(e){return}
+  if(!st)return;const c=st.counts||{};
+  box.innerHTML=!st.pixel_set||!st.key_set?`<b>ChatGPT Ads conversion tracking: waiting for set-up</b> (${!st.key_set?'API key':''}${!st.key_set&&!st.pixel_set?' and ':''}${!st.pixel_set?'Pixel ID':''} not saved in Supabase yet).${c.queued?` ${c.queued} enquiries are waiting to be reported.`:''}`
+    :`<b>ChatGPT Ads conversion tracking: on</b>${st.validate_only?' (test mode: OpenAI only checks the events)':''}. New CHATGPT enquiries reported as <span class="mono">lead_created</span>: ${c.sent||0} sent${c.queued||c.sending?`, ${(c.queued||0)+(c.sending||0)} waiting`:''}.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}${c.error?` <span class="prio-hot">${c.error} not accepted${st.last_error?': '+esc(st.last_error):''}</span>`:''}`;
 }
 /* Meta conversion tracking (supabase/meta-capi.sql): what Dialbook has reported back to Meta about Facebook / Instagram leads */
 async function capiStatus(){
