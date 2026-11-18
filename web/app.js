@@ -139,7 +139,7 @@ function barChart(b){
 }
 function hbars(rows){const mx=Math.max(1,...rows.map(r=>r.v));
   return rows.map((r,i)=>{const tag=r.act?'button':'div',at=r.act?` type="button" data-act="${esc(r.act)}" data-v="${esc(r.key)}" title="Show these ${r.v} leads"`:` title="${esc(r.label)}"`;
-    return `<${tag} class="hbar${r.act?' hbar-btn':''}"${at} style="--d:${Math.min(i*60,600)}ms"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}</span></${tag}>`}).join('')||'<p class="muted small">No data yet.</p>'}
+    return `<${tag} class="hbar${r.act?' hbar-btn':''}"${at} style="--d:${Math.min(i*60,600)}ms"><span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label)}</span><div class="track"><div class="fill" style="width:${r.v/mx*100}%;background:${r.color||'var(--accent)'}"></div></div><span class="num small" style="text-align:right">${r.v}${r.share!=null?`<small class="hbar-share">${r.share}%</small>`:''}</span></${tag}>`}).join('')||'<p class="muted small">No data yet.</p>'}
 function buckets(st,from,to){
   if(to-from<=DAY){const out=[];for(let h=8;h<=21;h++){const v=st.by_hour?.[h]||{a:0,b:0};out.push({label:(h%12||12)+(h<12?'a':'p'),a:v.a,b:v.b})}
     Object.entries(st.by_hour||{}).forEach(([h,v])=>{h=+h;if(h<8){out[0].a+=v.a;out[0].b+=v.b}if(h>21){out[13].a+=v.a;out[13].b+=v.b}});return out}
@@ -231,9 +231,10 @@ function lrShow(d){const c=$('#lrCard');if(!c)return;S.lr.data=d;const L=S.lr,ca
     if(!(k in key))key[k]=camp_?(l.campaign_id&&camp(l.campaign_id)?l.campaign_id:'_none'):((l.source||'').trim()?l.source:'_none')}
   const pal=['#3a7bd5','var(--call)','var(--warn)','var(--accent)','#8e5bd0','#c8644f','#2f9e9e'];
   const col=(k,i)=>camp_?(k==='No campaign'?'var(--muted)':pal[i%pal.length]):/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
-  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,color:col(label,i),...(key[label]!=null?{act:'lrOpen',key:(camp_?'c:':'s:')+key[label]}:{})}));
+  const tot=d.rows.length||1;
+  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,share:Math.round(v/tot*100),color:col(label,i),...(key[label]!=null?{act:'lrOpen',key:(camp_?'c:':'s:')+key[label]}:{})}));
   const dates=L.p==='c'?`<label class="field" style="flex:0 1 150px"><span>From</span><input class="input" type="date" id="lrFrom" value="${toDateInput(L.from??sod(now()))}" max="${toDateInput(now())}"></label><label class="field" style="flex:0 1 150px"><span>To</span><input class="input" type="date" id="lrTo" value="${toDateInput(L.to??sod(now()))}" max="${toDateInput(now())}"></label>`:'';
-  c.innerHTML=`<div class="row" style="align-items:flex-start;gap:24px;flex-wrap:wrap"><div style="min-width:180px"><h2 style="margin:0">Leads received</h2><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${d.rows.length}">${d.rows.length}</div><div class="small muted">${esc(d.label)}${d.agent?' · assigned to '+esc(nameOf(d.agent)):''}</div><button class="btn sm" data-act="lrOpen" data-v="" style="margin-top:10px" title="Open these leads in Leads">Open these leads</button></div>
+  c.innerHTML=`<div class="row" style="align-items:stretch;gap:24px;flex-wrap:wrap"><div class="lr-total"><div class="row" style="gap:8px"><span class="dash-ico">${ic('leads')}</span><h2 style="margin:0">Leads received</h2></div><div class="num" style="font-size:3rem;font-weight:700;line-height:1.1;margin-top:6px" data-count="${d.rows.length}">${d.rows.length}</div><div class="small muted">${esc(d.label)}${d.agent?' · assigned to '+esc(nameOf(d.agent)):''}</div><button class="btn sm" data-act="lrOpen" data-v="" style="margin-top:10px" title="Open these leads in Leads">Open these leads</button></div>
     <div class="hbar-wide" style="flex:1;min-width:260px"><div class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
       <label class="field" style="flex:0 1 180px"><span>Period</span><select class="input" id="lrP">${LR_P.map(([v,l])=>opt(v,l,L.p)).join('')}</select></label>${dates}
       <span class="spacer"></span><div class="row" style="gap:4px"><button class="chip-toggle" data-act="lrBy" data-v="src" aria-pressed="${!camp_}">By source</button><button class="chip-toggle" data-act="lrBy" data-v="camp" aria-pressed="${camp_}">By campaign</button></div></div>
@@ -263,25 +264,37 @@ V.home={mount(){
     <div><b>1. Invite your team</b><p class="muted small">Send them this website's link. They create an account and you approve them in Team.</p><button class="btn" data-act="nav" data-v="team">${ic('team')}Open Team</button></div>
     <div><b>2. Import leads</b><p class="muted small">Upload an Excel or CSV file and share the leads out to callers automatically.</p><button class="btn primary" data-act="import">${ic('up')}Import leads</button></div>
     <div><b>3. Install the phone app</b><p class="muted small">It logs every call and uploads recordings on its own. Get the connection code in Settings.</p><button class="btn" data-act="nav" data-v="settings">${ic('phone')}Phone app setup</button></div></div></div>`;
-  html+=`<div class="kpis">
-    <div class="kpi"><div class="lbl">Calls</div><div class="val" data-count="${t.n||0}">${t.n||0}</div><div class="sub">${t.auto||0} auto-logged · ${t.ai||0} by AI</div></div>
-    <div class="kpi"><div class="lbl">Connected</div><div class="val" data-count="${t.conn||0}">${t.conn||0}</div><div class="sub">${pct(t.n?t.conn/t.n:0)} connect rate</div></div>
-    <div class="kpi"><div class="lbl">Talk time</div><div class="val">${dur(t.talk).replace(/ \d+s$/,'')}</div><div class="sub">avg ${dur(t.conn?t.talk/t.conn:0)} per call</div></div>
-    <div class="kpi"><div class="lbl">Interested</div><div class="val" data-count="${t.intr||0}">${t.intr||0}</div><div class="sub">${t.recorded||0} calls recorded</div></div>
-    <div class="kpi"><div class="lbl">Converted</div><div class="val" data-count="${t.conv||0}">${t.conv||0}</div><div class="sub">${t.conn?pct(t.conv/t.conn):'0%'} of connected</div></div>
-    <div class="kpi ${ls.overdue?'alert':''}"><div class="lbl">Follow-ups due</div><div class="val" data-count="${(ls.overdue||0)+(ls.today||0)}">${(ls.overdue||0)+(ls.today||0)}</div><div class="sub">${ls.overdue||0} overdue</div></div></div>`;
+  const fuDue=(ls.overdue||0)+(ls.today||0);
+  html+=`<div class="kpis kpis-dash">
+    ${kpiTile('phone','var(--s2)','Calls',t.n||0,`${t.auto||0} auto-logged · ${t.ai||0} by AI`)}
+    ${kpiTile('send','var(--s6)','Connected',t.conn||0,`<b>${pct(t.n?t.conn/t.n:0)}</b> connect rate`)}
+    ${kpiTile('clock','var(--s5)','Talk time',null,`avg ${dur(t.conn?t.talk/t.conn:0)} per call`,dur(t.talk).replace(/ \d+s$/,''))}
+    ${kpiTile('spark','var(--s4)','Interested',t.intr||0,`${t.recorded||0} calls recorded`)}
+    ${kpiTile('flag','var(--s3)','Converted',t.conv||0,`<b>${t.conn?pct(t.conv/t.conn):'0%'}</b> of connected`)}
+    ${kpiTile('clock','var(--danger)','Follow-ups due',fuDue,`<b>${ls.overdue||0}</b> overdue · tap to open`,null,ls.overdue?'alert':'','followups')}</div>`;
   const drows=[...S.cfg.dispositions.map(d=>({label:d.name,v:st.outcomes?.[d.id]||0,color:d.connected?'var(--call)':'var(--warn)'})),{label:'Outcome not logged yet',v:st.outcomes?._none||0,color:'var(--muted)'}].filter(r=>r.v).sort((a,b)=>b.v-a.v);
-  const srows=S.cfg.stages.map(s=>({label:s.name,v:ls.stages?.[s.id]?.n||0,color:stageColor(s.id)}));
-  html+=`<div class="dash-grid"><div class="card"><h2>${S.range==='0'?'Calls by hour':'Calls per day'}</h2>${barChart(buckets(st,from,to))}</div>
-    <div class="card"><h2>Call outcomes</h2>${hbars(drows)}</div>
-    <div class="card"><h2>Lead pipeline</h2>${hbars(srows)}<p class="small muted">${ls.total} leads · ${inr(ls.stages?.won?.value)} won value · ${ls.fresh||0} never called</p></div>
-    <div class="card"><h2>Next follow-ups</h2>${fuList(fu.data,true)}<button class="btn sm" data-act="nav" data-v="followups" style="margin-top:8px">See all follow-ups</button></div>`;
+  const srows=S.cfg.stages.map(s=>({id:s.id,label:s.name,v:ls.stages?.[s.id]?.n||0,color:stageColor(s.id)}));
+  html+=`<div class="card dash-card" style="--c:var(--s2);margin-bottom:16px">${cardH('cols','Lead pipeline',`${(ls.total||0).toLocaleString('en-IN')} leads · ${inr(ls.stages?.won?.value)} won value · ${ls.fresh||0} never called`,`<button class="btn sm" data-act="nav" data-v="pipeline">Open pipeline</button>`)}${pipeTiles(srows,ls.total||0)}</div>
+  <div class="dash-grid"><div class="card dash-card" style="--c:var(--s3)">${cardH('chart',S.range==='0'?'Calls by hour':'Calls per day')}${barChart(buckets(st,from,to))}</div>
+    <div class="card dash-card" style="--c:var(--s4)">${cardH('phone','Call outcomes')}${hbars(drows)}</div>
+`;
+  const fuCard=`<div class="card dash-card" style="--c:var(--danger)">${cardH('clock','Next follow-ups','',`<button class="btn sm" data-act="nav" data-v="followups">See all</button>`)}${fuMini(fu.data)}</div>`;
   if(isMgr()&&!S.hAgent){
     const rows=[...agents().map(m=>({name:m.name,sub:m.role,s:st.by_agent?.[m.id]||{}})),...(st.by_agent?.ai?[{name:'AI agent',sub:'voice AI',s:st.by_agent.ai}]:[])].sort((a,b)=>(b.s.n||0)-(a.s.n||0));
-    html+=`<div class="card wide"><h2>Team leaderboard</h2><div class="tbl-wrap"><table><thead><tr><th>Caller</th><th class="r">Calls</th><th class="r">Connected</th><th class="r hide-sm">Connect %</th><th class="r">Talk time</th><th class="r hide-sm">Interested</th><th class="r">Converted</th></tr></thead><tbody>${rows.map(({name,sub,s})=>`<tr><td><b>${esc(name)}</b> <span class="small muted">${esc(sub)}</span></td><td class="r num">${s.n||0}</td><td class="r num">${s.conn||0}</td><td class="r num hide-sm">${pct(s.n?s.conn/s.n:0)}</td><td class="r num">${dur(s.talk)}</td><td class="r num hide-sm">${s.intr||0}</td><td class="r num">${s.conv||0}</td></tr>`).join('')}</tbody></table></div></div>`;
+    const top=Math.max(1,...rows.map(r=>r.s.n||0));
+    html+=`<div class="card dash-card" style="--c:var(--accent)">${cardH('team','Team leaderboard','Ranked by calls in this period')}<div class="lb">${rows.map(({name,sub,s:x},i)=>`<div class="lb-row"><span class="lb-rank r${i+1}">${i+1}</span>${avatar(name)}<div class="grow" style="min-width:0"><div class="lb-name"><b>${esc(name)}</b> <span class="small muted">${esc(sub)}</span></div><div class="lb-bar"><span style="width:${(x.n||0)/top*100}%"></span></div></div>
+      <div class="lb-stats"><span><b>${x.n||0}</b>calls</span><span><b>${pct(x.n?x.conn/x.n:0)}</b>connect</span><span class="hide-sm"><b>${dur(x.talk).replace(/ \d+s$/,'')}</b>talk</span><span class="hide-sm"><b>${x.intr||0}</b>interested</span><span><b style="color:var(--call)">${x.conv||0}</b>converted</span></div></div>`).join('')||'<p class="muted small">No calls yet.</p>'}</div></div>`;
   }
+  html+=fuCard;
   vb.innerHTML=html+'</div>';countUp(vb);lrP.then(d=>{if(rv===S.rv)lrShow(d)}).catch(()=>{const c=$('#lrCard');if(c)c.innerHTML='<p class="muted small">Could not load the leads received.</p>'});
 }};
+/* Dashboard pieces: card header with icon, KPI tile, pipeline stage tiles, compact follow-up rows */
+function cardH(icon,title,sub,right){return `<div class="dash-h"><span class="dash-ico">${ic(icon)}</span><div class="grow" style="min-width:0"><h2>${esc(title)}</h2>${sub?`<div class="small muted">${sub}</div>`:''}</div>${right||''}</div>`}
+function kpiTile(icon,col,lbl,n,sub,txt,cls,nav){const tag=nav?'button':'div';
+  return `<${tag} class="kpi ${cls||''}${nav?' kpi-btn':''}" style="--k:${col}"${nav?` type="button" data-act="nav" data-v="${nav}"`:''}><div class="kpi-top"><span class="lbl">${esc(lbl)}</span><span class="kpi-ico">${ic(icon)}</span></div><div class="val"${n!=null?` data-count="${n}"`:''}>${n!=null?n:esc(txt)}</div><div class="sub">${sub}</div></${tag}>`}
+function pipeTiles(rows,total){return `<div class="pipe-tiles">${rows.map(r=>`<button type="button" class="pipe-tile" style="--c:${r.color}" data-act="dashStage" data-v="${esc(r.id)}" title="Open ${esc(r.label)} leads"><span class="small">${esc(r.label)}</span><b class="num" data-count="${r.v}">${r.v.toLocaleString('en-IN')}</b><span class="pipe-pct"><i style="width:${total?Math.max(2,r.v/total*100):0}%"></i></span><span class="small muted">${total?Math.round(r.v/total*100):0}%</span></button>`).join('')}</div>`}
+function fuMini(list){if(!list||!list.length)return '<p class="muted small">Nothing scheduled.</p>';
+  return `<div class="fu-mini">${list.map(l=>{const f=ts(l.next_follow_up_at),late=f<now();return `<div class="fu-mini-row${late?' late':''}"><button type="button" class="fu-mini-main" data-act="lead" data-id="${l.id}">${avatar(l.name)}<span class="grow" style="min-width:0"><span class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}</span><span class="small ${late?'prio-hot':'muted'}">${late?'Overdue · ':''}${esc(fmtDT(f))}</span></span></button><a class="btn sm call" href="tel:${esc(normPhone(l.phone))}" aria-label="Call ${esc(l.name||'')}">${ic('phone')}</a></div>`}).join('')}</div>`}
 function fuList(list,compact){
   if(!list||!list.length)return '<p class="muted small">Nothing scheduled.</p>';
   return `<div class="list">${list.map(l=>{const f=ts(l.next_follow_up_at),late=f<now();return `<div class="li">${avatar(l.name)}<div class="grow"><div class="lead-name">${esc(l.name||'Unnamed')} ${prioLabel(l.priority)}</div><div class="lead-phone">${esc(l.phone)}${!compact&&isMgr()?' · '+esc(nameOf(l.assigned_to)):''}</div>${!compact&&l.last_outcome?`<div class="small muted">Last: ${esc(dispo(l.last_outcome)?.name||l.last_outcome)}</div>`:''}</div>
@@ -1323,6 +1336,7 @@ document.addEventListener('click',async e=>{
     case'stageLeads':{const [k,key]=v.includes(':')?v.split(':'):['stage',v];S.lf={q:'',stage:k==='stage'?key:'',camp:k==='camp'?key:S.pf.camp,agent:k==='agent'?key:S.pf.agent,source:'',prio:'',fu:''};S.page=0;go('leads');break}
     case'pfBy':S.pf.by=v;render();break;
     case'copy':copyText(v);break;
+    case'dashStage':S.lf={...S.lf,q:'',stage:v,prio:'',lang:'',fu:'',camp:'',source:'',from:'',to:'',agent:isMgr()?(S.hAgent||''):S.lf.agent};S.page=0;S.sel.clear();go('leads');break;
     case'lsJump':{const el=document.getElementById(v);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});break}
     case'wa':if(waUsable().length)openChat(S.openLead);else msgModal();break;
     case'waDial':S.lead=S.dialLead;msgModal();break;
