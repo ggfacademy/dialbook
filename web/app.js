@@ -32,6 +32,11 @@ const TZ=(()=>{try{const z=Intl.DateTimeFormat().resolvedOptions().timeZone||'As
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o};
 
 const I={
+fb:'<path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8z"/>',
+gads:'<path d="M9 4l-6 11a3 3 0 1 0 5 3l6-11"/><path d="M15 4l6 11a3 3 0 1 1-5 3L10 7"/>',
+globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
 home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
 leads:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
 phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
@@ -816,6 +821,7 @@ V.settings={live:false,mount(){
   <label class="field"><span>Most calls per list</span><input class="input" type="number" min="1" max="200" data-sp="ai.maxBatch" value="${esc(d.ai.maxBatch)}"></label></div>
   <h3 style="margin-top:16px">Agent for each language</h3><p class="small muted">Leads are called by their campaign's own agent when it has one (Campaigns → Edit, e.g. a separate agent for a new course), otherwise by the agent for their language (for example a Tamil-speaking agent for Tamil leads), otherwise by the default agent. Ready-made Tamil, Telugu and Kannada prompts are in the ai-agents folder of the package.</p>
   <div class="grid3">${d.languages.map(x=>`<label class="field"><span>${esc(x)}</span><input class="input mono" data-sp="ai.agents.${esc(x)}" value="${esc(d.ai.agents[x]||'')}" placeholder="Bolna agent ID"></label>`).join('')}</div></div>
+  <div data-tab="src" class="ls-jump-host">${lsJump()}</div>
   <div data-tab="src">${assignmentCard(d)}</div>
   <div id="lsSet" data-tab="src">${loadingHTML}</div>
   <div class="card" data-tab="calls"><h2>Call outcomes</h2><p class="small muted" style="margin-top:-6px">“Connected” counts toward connect rate. The stage moves the lead automatically. “Ask follow-up” pre-fills a callback time.</p>
@@ -1282,6 +1288,7 @@ document.addEventListener('click',async e=>{
     case'stageLeads':{const [k,key]=v.includes(':')?v.split(':'):['stage',v];S.lf={q:'',stage:k==='stage'?key:'',camp:k==='camp'?key:S.pf.camp,agent:k==='agent'?key:S.pf.agent,source:'',prio:'',fu:''};S.page=0;go('leads');break}
     case'pfBy':S.pf.by=v;render();break;
     case'copy':copyText(v);break;
+    case'lsJump':{const el=document.getElementById(v);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});break}
     case'wa':if(waUsable().length)openChat(S.openLead);else msgModal();break;
     case'waDial':S.lead=S.dialLead;msgModal();break;
     case'msgSent':if(S.lead)addActivity(S.lead.id,'msg',v,{channel:p}).catch(()=>{});break;
@@ -1801,7 +1808,8 @@ async function lsFn(body){const{data,error}=await sb.functions.invoke('leadsourc
 async function loadSourceNames(){if(!isMgr())return;try{const{data}=await R(sb.from('lead_sources').select('id,name,kind').order('created_at'));S.lsNames=data.map(x=>x.name)}catch(e){S.lsNames=[]}}
 function assignmentCard(d){
   const a=d.assignment;const srcNames=[...new Set([...(d.sources||[]),...S.lsNames])];
-  return `<div class="card"><h2>Lead assignment</h2><p class="small muted" style="margin-top:-6px">New leads without an owner (from Facebook, Google Ads, website forms, imports) are given to someone automatically. Rules are checked from top to bottom. The first rule that matches, and has someone available, wins. People in a rule take turns.</p>
+  const on=a.enabled, np=(a.paused||[]).length;
+  return `<div class="card ls-sec" id="sec-assign" style="--c:var(--accent)">${lsHead('route','Lead assignment',`${on?'On':'Off'} · ${a.rules.length} rule${a.rules.length===1?'':'s'}${np?` · ${np} paused`:''}`,on?'ok':'off')}<p class="small muted">New leads without an owner (from Facebook, Google Ads, website forms, imports) are given to someone automatically. Rules are checked from top to bottom. The first rule that matches, and has someone available, wins. People in a rule take turns.</p>
   <label class="row" style="margin-bottom:10px"><input type="checkbox" data-sp="assignment.enabled" ${a.enabled?'checked':''}> <b>Assign new leads automatically</b></label>
   ${a.rules.map((r,i)=>`<div class="rule-box"><div class="row small muted" style="margin-bottom:6px"><b style="color:var(--fg)">Rule ${i+1}</b><span class="spacer"></span><button class="btn sm ghost" data-act="ruleUp" data-v="${i}" aria-label="Move up" ${i?'':'disabled'}>↑</button><button class="btn sm ghost" data-act="ruleDel" data-v="${i}" aria-label="Remove rule">${ic('x')}</button></div>
     <div class="grid3"><label class="field"><span>When language is</span><select class="input" data-sp="assignment.rules.${i}.language">${opt('','Any language',r.language)}${(d.languages||[]).map(x=>opt(x,x,r.language)).join('')}</select></label>
@@ -1816,10 +1824,23 @@ function assignmentCard(d){
   <div class="row" style="margin-top:6px">${agents().filter(m=>m.role==='telecaller'||(a.rules||[]).some(r=>(r.agents||[]).includes(m.id))).map(m=>`<label class="row small" style="gap:4px"><input type="checkbox" class="asPause" value="${m.id}" ${(a.paused||[]).includes(m.id)?'checked':''}>${esc(m.name)}</label>`).join('')}</div></div>
   <p class="small muted">Set each telecaller's languages in Team → Edit. Leads get their language from the form's language question, the source's or campaign's default language, the import file, or by hand.</p></div>`;
 }
+/* Settings → Lead sources: each kind of source is its own coloured section, with a jump bar to reach it */
+const LS_SECS=[['sec-assign','Lead assignment','route','var(--accent)'],['sec-fb','Facebook & Instagram','fb','#1877f2'],['sec-google','Google Ads','gads','#1e8e3e'],['sec-web','Website & others','globe','var(--s6)'],['sec-track','Conversion tracking','target','var(--s5)']];
+function lsJump(){return `<nav class="ls-jump" aria-label="Lead source sections">${LS_SECS.map(([id,t,i,c])=>`<button class="ls-chip" style="--c:${c}" data-act="lsJump" data-v="${id}">${ic(i)}${esc(t)}</button>`).join('')}</nav>`}
+function lsHead(icon,title,summary,state){
+  const st={ok:['Working','var(--call)'],warn:['Check','var(--warn)'],off:['Off','var(--muted)'],none:['Not set up','var(--muted)']}[state]||null;
+  return `<div class="ls-head"><span class="ls-ico">${ic(icon)}</span><div class="grow"><h2>${esc(title)}</h2>${summary?`<div class="small muted">${summary}</div>`:''}</div>${st?`<span class="pill" style="color:${st[1]}"><span class="dot"></span><span style="color:var(--fg)">${st[0]}</span></span>`:''}</div>`;
+}
+function lsSum(list){
+  if(!list.length)return {txt:'Nothing connected yet',state:'none'};
+  const leads=list.reduce((a,s)=>a+(s.lead_count||0),0), bad=list.filter(s=>s.active&&s.last_error).length, off=list.filter(s=>!s.active).length;
+  const last=list.map(s=>s.last_lead_at).filter(Boolean).sort().pop();
+  return {txt:`${list.length} connected · ${leads.toLocaleString('en-IN')} leads${last?' · last '+rel(last):''}${off?` · ${off} paused`:''}`,state:bad?'warn':off===list.length?'off':'ok'};
+}
 const lsPill=s=>`<span class="pill" style="color:${s.active?(s.last_error?'var(--warn)':'var(--call)'):'var(--muted)'}"><span class="dot"></span><span style="color:var(--fg)">${s.active?(s.last_error?'Check':'Receiving'):'Paused'}</span></span>`;
 function lsRow(s){
   const c=s.config||{};
-  return `<div class="li" style="flex-direction:column;align-items:stretch"><div class="row"><b>${esc(s.name)}</b>${lsPill(s)}<span class="spacer"></span><span class="small muted">${s.lead_count} leads${s.last_lead_at?' · last '+rel(s.last_lead_at):''}</span></div>
+  return `<div class="src-row${s.active?'':' paused'}"><div class="row"><b class="src-name">${esc(s.name)}</b>${lsPill(s)}<span class="spacer"></span><span class="src-count"><b>${(s.lead_count||0).toLocaleString('en-IN')}</b> leads${s.last_lead_at?`<span class="muted"> · last ${rel(s.last_lead_at)}</span>`:''}</span></div>
     ${s.last_error?`<div class="small prio-hot">Last problem: ${esc(s.last_error)}</div>`:''}
     <div class="row" style="margin-top:6px"><label class="field" style="flex:1 1 150px"><span>Default language</span><select class="input lsLang" data-id="${s.id}">${langOpts(c.default_language||'','From the form / none')}</select></label>
     <label class="field" style="flex:1 1 150px"><span>Add to campaign</span><select class="input lsCamp" data-id="${s.id}">${campOpts(c.campaign_id||'','No campaign')}</select></label></div>
@@ -1833,17 +1854,22 @@ async function lsSettings(){
   catch(e){if($('#lsSet'))box.innerHTML=`<div class="card"><h2>Lead sources</h2><p class="muted">Lead sources are not installed yet. Run <b>supabase/leadsources.sql</b> and add the <b>leadsources</b> and <b>leads-webhook</b> functions (setup guide, Step 9).</p><p class="small muted">${esc(e.message)}</p></div>`;return}
   S.ls.fb=st.facebook;S.ls.base=st.webhook_base;if(!$('#lsSet'))return;
   const by=k=>S.ls.sources.filter(s=>s.kind===k);const fb=S.ls.fb;
-  box.innerHTML=`<div class="card"><h2>Lead sources</h2><p class="small muted" style="margin-top:-6px">New leads arrive here within seconds, get their language, and are assigned by the rules above. A number already in the CRM is not duplicated; the existing lead is marked for a call today.</p>
-    <h3 style="margin-top:14px">Facebook &amp; Instagram lead ads</h3>
+  const sf=lsSum(by('facebook')),sg=lsSum(by('google')),sw=lsSum(by('webhook'));
+  box.innerHTML=`<p class="small muted ls-note">New leads arrive within seconds, get their language, and are assigned by the rules above. A number already in Dialbook is not duplicated: the existing lead is marked for a call today.</p>
+  <div class="card ls-sec" id="sec-fb" style="--c:#1877f2">${lsHead('fb','Facebook & Instagram lead ads',sf.txt,fb.configured?sf.state:'none')}
     ${fb.configured?`<p class="small">Connected as <b>${esc(fb.account||'your Facebook account')}</b>. <button class="btn sm" data-act="fbSetup">Facebook settings</button> <button class="btn sm primary" data-act="fbPages">${ic('plus')}Add Pages</button></p>`
       :`<p class="small muted">Connect any number of Facebook Pages. Leads from their Facebook and Instagram lead forms come in automatically.</p><button class="btn primary sm" data-act="fbSetup">Set up Facebook</button>`}
-    <div class="list" style="margin-top:8px">${by('facebook').map(lsRow).join('')||(fb.configured?'<p class="small muted">No Pages added yet.</p>':'')}</div>
-    <div id="capiSt" class="small muted" style="margin-top:8px"></div>
-    <h3 style="margin-top:18px">Google Ads lead forms</h3><div class="list" style="margin-top:8px">${by('google').map(lsRow).join('')}</div>
-    <button class="btn sm" data-act="lsAdd" data-v="google" style="margin-top:8px">${ic('plus')}Add a Google Ads lead form</button>
-    <h3 style="margin-top:18px">Website forms, IndiaMART, JustDial, Zapier and others</h3><div class="list" style="margin-top:8px">${by('webhook').map(lsRow).join('')}</div>
-    <button class="btn sm" data-act="lsAdd" data-v="webhook" style="margin-top:8px">${ic('plus')}Add a website or other source</button>
-    <div id="oaiSt" class="small muted" style="margin-top:8px"></div></div>`;
+    <div class="src-list">${by('facebook').map(lsRow).join('')||(fb.configured?'<p class="small muted">No Pages added yet.</p>':'')}</div></div>
+  <div class="card ls-sec" id="sec-google" style="--c:#1e8e3e">${lsHead('gads','Google Ads lead forms',sg.txt,sg.state)}
+    <p class="small muted">Leads from the lead form inside your Google ads. (The Google Ads enquiry page on your website also saves its leads as GOOGLE ADS.)</p>
+    <div class="src-list">${by('google').map(lsRow).join('')}</div>
+    <button class="btn sm" data-act="lsAdd" data-v="google">${ic('plus')}Add a Google Ads lead form</button></div>
+  <div class="card ls-sec" id="sec-web" style="--c:var(--s6)">${lsHead('globe','Website, ChatGPT ad page and other tools',sw.txt,sw.state)}
+    <p class="small muted">Website forms, enquiry pages, IndiaMART, JustDial, Zapier and others, each with its own address and key.</p>
+    <div class="src-list">${by('webhook').map(lsRow).join('')}</div>
+    <button class="btn sm" data-act="lsAdd" data-v="webhook">${ic('plus')}Add a website or other source</button></div>
+  <div class="card ls-sec" id="sec-track" style="--c:var(--s5)">${lsHead('target','Conversion tracking','What Dialbook reports back to the ad platforms. Only IDs and stages are sent, never names or numbers.')}
+    <div class="ct-grid"><div class="ct-tile" id="capiSt"><b>Meta – lead forms</b><div class="small muted">Loading…</div></div><div class="ct-tile" id="capiWa"><b>Meta – WhatsApp ad chats</b><div class="small muted">Loading…</div></div><div class="ct-tile" id="oaiSt"><b>ChatGPT Ads</b><div class="small muted">Loading…</div></div></div></div>`;
   capiStatus();oaiStatus();
 }
 /* ChatGPT Ads Conversions API (supabase/openai-capi.sql): lead_created events for new CHATGPT leads */
@@ -1851,17 +1877,29 @@ async function oaiStatus(){
   const box=$('#oaiSt');if(!box)return;
   let st;try{const{data,error}=await sb.rpc('openai_capi_status');if(error)throw error;st=data}catch(e){return}
   if(!st)return;const c=st.counts||{};
-  box.innerHTML=!st.pixel_set||!st.key_set?`<b>ChatGPT Ads conversion tracking: waiting for set-up</b> (${!st.key_set?'API key':''}${!st.key_set&&!st.pixel_set?' and ':''}${!st.pixel_set?'Pixel ID':''} not saved in Supabase yet).${c.queued?` ${c.queued} enquiries are waiting to be reported.`:''}`
-    :`<b>ChatGPT Ads conversion tracking: on</b>${st.validate_only?' (test mode: OpenAI only checks the events)':''}. New CHATGPT enquiries reported as <span class="mono">lead_created</span>: ${c.sent||0} sent${c.queued||c.sending?`, ${(c.queued||0)+(c.sending||0)} waiting`:''}.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}${c.error?` <span class="prio-hot">${c.error} not accepted${st.last_error?': '+esc(st.last_error):''}</span>`:''}`;
+  const on=st.pixel_set&&st.key_set;
+  box.innerHTML=ctTile('ChatGPT Ads',on?(c.error?'warn':'ok'):'none',on?`New CHATGPT enquiries → <span class="mono">lead_created</span>${st.validate_only?' (test mode)':''}`:`Waiting for the ${!st.key_set?'API key':''}${!st.key_set&&!st.pixel_set?' and ':''}${!st.pixel_set?'Pixel ID':''} in Supabase`,
+    [['Sent',c.sent||0],['Waiting',(c.queued||0)+(c.sending||0)]],st.last_ok,c.error?`${c.error} not accepted${st.last_error?': '+st.last_error:''}`:'');
+}
+function ctTile(title,state,sub,stats,last,err){
+  const st={ok:['On','var(--call)'],warn:['Check','var(--warn)'],off:['Off','var(--muted)'],none:['Not set up','var(--muted)']}[state];
+  return `<div class="row"><b>${esc(title)}</b><span class="spacer"></span><span class="pill" style="color:${st[1]}"><span class="dot"></span><span style="color:var(--fg)">${st[0]}</span></span></div>
+    <div class="small muted">${sub}</div><div class="ct-stats">${stats.map(([k,v])=>`<span><b>${(+v||0).toLocaleString('en-IN')}</b>${esc(k)}</span>`).join('')}</div>
+    ${last?`<div class="small muted">Last sent ${esc(fmtD(last))}</div>`:''}${err?`<div class="small prio-hot">${esc(err)}</div>`:''}`;
 }
 /* Meta conversion tracking (supabase/meta-capi.sql): what Dialbook has reported back to Meta about Facebook / Instagram leads */
 async function capiStatus(){
   const box=$('#capiSt');if(!box)return;
   let st;try{const{data,error}=await sb.rpc('meta_capi_status');if(error)throw error;st=data}catch(e){return}
   if(!st)return;
-  const n=(ev,stt='sent')=>st.counts?.[ev+':'+stt]||0, err=Object.entries(st.counts||{}).filter(([k])=>k.endsWith(':error')).reduce((a,[,v])=>a+v,0);
-  box.innerHTML=st.dataset_id&&st.enabled?`<b>Conversion tracking to Meta: on</b> (dataset ${esc(st.dataset_id)}). Sent so far: ${n('LeadSubmitted')} LeadSubmitted · ${n('Contacted')} Contacted · ${n('QualifiedLead')} QualifiedLead (Interested or later) · ${n('RegistrationPaid')} RegistrationPaid (Converted) · ${n('Lost')} Lost · ${n('WrongNumber')} WrongNumber. Only Meta's lead ID is sent, never names or numbers.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}<br>WhatsApp ad chats: ${st.wa_clicks||0} with Meta's click ID. ${st.waba_set?`Sent: ${n('WA LeadSubmitted')} LeadSubmitted · ${n('WA QualifiedLead')} QualifiedLead · ${n('WA Purchase')} Purchase.`:`Waiting for the WhatsApp account to be connected (${(st.counts?.['WA LeadSubmitted:queued']||0)+(st.counts?.['WA QualifiedLead:queued']||0)+(st.counts?.['WA Purchase:queued']||0)} events waiting).`}${err?` <span class="prio-hot">${err} not accepted by Meta${st.last_error?': '+esc(st.last_error):''}</span>`:''}`
-    :'Conversion tracking to Meta is off.';
+  const n=(ev,stt='sent')=>st.counts?.[ev+':'+stt]||0, errOf=w=>Object.entries(st.counts||{}).filter(([k])=>k.endsWith(':error')&&k.startsWith('WA ')===w).reduce((a,[,v])=>a+v,0);
+  const on=!!(st.dataset_id&&st.enabled), ef=errOf(false), ew=errOf(true);
+  box.innerHTML=ctTile('Meta – lead forms',on?(ef?'warn':'ok'):'off',on?`Dataset ${esc(st.dataset_id)} · Meta's lead ID + stage`:'Off',
+    [['LeadSubmitted',n('LeadSubmitted')],['Contacted',n('Contacted')],['QualifiedLead',n('QualifiedLead')],['RegistrationPaid',n('RegistrationPaid')],['Lost',n('Lost')],['WrongNumber',n('WrongNumber')]],st.last_ok,ef?`${ef} not accepted${st.last_error?': '+st.last_error:''}`:'');
+  const wb=$('#capiWa');
+  if(wb){const waiting=['LeadSubmitted','QualifiedLead','Purchase'].reduce((a,e)=>a+n('WA '+e,'queued')+n('WA '+e,'sending'),0);
+    wb.innerHTML=ctTile('Meta – WhatsApp ad chats',st.waba_set&&on?(ew?'warn':'ok'):'none',st.waba_set?`${st.wa_clicks||0} chats with Meta's click ID`:'Waiting for the WhatsApp account to be connected',
+      [['LeadSubmitted',n('WA LeadSubmitted')],['QualifiedLead',n('WA QualifiedLead')],['Purchase',n('WA Purchase')],['Waiting',waiting]],null,ew?`${ew} not accepted`:'')}
 }
 function fbSetupModal(){
   const fb=S.ls.fb||{};
