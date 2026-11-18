@@ -24,7 +24,25 @@ async function hmacHex(secret: string, body: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Incoming = { phone: string; body: string; id: string; at?: string; name?: string; media?: string; fromMe?: boolean; hint?: string };
+type Incoming = { phone: string; body: string; id: string; at?: string; name?: string; media?: string; fromMe?: boolean; hint?: string; ad?: AdClick | null };
+type AdClick = { ctwa_clid: string; ad_id: string };
+
+/** The first value of a key anywhere in a payload (e.g. ctwa_clid inside referral / meta data). */
+function findDeep(o: unknown, key: string, depth = 0): string {
+  if (!o || typeof o !== "object" || depth > 6) return "";
+  for (const [k, v] of Object.entries(o as Obj)) {
+    if (k === key && (typeof v === "string" || typeof v === "number") && String(v).trim()) return String(v).trim();
+    if (v && typeof v === "object") { const f = findDeep(v, key, depth + 1); if (f) return f; }
+  }
+  return "";
+}
+/** Meta's click ID for a chat that started from a click-to-WhatsApp ad, and the ad's ID. */
+export function adClick(o: unknown): AdClick | null {
+  const clid = findDeep(o, "ctwa_clid");
+  if (!clid) return null;
+  const sid = findDeep(o, "source_id");
+  return { ctwa_clid: clid.slice(0, 500), ad_id: /^\d+$/.test(sid) ? sid : "" };
+}
 
 /** Ad details a provider sends with a message from a click-to-WhatsApp ad (referral, ad id/name, headline…). */
 export function adHints(o: unknown, path = "", out: string[] = [], depth = 0): string[] {
@@ -89,6 +107,9 @@ async function storeIncoming(acc: Obj, m: Incoming) {
   if (error && !String(error.message).includes("duplicate")) console.error(error.message);
   if (!error) await admin.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", lead.id);
   if (!error && !m.fromMe) {
+    // Meta's click ID from a WhatsApp ad: kept with the lead so its later stages can be reported to Meta
+    if (m.ad) await admin.rpc("wa_ctwa_save", { p_lead: lead.id, p_clid: m.ad.ctwa_clid, p_ad: m.ad.ad_id, p_at: m.at || new Date().toISOString() })
+      .then(({ error: e }) => { if (e) console.error("wa_ctwa_save", e.message); });
     if (m.hint && !lead.campaign_id) await admin.from("activities").insert({ lead_id: lead.id, kind: "note", text: `Came from an ad · ${m.hint.slice(0, 500)}` });
     await campaignByKeywords(lead, `${m.body || ""} ${m.hint || ""}`).catch((e) => console.error("keywords", e));
   }
@@ -123,7 +144,7 @@ async function handleMeta(acc: Obj, p: Obj) {
     for (const msg of v.messages || []) {
       const t = metaText(msg);
       await storeIncoming(acc, { phone: msg.from, body: t.body, media: t.media, id: msg.id, name: names[msg.from],
-        at: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : undefined, hint: adHints({ referral: msg.referral }).join(" · ") });
+        at: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : undefined, hint: adHints({ referral: msg.referral }).join(" · "), ad: adClick({ referral: msg.referral }) });
     }
     for (const s of v.statuses || []) {
       await storeStatus(acc, s.id, s.status, s.errors?.[0]?.error_data?.details || s.errors?.[0]?.title);
@@ -217,7 +238,8 @@ async function handleInterakt(acc: Obj, p: Obj) {
   if (type === "message_received") {
     const hint = adHints({ message: msg, customer: { traits: c.traits }, referral: d.referral, meta: d.meta_data }).join(" · ");
     if (hint) console.log("interakt ad details:", hint);
-    await storeIncoming(acc, { phone, body, media, id: String(msg.id || ""), name: c.traits?.name || undefined, at: msg.received_at_utc || undefined, hint });
+    const ad = adClick({ message: msg, customer: { traits: c.traits }, referral: d.referral, meta: d.meta_data });
+    await storeIncoming(acc, { phone, body, media, id: String(msg.id || ""), name: c.traits?.name || undefined, at: msg.received_at_utc || undefined, hint, ad });
     return;
   }
   const st = (type.match(/_(sent|delivered|read|failed)$/) || [])[1];
