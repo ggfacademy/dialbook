@@ -835,16 +835,51 @@ V.settings={live:false,mount(){
   <tr><td><b>Whole team (default)</b></td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.${k}" value="${esc(d.targets[k]||'')}" aria-label="Team ${k}"></td>`).join('')}</tr>
   ${agents().filter(m=>m.role==='telecaller').map(m=>`<tr><td>${esc(m.name)}</td>${['calls','connected','converted'].map(k=>`<td class="r"><input class="input num" style="width:90px;text-align:right" type="number" min="0" data-sp="targets.agents.${m.id}.${k}" value="${esc(d.targets.agents[m.id]?.[k]||'')}" placeholder="${esc(d.targets[k]||'')}" aria-label="${esc(m.name)} ${k}"></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
   <div class="card" data-tab="team"><h2>Call scripts</h2><p class="small muted" style="margin-top:-6px">What to say on the call, shown in Calling mode, on the lead and in the phone app. The best match is used: campaign and language, then campaign, then course and language, then course (one script for every city of a course), then the script under Campaigns → Edit, then language only, then a general one. Use ${TPLHELP}; they are filled from the lead and its campaign's course details.</p>
-  ${d.scripts.map((x,i)=>`<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:6px"><div class="row"><input class="input" style="max-width:240px" data-sp="scripts.${i}.name" value="${esc(x.name)}" aria-label="Script name" placeholder="Name, e.g. GAC Telugu"><select class="input" style="width:auto" data-sp="scripts.${i}.campaign_id" aria-label="Program">${opt('','Any program',x.campaign_id)}${S.campaigns.map(c=>opt(c.id,c.name,x.campaign_id)).join('')}</select>${courses().length||x.course?`<select class="input" style="width:auto" data-sp="scripts.${i}.course" aria-label="Course">${opt('','Any course',x.course)}${[...new Set([...courses(),x.course].filter(Boolean))].map(g=>opt(g,g,x.course)).join('')}</select>`:''}<select class="input" style="width:auto" data-sp="scripts.${i}.language" aria-label="Language">${opt('','Any language',x.language)}${d.languages.map(g=>opt(g,g,x.language)).join('')}</select><button class="btn sm ghost" data-act="setDel" data-v="scripts.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="8" data-sp="scripts.${i}.body" aria-label="Script" placeholder="Opening: Hello {first_name}, I am {agent} from {company}…&#10;Questions to ask…&#10;If they say the fee is high: …">${esc(x.body||'')}</textarea></div>`).join('')}
+  ${d.scripts.map((x,i)=>`<div class="set-item"><div class="row"><input class="input" style="max-width:240px" data-sp="scripts.${i}.name" value="${esc(x.name)}" aria-label="Script name" placeholder="Name, e.g. GAC Telugu"><select class="input" style="width:auto" data-sp="scripts.${i}.campaign_id" aria-label="Program">${opt('','Any program',x.campaign_id)}${S.campaigns.map(c=>opt(c.id,c.name,x.campaign_id)).join('')}</select>${courses().length||x.course?`<select class="input" style="width:auto" data-sp="scripts.${i}.course" aria-label="Course">${opt('','Any course',x.course)}${[...new Set([...courses(),x.course].filter(Boolean))].map(g=>opt(g,g,x.course)).join('')}</select>`:''}<select class="input" style="width:auto" data-sp="scripts.${i}.language" aria-label="Language">${opt('','Any language',x.language)}${d.languages.map(g=>opt(g,g,x.language)).join('')}</select><button class="btn sm ghost" data-act="setDel" data-v="scripts.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="8" data-sp="scripts.${i}.body" aria-label="Script" placeholder="Opening: Hello {first_name}, I am {agent} from {company}…&#10;Questions to ask…&#10;If they say the fee is high: …">${esc(x.body||'')}</textarea></div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="scripts">${ic('plus')}Add script</button></div>
   <div class="card" data-tab="biz"><h2>Languages</h2><label class="field" style="max-width:420px"><span>Languages your team works in, one per line</span><textarea class="input" rows="6" data-sp="languagesText">${esc(d.languages.join('\n'))}</textarea></label><p class="small muted">Save to update the language lists everywhere.</p></div>
   <div class="card" data-tab="src"><h2>Source names</h2><label class="field" style="max-width:420px"><span>One per line (used in lists and filters)</span><textarea class="input" rows="6" data-sp="sourcesText">${esc(d.sources.join('\n'))}</textarea></label></div>
   <div class="card" data-tab="msg"><h2>Quick messages (WhatsApp app and SMS)</h2><p class="small muted" style="margin-top:-6px">Ready-made texts that open in the phone's WhatsApp or SMS app. Use ${TPLHELP} and {phone}; course details come from the lead's campaign (Campaigns → Edit). Approved WhatsApp API templates are managed under WhatsApp above.</p>
-  ${d.templates.map((x,i)=>`<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:6px"><div class="row"><input class="input" style="max-width:260px" data-sp="templates.${i}.name" value="${esc(x.name)}" aria-label="Template name"><select class="input" style="width:auto" data-sp="templates.${i}.channel" aria-label="Channel">${opt('whatsapp','WhatsApp',x.channel)}${opt('sms','SMS',x.channel)}</select><button class="btn sm ghost" data-act="setDel" data-v="templates.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="3" data-sp="templates.${i}.body" aria-label="Message">${esc(x.body)}</textarea></div>`).join('')}
+  ${d.templates.map((x,i)=>`<div class="set-item"><div class="row"><input class="input" style="max-width:260px" data-sp="templates.${i}.name" value="${esc(x.name)}" aria-label="Template name"><select class="input" style="width:auto" data-sp="templates.${i}.channel" aria-label="Channel">${opt('whatsapp','WhatsApp',x.channel)}${opt('sms','SMS',x.channel)}</select><button class="btn sm ghost" data-act="setDel" data-v="templates.${i}" aria-label="Remove">${ic('x')}</button></div><textarea class="input" rows="3" data-sp="templates.${i}.body" aria-label="Message">${esc(x.body)}</textarea></div>`).join('')}
   <button class="btn sm" data-act="setAdd" data-v="templates">${ic('plus')}Add template</button></div></div>`;
 }};
 
-V.settings.load=async()=>{waSettings();if(isAdmin()){lsSettings();nuSettings()}};
+V.settings.load=async()=>{setDecor();Promise.allSettled([waSettings(),isAdmin()&&lsSettings(),isAdmin()&&nuSettings()]).then(setDecor)};
+/* Settings: every card becomes a colour-coded section with an icon, and each tab gets a jump bar to its sections
+   (Lead sources builds its own). Runs again after the parts that load later (WhatsApp, Nurture, Lead sources). */
+const SET_SEC={'My WhatsApp':['phone','#1fa855'],'Company WhatsApp numbers':['msg','#1fa855'],'Business':['home','var(--accent)'],'Languages':['globe','var(--s6)'],'Phone app':['phone','var(--s2)'],'WhatsApp':['msg','#1fa855'],
+  'Nurture sequences':['send','var(--s5)'],'Quick messages (WhatsApp app and SMS)':['copy','var(--s2)'],'AI calling':['spark','var(--s5)'],
+  'Call outcomes':['phone','var(--s2)'],'Lead stages':['cols','var(--s3)'],'Lost reasons':['x','var(--s7)'],'Daily targets':['target','var(--s4)'],
+  'Call scripts':['edit','var(--s6)'],'Source names':['leads','var(--s8)'],'Training calendar link':['cal','var(--s6)'],"Team members' linked WhatsApp":['team','#1fa855'],'WhatsApp gateway (for QR linking)':['msg','var(--s8)']};
+const SET_SHORT={'Quick messages (WhatsApp app and SMS)':'Quick messages','WhatsApp gateway (for QR linking)':'WhatsApp gateway',"Team members' linked WhatsApp":'Linked WhatsApp'};
+function setDecor(){
+  const body=$('.set-body');if(!body)return;
+  const tabs={};
+  [...body.querySelectorAll('.card')].forEach(card=>{
+    const tabEl=card.closest('[data-tab]');const tab=tabEl?tabEl.dataset.tab:'';if(!tab)return;
+    if(!card.classList.contains('ls-sec')){
+      const h=[...card.children].find(x=>x.tagName==='H2')||card.querySelector(':scope>.row>h2');if(!h)return;
+      const title=h.textContent.trim();const [icon,c]=SET_SEC[title]||['gear','var(--s1)'];
+      card.classList.add('ls-sec','set-sec');card.style.setProperty('--c',c);
+      if(!card.id)card.id='sec-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+      if(h.parentElement!==card){   // heading shares a row with buttons: keep the row, add the icon
+        const row=h.parentElement;row.classList.add('ls-head');const i=document.createElement('span');i.className='ls-ico';i.innerHTML=ic(icon);row.insertBefore(i,row.firstChild);
+      }else{
+        const hd=document.createElement('div');hd.className='ls-head';hd.innerHTML=`<span class="ls-ico">${ic(icon)}</span><div class="grow"></div>`;
+        h.replaceWith(hd);hd.querySelector('.grow').appendChild(h);
+        const p=hd.nextElementSibling;if(p&&p.matches('p.small.muted')&&p.textContent.length<260){p.style.margin='0';hd.querySelector('.grow').appendChild(p)}
+      }
+    }
+    if(tab!=='src'){const h2=card.querySelector('.ls-head h2');if(h2)(tabs[tab]=tabs[tab]||[]).push([card.id,h2.textContent.trim(),card.style.getPropertyValue('--c')||'var(--s1)',SET_SEC[h2.textContent.trim()]?.[0]||'gear'])}
+  });
+  Object.entries(tabs).forEach(([tab,list])=>{
+    body.querySelectorAll(`.ls-jump-host[data-tab="${tab}"]`).forEach(x=>x.remove());
+    if(list.length<2)return;
+    const host=document.createElement('div');host.className='ls-jump-host';host.dataset.tab=tab;
+    host.innerHTML=`<nav class="ls-jump" aria-label="Sections">${list.map(([id,t,c,i])=>`<button class="ls-chip" style="--c:${c}" data-act="lsJump" data-v="${esc(id)}">${ic(i)}${esc(SET_SHORT[t]||t)}</button>`).join('')}</nav>`;
+    const first=body.querySelector(`[data-tab="${tab}"]`);if(first)body.insertBefore(host,first);
+  });
+}
 /* ---------- modal & drawer ---------- */
 function modal(html){histMark('md');$('#md').innerHTML=`<div class="overlay modal-ov" data-act="closeMd"></div><div class="modal" role="dialog" aria-modal="true"><button class="btn sm ghost x" data-act="closeMd" aria-label="Close">${ic('x')}</button>${html}</div>`;setTimeout(()=>$('#md .modal input:not([type=checkbox]),#md .modal select')?.focus(),30)}
 function closeModal(){$('#md').innerHTML='';if(S.lostRes){const f=S.lostRes;S.lostRes=null;f(null)}}

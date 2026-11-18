@@ -308,7 +308,7 @@ details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;b
 .ls-chip:hover{background:color-mix(in srgb,var(--c) 16%,var(--surface))}
 .ls-note{margin:4px 2px 12px}
 .card.ls-sec{position:relative;border-left:5px solid var(--c);margin-bottom:16px;scroll-margin-top:130px}
-.ls-head{display:flex;align-items:center;gap:12px;margin:-2px 0 12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ls-head{display:flex;align-items:flex-start;gap:12px;margin:-2px 0 12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .ls-head h2{margin:0;font-size:1.08rem}
 .ls-ico{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--c)}
 .ls-ico svg{width:22px;height:22px}
@@ -323,6 +323,9 @@ details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;b
 .ct-stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
 .ct-stats span{display:inline-flex;flex-direction:column;min-width:76px;padding:6px 9px;border-radius:8px;background:var(--surface);border:1px solid var(--line);font-size:.72rem;color:var(--muted)}
 .ct-stats span b{font-size:1rem;color:var(--fg)}
+.set-item{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:12px;border:1px solid var(--line);border-left:3px solid color-mix(in srgb,var(--c) 55%,var(--line));border-radius:10px;background:var(--surface)}
+.set-sec h3{margin:22px 0 10px;padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--c) 9%,var(--surface2));border-left:3px solid var(--c);font-size:.95rem}
+.set-sec .ls-head+h3,.set-sec .ls-head+.small+h3{margin-top:4px}
 @media (max-width:640px){.set-body>.ls-jump-host{position:static}.ls-chip{font-size:.76rem;padding:6px 10px}}
 /* WhatsApp inbox */
 .wa-wrap{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:460px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
