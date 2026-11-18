@@ -1,9 +1,9 @@
--- Dialbook Pro – call scripts for the Gold Audit and Appraisal course (English, Hindi, Tamil, Telugu).
--- Run in Supabase → SQL Editor, after courses.sql. Safe to run again: it puts this version of the four
+-- Dialbook Pro – call scripts for the Gold Audit and Appraisal course (English, Hindi, Tamil, Telugu, Kannada).
+-- Run in Supabase → SQL Editor, after courses.sql. Safe to run again: it puts this version of the five
 -- Gold Audit scripts in place (replacing earlier copies of them) and leaves every other script as it is.
 --
 -- The scripts are for the course "Gold Audit and Appraisal", so they work for every city's campaign of that
--- course. The English one is for any language; Hindi, Tamil and Telugu are used for leads with that language.
+-- course. The English one is for any language; Hindi, Tamil, Telugu and Kannada are used for leads with that language.
 -- {fee}, {duration}, {timing}, {venue} and {dates} are filled from the lead's campaign (Campaigns → Edit).
 -- Payment: the QR code on the MSME website link, or a DD in the name of "Director, MSME TDC Chennai".
 
@@ -331,7 +331,88 @@ CUSTOMERS అడిగే ప్రశ్నలు – ఏం చెప్పా
 జ: "లేదు గారు. ఇది పూర్తిగా practical – real ornaments ని మీరే చేతితో test చేస్తారు, అందుకే classroom లో మాత్రమే."
 
 ప్ర: Certificate వేరే state లో valid ఆ?
-జ: "ఇది Central Government (MSME) certificate, Government of India logo తో. భారతదేశం అంతటా ఉపయోగించవచ్చు."$gs$, 3)
+జ: "ఇది Central Government (MSME) certificate, Government of India logo తో. భారతదేశం అంతటా ఉపయోగించవచ్చు."$gs$, 3),
+  ('ga-kn', 'Gold Audit – Kannada', 'Kannada', $gs$GOLD AUDIT AND APPRAISAL – KANNADA CALL SCRIPT
+
+★ 1. OPENING – ಮೊದಲು ನಿಮ್ಮ ಹೆಸರು, company ಹೆಸರು ಹೇಳಿ
+"ನಮಸ್ಕಾರ {first_name} ಸರ್/ಮೇಡಂ, ನಾನು {agent}, {company} ಇಂದ ಮಾತಾಡ್ತಾ ಇದ್ದೀನಿ.
+ನೀವು ನಮ್ಮ {course} training ಬಗ್ಗೆ enquiry ಮಾಡಿದ್ದೀರಿ.
+ಈಗ 2 ನಿಮಿಷ ಮಾತಾಡಬಹುದಾ?"
+(ಆಗದಿದ್ದರೆ: "ಪರವಾಗಿಲ್ಲ ಸರ್ – ಯಾವಾಗ call ಮಾಡಲಿ?" ಆ ಸಮಯಕ್ಕೆ follow-up ಇಡಿ.)
+
+★ 2. ವಿವರಿಸುವ ಮೊದಲು ಕೇಳಿ – 3 ಚಿಕ್ಕ ಪ್ರಶ್ನೆಗಳು
+- "ನೀವು ಯಾವ ಊರಿನವರು?"
+- "ಈಗ ಏನು ಮಾಡ್ತಾ ಇದ್ದೀರಿ, ನಿಮ್ಮ qualification ಏನು?"
+- "ನಿಮ್ಮ plan ಏನು – bank ಅಥವಾ NBFC ಯಲ್ಲಿ gold appraiser / gold auditor job, ನಿಮ್ಮದೇ gold loan business, ಅಥವಾ ಹಳೆಯ ಚಿನ್ನ ಖರೀದಿ-ಮಾರಾಟ?"
+ಅವರ ಉತ್ತರ ಕೇಳಿ, ವಿವರಿಸುವಾಗ ಅದನ್ನೇ ಬಳಸಿ.
+
+3. PROGRAM ಬಗ್ಗೆ
+"ಈ training ಅನ್ನು MSME Technology Development Centre ನಡೆಸುತ್ತದೆ – ಇದು ಭಾರತ ಸರ್ಕಾರದ ಸಂಸ್ಥೆ.
+- ಇದು {duration}, {timing}.
+- ಪೂರ್ಣ Gold Appraisal syllabus ಇದೆ: ಚಿನ್ನದ purity check ಮಾಡುವುದು, stone weight ಲೆಕ್ಕ ಹಾಕುವುದು, ಅಸಲಿ ಮತ್ತು ನಕಲಿ ಚಿನ್ನ ಗುರುತಿಸುವುದು.
+- ಜೊತೆಗೆ, ಬೇರೆ ಬೇರೆ ರೀತಿಯ fake jewellery ಗುರುತಿಸುವ ಹೆಚ್ಚುವರಿ practical sessions,
+  ಮತ್ತು bank ಅಥವಾ NBFC ಯಲ್ಲಿ gold audit ಮಾಡುವಾಗ ಅನುಸರಿಸಬೇಕಾದ step-by-step procedure.
+- ಪ್ರತಿಯೊಬ್ಬರೂ ಬೇರೆ ಬೇರೆ purity ಇರುವ real gold ornaments ಮತ್ತು samples ಜೊತೆ ಸ್ವತಃ practice ಮಾಡ್ತಾರೆ.
+- ಕೊನೆಯಲ್ಲಿ Government of India logo ಇರುವ MSME certificate ಸಿಗುತ್ತದೆ.
+ಮೊದಲು GAC course ಮಾಡಬೇಕಾಗಿಲ್ಲ – ನೇರವಾಗಿ ಇದಕ್ಕೆ ಸೇರಬಹುದು."
+
+4. ಯಾರು ಸೇರಬಹುದು
+- bank ಮತ್ತು NBFC ಯಲ್ಲಿ gold appraiser ಅಥವಾ gold auditor job ಬೇಕಾದವರು
+- ತಮ್ಮದೇ gold loan business ಶುರು ಮಾಡಬೇಕೆಂದಿರುವವರು
+- ಹಳೆಯ ಚಿನ್ನ ಖರೀದಿ-ಮಾರಾಟ business ಶುರು ಮಾಡಬೇಕೆಂದಿರುವವರು
+
+5. VENUE ಮತ್ತು DATES
+Venue: {venue}
+Dates: {dates}
+(ಇನ್ನೂ fix ಆಗದಿದ್ದರೆ: "ಈ batch ನ venue ಮತ್ತು dates ಬೇಗ confirm ಆಗುತ್ತೆ. ನಿಮ್ಮ interest note ಮಾಡ್ಕೊಳ್ತೀನಿ, fix ಆದ ತಕ್ಷಣ WhatsApp ನಲ್ಲಿ details ಕಳಿಸ್ತೀನಿ.")
+
+6. ಮೊದಲ ದಿನ ತರಬೇಕಾದ documents
+- 1 passport-size photo
+- Aadhaar card xerox
+- Qualification certificate xerox
+- MSME application form, ತುಂಬಿ sign ಮಾಡಿದ್ದು ("Send form" ಒತ್ತಿ – ಅವರು phone ನಲ್ಲೇ ತುಂಬಿ print ಮಾಡ್ಕೊಳ್ತಾರೆ)
+
+7. FEES ಮತ್ತು PAYMENT
+"Fee {fee}.
+ಎರಡು ರೀತಿಯಲ್ಲಿ pay ಮಾಡಬಹುದು:
+- MSME website link ನಲ್ಲಿರುವ QR code ಮೂಲಕ – link ಅನ್ನು WhatsApp ನಲ್ಲಿ ಕಳಿಸ್ತೀನಿ, ಅಥವಾ
+- 'Director, MSME TDC Chennai' ಹೆಸರಿಗೆ DD ಮೂಲಕ."
+(Cash ತೆಗೆದುಕೊಳ್ಳುವುದಿಲ್ಲ.)
+
+8. COURSE ಆದ ಮೇಲೆ
+"ಈ certificate ಇಂದ bank ಮತ್ತು NBFC ಗಳಲ್ಲಿ gold auditor ಅಥವಾ gold appraiser ಆಗಿ empanel ಆಗಬಹುದು.
+ಕೆಲಸ ಮತ್ತು ಸಂಪಾದನೆ bank ನ business ಅಥವಾ ನೀವು cover ಮಾಡುವ branches ಮೇಲೆ ಅವಲಂಬಿಸಿರುತ್ತದೆ.
+ಅನೇಕರು ತಮ್ಮದೇ gold loan ಅಥವಾ ಹಳೆಯ ಚಿನ್ನದ business ಕೂಡ ಶುರು ಮಾಡ್ತಾರೆ."
+
+★ 9. ಯಾವಾಗಲೂ ಮುಂದಿನ step ಜೊತೆ call ಮುಗಿಸಿ – step ಇಲ್ಲದೆ ಎಂದಿಗೂ ಮುಗಿಸಬೇಡಿ
+"ಈಗಲೇ course details WhatsApp ನಲ್ಲಿ ಕಳಿಸ್ತೀನಿ. ಈ batch ಗೆ ನಿಮ್ಮ seat book ಮಾಡಲಾ?"
+→ YES: "Payment link ಈಗಲೇ ಕಳಿಸ್ತೀನಿ – ಅಥವಾ DD ತರಬಹುದು." Lead ಅನ್ನು Payment pending ಗೆ move ಮಾಡಿ, payment confirm ಮಾಡಲು follow-up ಇಡಿ.
+→ ಯೋಚಿಸಲು ಸಮಯ ಬೇಕು: "ಯಾವಾಗ call ಮಾಡಲಿ – ಇವತ್ತು ಸಂಜೆ ಅಥವಾ ನಾಳೆ ಬೆಳಿಗ್ಗೆ?" ಅದೇ ಸಮಯಕ್ಕೆ follow-up ಇಡಿ.
+→ ಆಸಕ್ತಿ ಇಲ್ಲ: ವಿನಯದಿಂದ "ಕಾರಣ ತಿಳಿಸಬಹುದಾ?" ಎಂದು ಕೇಳಿ, ಅದನ್ನು lost reason ಆಗಿ ಆಯ್ಕೆ ಮಾಡಿ.
+
+------------------------------------------------------------
+ಗ್ರಾಹಕರು ಕೇಳುವ ಪ್ರಶ್ನೆಗಳು – ಮತ್ತು ಉತ್ತರಗಳು
+
+ಪ್ರ: Fee Rs. 25,000 ಯಾಕೆ?
+ಉ: "Rs. 25,000 ನಲ್ಲಿ GST ಸೇರಿದೆ. ಈ course ನಲ್ಲಿ ಪ್ರತಿಯೊಬ್ಬರಿಗೂ ಬೇರೆ ಬೇರೆ purity ಇರುವ real gold ornaments ಮತ್ತು samples ಸ್ವತಃ test ಮಾಡಲು ಕೊಡ್ತೀವಿ – ಒಬ್ಬರು ಇಬ್ಬರು ಮಾತ್ರ test ಮಾಡುವ demo ಅಲ್ಲ. Test ಮಾಡುವಾಗ ಸ್ವಲ್ಪ ಚಿನ್ನ ನಷ್ಟ ಆಗುತ್ತೆ, ಇವೆಲ್ಲವನ್ನೂ ಗಮನಿಸಿ fee fix ಮಾಡಲಾಗಿದೆ."
+
+ಪ್ರ: 2 ದಿನ ಸಾಕಾ?
+ಉ: "ಹೌದು, 2 ಪೂರ್ಣ ದಿನ ಸಾಕು. Goldsmithing ಅಥವಾ stone setting ತರಹದ jewellery ತಯಾರಿಕೆ courses ಗೆ ಹೆಚ್ಚು ಸಮಯ ಬೇಕು. ಇಲ್ಲಿ ತಯಾರಾದ ಚಿನ್ನದ ಆಭರಣಗಳನ್ನು ಮಾತ್ರ ನೋಡಿ ಅಸಲಿಯಾ ನಕಲಿಯಾ ಅಂತ check ಮಾಡ್ತೀವಿ – appraiser ಮತ್ತು auditor ಗೆ ಬೇಕಾದ ಎಲ್ಲಾ ವಿಷಯಗಳನ್ನೂ ಈ 2 ದಿನಗಳಲ್ಲಿ cover ಮಾಡ್ತೀವಿ."
+
+ಪ್ರ: Job guarantee ಕೊಡ್ತೀರಾ?
+ಉ: "ಒಳ್ಳೆಯ ಪ್ರಶ್ನೆ. Bank ಮತ್ತು NBFC ಗಳಿಗೆ trained gold appraisers ಮತ್ತು gold auditors ಬೇಕು, ಈ Government of India certificate ಇಂದ ಅವರ ಜೊತೆ empanel ಆಗಲು ನೀವು ಅರ್ಹರಾಗ್ತೀರಿ. ಆದರೆ ನಾವು job guarantee ಕೊಡುವುದಿಲ್ಲ – empanelment ಮತ್ತು ಕೆಲಸ bank ಮತ್ತು ನಿಮ್ಮ ಪ್ರಯತ್ನದ ಮೇಲೆ ಅವಲಂಬಿಸಿರುತ್ತದೆ."
+
+ಪ್ರ: ಮೊದಲು GAC course ಮುಗಿಸಬೇಕಾ?
+ಉ: "ಬೇಡ. ಈ course ನಲ್ಲೇ ಪೂರ್ಣ Gold Appraisal content ಇದೆ, ನೇರವಾಗಿ ಸೇರಬಹುದು."
+
+ಪ್ರ: ಇದು Gold Appraisal (GAC) course ಗಿಂತ ಹೇಗೆ ಬೇರೆ?
+ಉ: "GAC ನಲ್ಲಿ gold appraisal ಕಲಿಸ್ತಾರೆ. ಈ course ನಲ್ಲಿ ಅದೆಲ್ಲವೂ ಇದೆ, ಜೊತೆಗೆ ಬೇರೆ ಬೇರೆ ರೀತಿಯ fake jewellery ಮತ್ತು bank / NBFC ಗಳಲ್ಲಿ ಅನುಸರಿಸುವ audit procedure ಬಗ್ಗೆ practical sessions ಇವೆ. ಇದು 2 ಪೂರ್ಣ ದಿನ, {timing}."
+
+ಪ್ರ: Online course ಇದೆಯಾ?
+ಉ: "ಇಲ್ಲ. ಇದು ಪೂರ್ತಿ practical – real ornaments ಅನ್ನು ನೀವೇ ಕೈಯಾರೆ test ಮಾಡ್ತೀರಿ, ಅದಕ್ಕೆ classroom ನಲ್ಲಿ ಮಾತ್ರ."
+
+ಪ್ರ: Certificate ಬೇರೆ state ನಲ್ಲಿ valid ಆಗುತ್ತಾ?
+ಉ: "ಇದು Government of India logo ಇರುವ Central Government (MSME) certificate, ಭಾರತದ ಎಲ್ಲೆಡೆ ಬಳಸಬಹುದು."$gs$, 4)
 ), add as (
   select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'campaign_id', '', 'course', 'Gold Audit and Appraisal',
                                       'language', language, 'body', body) order by ord) as items
