@@ -3,8 +3,11 @@
 --
 -- For every lead that came from a Facebook or Instagram lead form (it has Meta's lead ID), Dialbook sends Meta:
 --   LeadSubmitted     when the lead arrives
+--   Contacted         the first time it is moved past New (Contacted, Follow-up, Interested, Payment pending, Converted)
 --   QualifiedLead     the first time it is moved to Interested, Payment pending or Converted
 --   RegistrationPaid  when it is moved to Converted
+--   Lost / WrongNumber when it is moved to Lost (WrongNumber when the lost reason or last call outcome is "Wrong number";
+--                     sent 3+ minutes later so the reason is saved first, and not sent if the lead was reopened)
 -- Only Meta's own lead ID is sent – never the name, phone or email. Each event goes once per Meta lead.
 -- Events are sent every 5 minutes with the Facebook token saved in Settings → Lead sources → Facebook settings,
 -- to the Meta dataset (pixel) set below. Meta accepts events up to 7 days old.
@@ -72,8 +75,11 @@ create or replace function public.meta_capi_on_stage() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if new.stage is not distinct from old.stage then return new; end if;
+  if new.stage in ('contacted', 'followup', 'interested', 'negotiation', 'won') then perform public.meta_capi_queue(new.id, 'Contacted'); end if;
   if new.stage in ('interested', 'negotiation', 'won') then perform public.meta_capi_queue(new.id, 'QualifiedLead'); end if;
   if new.stage = 'won' then perform public.meta_capi_queue(new.id, 'RegistrationPaid'); end if;
+  -- named Lost or WrongNumber when it is sent (a few minutes later), after the lost reason has been saved
+  if new.stage = 'lost' then perform public.meta_capi_queue(new.id, 'Lost'); end if;
   return new;
 exception when others then raise warning 'meta_capi_on_stage: %', sqlerrm; return new;
 end $$;
@@ -83,13 +89,16 @@ create trigger meta_capi_on_stage after update of stage on public.leads for each
 -- read Meta's answers to the last batch, then send the next one (every 5 minutes)
 create or replace function public.meta_capi_run() returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare c public.meta_capi_config; fb jsonb; r record; body jsonb; req bigint; n int := 0;
+declare c public.meta_capi_config; fb jsonb; r record; body jsonb; ids bigint[]; req bigint; n int := 0;
 begin
   -- 1. answers
   for r in select distinct e.request_id, h.status_code, h.content, h.timed_out, h.error_msg
              from public.meta_capi_events e join net._http_response h on h.id = e.request_id
             where e.status = 'sending' loop
-    if r.status_code = 200 then
+    if r.timed_out or r.status_code is null then
+      -- no answer in time: send again later (same event_id, so Meta counts it once)
+      update public.meta_capi_events set status = 'queued', request_id = null where request_id = r.request_id and status = 'sending';
+    elsif r.status_code = 200 then
       update public.meta_capi_events set status = 'sent', sent_at = now(), error = null where request_id = r.request_id and status = 'sending';
       update public.meta_capi_config set last_ok = now(), last_error = null where id = 1;
     else
@@ -106,28 +115,40 @@ begin
   -- too old for Meta
   update public.meta_capi_events set status = 'expired' where status = 'queued' and event_time < now() - interval '7 days';
 
+  -- a lost lead: Wrong number (lost reason or last call outcome) or Lost; skip if the lead was reopened meanwhile
+  update public.meta_capi_events e set event = 'WrongNumber'
+    from public.leads l
+   where e.status = 'queued' and e.event = 'Lost' and l.id = e.lead_id
+     and (l.lost_reason ilike '%wrong number%'
+          or (select c2.outcome from public.calls c2 where c2.lead_id = l.id order by c2.created_at desc limit 1) = 'wrong_number')
+     and not exists (select 1 from public.meta_capi_events x where x.meta_lead_id = e.meta_lead_id and x.event = 'WrongNumber');
+  update public.meta_capi_events e set status = 'skipped'
+    from public.leads l
+   where e.status = 'queued' and e.event in ('Lost', 'WrongNumber') and l.id = e.lead_id and l.stage <> 'lost';
+
   -- 2. next batch
   select * into c from public.meta_capi_config where id = 1;
   if not c.enabled or coalesce(c.dataset_id, '') !~ '^[0-9]+$' then return jsonb_build_object('ok', false, 'reason', 'not set up'); end if;
   select value into fb from public.integration_secrets where key = 'facebook';
   if coalesce(fb->>'user_token', '') = '' then return jsonb_build_object('ok', false, 'reason', 'no Facebook token'); end if;
 
-  select jsonb_agg(jsonb_build_object(
+  select array_agg(e.id order by e.id), jsonb_agg(jsonb_build_object(
            'event_name', e.event,
            'event_time', extract(epoch from e.event_time)::bigint,
            'event_id', e.meta_lead_id || ':' || e.event,
            'action_source', 'system_generated',
            'user_data', jsonb_build_object('lead_id', e.meta_lead_id::numeric),
-           'custom_data', jsonb_build_object('event_source', 'crm', 'lead_event_source', 'Dialbook Pro'))), count(*)
-    into body, n
-    from (select * from public.meta_capi_events where status = 'queued' order by id limit 500) e;
+           'custom_data', jsonb_build_object('event_source', 'crm', 'lead_event_source', 'Dialbook Pro')) order by e.id), count(*)
+    into ids, body, n
+    from (select * from public.meta_capi_events
+           where status = 'queued' and (event not in ('Lost', 'WrongNumber') or event_time < now() - interval '3 minutes')
+           order by id limit 100) e;
   if n = 0 then return jsonb_build_object('ok', true, 'sent', 0); end if;
 
   req := net.http_post(
     url := 'https://graph.facebook.com/' || coalesce(nullif(fb->>'api_version', ''), 'v23.0') || '/' || c.dataset_id || '/events?access_token=' || (fb->>'user_token'),
-    body := jsonb_build_object('data', body), timeout_milliseconds := 30000);
-  update public.meta_capi_events set status = 'sending', request_id = req, sending_at = now()
-   where id in (select id from public.meta_capi_events where status = 'queued' order by id limit 500);
+    body := jsonb_build_object('data', body), timeout_milliseconds := 60000);
+  update public.meta_capi_events set status = 'sending', request_id = req, sending_at = now() where id = any(ids);
   return jsonb_build_object('ok', true, 'sent', n);
 end $$;
 revoke execute on function public.meta_capi_run() from anon, authenticated, public;
