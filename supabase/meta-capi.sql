@@ -173,11 +173,14 @@ notify pgrst, 'reload schema';
 --   LeadSubmitted  when the chat arrives,  QualifiedLead  at Interested / Payment pending / Converted,
 --   Purchase       at Converted (with the fee: the lead's value, else the campaign's fee, in INR).
 -- Meta only accepts its standard event names for WhatsApp, so there is no Contacted / Lost here.
--- Sending starts once the WhatsApp Business Account ID is saved:
---   update public.meta_capi_config set waba_id = '<WhatsApp Business Account ID>' where id = 1;
+-- Sending starts once the WhatsApp Business Account ID is saved (and, if WhatsApp Manager → Datasets gave a different
+-- dataset, its ID):
+--   update public.meta_capi_config set waba_id = '<WhatsApp Business Account ID>', wa_dataset_id = '<dataset ID>' where id = 1;
 -- and the Facebook token in Dialbook has access to that WhatsApp account (whatsapp_business_manage_events).
 -- =====================================================================================================
 alter table public.meta_capi_config add column if not exists waba_id text not null default '';
+-- the dataset linked to the WhatsApp account in WhatsApp Manager → Datasets (if it differs from dataset_id)
+alter table public.meta_capi_config add column if not exists wa_dataset_id text not null default '';
 
 -- the amount reported with RegistrationPaid / Purchase: the lead's value, else the campaign's fee ("Rs. 15,000 including GST")
 create or replace function public.meta_capi_value(p_lead uuid) returns numeric
@@ -320,7 +323,9 @@ begin
              order by id limit 100) e;
     if n = 0 then continue; end if;
     req := net.http_post(
-      url := 'https://graph.facebook.com/' || coalesce(nullif(fb->>'api_version', ''), 'v23.0') || '/' || c.dataset_id || '/events?access_token=' || (fb->>'user_token'),
+      url := 'https://graph.facebook.com/' || coalesce(nullif(fb->>'api_version', ''), 'v23.0') || '/'
+             || case when kind = 'wa' and coalesce(c.wa_dataset_id, '') ~ '^[0-9]+$' then c.wa_dataset_id else c.dataset_id end
+             || '/events?access_token=' || (fb->>'user_token'),
       body := jsonb_build_object('data', body), timeout_milliseconds := 60000);
     update public.meta_capi_events set status = 'sending', request_id = req, sending_at = now() where id = any(ids);
     total := total + n;
