@@ -179,6 +179,15 @@ notify pgrst, 'reload schema';
 -- =====================================================================================================
 alter table public.meta_capi_config add column if not exists waba_id text not null default '';
 
+-- the amount reported with RegistrationPaid / Purchase: the lead's value, else the campaign's fee ("Rs. 15,000 including GST")
+create or replace function public.meta_capi_value(p_lead uuid) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(nullif(l.value, 0),
+                  nullif(regexp_replace(split_part(coalesce(c.details->>'fee', ''), ' incl', 1), '\D', '', 'g'), '')::numeric)
+    from public.leads l left join public.campaigns c on c.id = l.campaign_id where l.id = p_lead
+$$;
+revoke execute on function public.meta_capi_value(uuid) from anon, authenticated, public;
+
 create table if not exists public.wa_ctwa (
   ctwa_clid text primary key,
   lead_id uuid references public.leads(id) on delete cascade,
