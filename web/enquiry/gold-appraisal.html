@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gold Appraiser Training – MSME certified | Global Gold Foundation</title>
 <meta name="description" content="4-day Gold Appraiser Training with a Government of India (MSME) certificate. Fee Rs. 15,000. Batches in Chennai, Hyderabad and Vijayawada. Enquire now.">
-<link rel="icon" href="../media/ggf-logo.jpg">
+<link rel="icon" href="https://ggfacademy.github.io/dialbook/media/ggf-logo.jpg">
 <!-- Google tag (Google Ads AW-10979287831) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-10979287831"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','AW-10979287831');</script>
@@ -59,7 +59,7 @@
 <body>
 <div class="wrap">
   <header>
-    <img src="../media/ggf-logo.jpg" alt="Global Gold Foundation logo">
+    <img src="https://ggfacademy.github.io/dialbook/media/ggf-logo.jpg" alt="Global Gold Foundation logo">
     <div><b>Global Gold Foundation</b><span>Training partner of MSME TDC, Chennai (Govt of India)</span></div>
   </header>
 
@@ -123,7 +123,7 @@
     <button id="go" type="submit">Submit enquiry</button>
     <div class="err-box" id="sendErr"></div>
     <a class="call" href="tel:8807700611">Or call us: 88077 00611</a>
-    <p class="privacy"><b>Privacy notice:</b> This form is run by <b>Global Gold Foundation Pvt Ltd</b>, Mogappair West, Chennai – 600 037. We use your details to answer this enquiry and to contact you about our training by phone and WhatsApp. To measure our Google ads, Google is told that an enquiry was made, with your mobile number in encrypted (hashed) form. We do not sell your details. You can ask us to stop contacting you or to delete your details at any time – reply "STOP" on WhatsApp or tell the team member who calls you. Read our <a href="https://www.globalgoldfoundation.com/app/includes/ggf_policies/privacy_policies" target="_blank" rel="noopener">privacy policy</a> and <a href="../privacy.html" target="_blank" rel="noopener">enquiry data policy</a>.</p>
+    <p class="privacy"><b>Privacy notice:</b> This form is run by <b>Global Gold Foundation Pvt Ltd</b>, Mogappair West, Chennai – 600 037. We use your details to answer this enquiry and to contact you about our training by phone and WhatsApp. To measure our Google ads, Google is told that an enquiry was made, with your mobile number in encrypted (hashed) form. We do not sell your details. You can ask us to stop contacting you or to delete your details at any time – reply "STOP" on WhatsApp or tell the team member who calls you. Read our <a href="https://www.globalgoldfoundation.com/app/includes/ggf_policies/privacy_policies" target="_blank" rel="noopener">privacy policy</a> and <a href="https://ggfacademy.github.io/dialbook/privacy.html" target="_blank" rel="noopener">enquiry data policy</a>.</p>
   </form>
 
   <div class="done" id="done">
@@ -133,15 +133,19 @@
     <a href="https://www.globalgoldfoundation.com/">Visit globalgoldfoundation.com</a>
   </div>
 
-  <footer>© Global Gold Foundation Pvt Ltd · Chennai · <a href="../privacy.html" target="_blank" rel="noopener">Privacy</a></footer>
+  <footer>© Global Gold Foundation Pvt Ltd · Chennai · <a href="https://ggfacademy.github.io/dialbook/privacy.html" target="_blank" rel="noopener">Privacy</a></footer>
 </div>
 
-<script src="../config.js"></script>
 <script>
 (function () {
   // Leads are saved through Dialbook's web_enquiry function (lead source GOOGLE ADS); the Google Ads conversion
   // fires only after Dialbook answers that the lead is saved – never on a click, an error or a page refresh.
-  var CFG = window.DIALBOOK_CONFIG || {};
+  // Self-contained, so this one file also works when copied onto globalgoldfoundation.com.
+  // The key below is Dialbook's public ("anon") key: it can only call the locked-down web_enquiry function.
+  var CFG = {
+    url: "https://yyrovakknsuanlolrlth.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5cm92YWtrbnN1YW5sb2xybHRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NjE4ODgsImV4cCI6MjEwNjMzNzg4OH0.wcMxbvfSHD9qbzD7UATOY5No2ixJnZ5IUO99XKWYqy0"
+  };
   var FORM_KEY = "google-gold-appraisal";
   var SEND_TO = "AW-10979287831/-NCsCP7yue4aEJfGqvMo";
 
