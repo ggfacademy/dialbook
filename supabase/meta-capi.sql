@@ -176,7 +176,8 @@ notify pgrst, 'reload schema';
 -- Sending starts once the WhatsApp Business Account ID is saved (and, if WhatsApp Manager → Datasets gave a different
 -- dataset, its ID):
 --   update public.meta_capi_config set waba_id = '<WhatsApp Business Account ID>', wa_dataset_id = '<dataset ID>' where id = 1;
--- and the Facebook token in Dialbook has access to that WhatsApp account (whatsapp_business_manage_events).
+-- and a token with access to that WhatsApp account (whatsapp_business_manage_events) is saved in Supabase Vault as
+-- 'meta_wa_token'. The dataset linked to the account is created with POST /<WhatsApp account ID>/dataset.
 -- =====================================================================================================
 alter table public.meta_capi_config add column if not exists waba_id text not null default '';
 -- the dataset linked to the WhatsApp account in WhatsApp Manager → Datasets (if it differs from dataset_id)
@@ -325,7 +326,10 @@ begin
     req := net.http_post(
       url := 'https://graph.facebook.com/' || coalesce(nullif(fb->>'api_version', ''), 'v23.0') || '/'
              || case when kind = 'wa' and coalesce(c.wa_dataset_id, '') ~ '^[0-9]+$' then c.wa_dataset_id else c.dataset_id end
-             || '/events?access_token=' || (fb->>'user_token'),
+             || '/events?access_token=' || case when kind = 'wa'
+                  -- WhatsApp events: token of the business that owns the WhatsApp account (Supabase Vault), if saved
+                  then coalesce((select v.decrypted_secret from vault.decrypted_secrets v where v.name = 'meta_wa_token' limit 1), fb->>'user_token')
+                  else fb->>'user_token' end,
       body := jsonb_build_object('data', body), timeout_milliseconds := 60000);
     update public.meta_capi_events set status = 'sending', request_id = req, sending_at = now() where id = any(ids);
     total := total + n;
