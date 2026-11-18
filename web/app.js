@@ -1812,6 +1812,8 @@ function assignmentCard(d){
   </div>`).join('')}
   <div class="row" style="margin-top:10px"><button class="btn sm" data-act="ruleAdd">${ic('plus')}Add rule</button><span class="spacer"></span>
   <label class="field" style="min-width:240px"><span>If no rule matches</span><select class="input" data-sp="assignment.fallback">${opt('all','Share among all telecallers',a.fallback)}${opt('none','Leave unassigned for a manager',a.fallback)}</select></label></div>
+  <div style="margin-top:12px"><b class="small">Pause new leads for</b> <span class="small muted">(e.g. on leave or phone not working; they keep their current leads and can still log in)</span>
+  <div class="row" style="margin-top:6px">${agents().filter(m=>m.role==='telecaller'||(a.rules||[]).some(r=>(r.agents||[]).includes(m.id))).map(m=>`<label class="row small" style="gap:4px"><input type="checkbox" class="asPause" value="${m.id}" ${(a.paused||[]).includes(m.id)?'checked':''}>${esc(m.name)}</label>`).join('')}</div></div>
   <p class="small muted">Set each telecaller's languages in Team → Edit. Leads get their language from the form's language question, the source's or campaign's default language, the import file, or by hand.</p></div>`;
 }
 const lsPill=s=>`<span class="pill" style="color:${s.active?(s.last_error?'var(--warn)':'var(--call)'):'var(--muted)'}"><span class="dot"></span><span style="color:var(--fg)">${s.active?(s.last_error?'Check':'Receiving'):'Paused'}</span></span>`;
@@ -1940,6 +1942,7 @@ document.addEventListener('change',async e=>{
   try{
     if(t.classList.contains('lsLang')){await lsSave(t.dataset.id,{config:{default_language:t.value}});toast('Saved');return}
     if(t.classList.contains('lsCamp')){await lsSave(t.dataset.id,{config:{campaign_id:t.value}});toast('Saved');return}
+    if(t.classList.contains('asPause')){const as=S.sd.assignment;as.paused=(as.paused||[]).filter(x=>x!==t.value);if(t.checked)as.paused.push(t.value);S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false;return}
     if(t.classList.contains('ruleAg')){const r=S.sd.assignment.rules[+t.dataset.i];r.agents=r.agents||[];if(t.checked){if(!r.agents.includes(t.value))r.agents.push(t.value)}else r.agents=r.agents.filter(x=>x!==t.value);S.sdirty=true;const b=$('[data-act="saveSet"]');if(b)b.disabled=false;return}
     if(t.dataset.sp&&/^assignment\.rules\.\d+\.(mode|language)$/.test(t.dataset.sp))render();
   }catch(err){fail(err)}

@@ -100,10 +100,12 @@ end $$;
 -- mode "speakers" = telecallers whose languages include the lead's language.
 create or replace function public.pick_assignee(p_language text, p_source text, p_campaign uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
-declare a jsonb; r jsonb; cands uuid[]; k text; pos bigint; i int := 0;
+declare a jsonb; r jsonb; cands uuid[]; k text; pos bigint; i int := 0; paused text[];
 begin
   select data->'assignment' into a from public.settings where id = 1;
   if a is null or not coalesce((a->>'enabled')::boolean, false) then return null; end if;
+  -- people paused in Settings → Lead assignment get no new leads (e.g. phone not working)
+  paused := coalesce((select array_agg(x) from jsonb_array_elements_text(coalesce(a->'paused','[]'::jsonb)) x), '{}');
   for r in select * from jsonb_array_elements(coalesce(a->'rules','[]'::jsonb)) loop
     i := i + 1;
     if coalesce(r->>'language','') <> '' and lower(r->>'language') <> lower(coalesce(p_language,'')) then continue; end if;
@@ -112,11 +114,11 @@ begin
     cands := null;
     if coalesce(r->>'mode','speakers') = 'people' then
       select array_agg(p.id order by p.created_at) into cands from public.profiles p
-       where p.active and p.id::text in (select jsonb_array_elements_text(coalesce(r->'agents','[]'::jsonb)));
+       where p.active and p.id::text <> all(paused) and p.id::text in (select jsonb_array_elements_text(coalesce(r->'agents','[]'::jsonb)));
     else
       if coalesce(p_language,'') = '' then continue; end if;
       select array_agg(p.id order by p.created_at) into cands from public.profiles p
-       where p.active and p.role = 'telecaller' and exists (select 1 from unnest(p.languages) x where lower(x) = lower(p_language));
+       where p.active and p.id::text <> all(paused) and p.role = 'telecaller' and exists (select 1 from unnest(p.languages) x where lower(x) = lower(p_language));
     end if;
     if cands is null or coalesce(array_length(cands,1),0) = 0 then continue; end if;
     k := 'rule:' || coalesce(nullif(r->>'id',''), i::text);
@@ -125,7 +127,7 @@ begin
     return cands[((pos - 1) % array_length(cands,1)) + 1];
   end loop;
   if coalesce(a->>'fallback','all') = 'all' then
-    select array_agg(id order by created_at) into cands from public.profiles where active and role = 'telecaller';
+    select array_agg(id order by created_at) into cands from public.profiles where active and role = 'telecaller' and id::text <> all(paused);
     if cands is null then return null; end if;
     insert into public.assign_state(key, n) values ('fallback', 1)
       on conflict (key) do update set n = public.assign_state.n + 1 returning n into pos;
