@@ -1860,7 +1860,7 @@ async function capiStatus(){
   let st;try{const{data,error}=await sb.rpc('meta_capi_status');if(error)throw error;st=data}catch(e){return}
   if(!st)return;
   const n=(ev,stt='sent')=>st.counts?.[ev+':'+stt]||0, err=Object.entries(st.counts||{}).filter(([k])=>k.endsWith(':error')).reduce((a,[,v])=>a+v,0);
-  box.innerHTML=st.dataset_id&&st.enabled?`<b>Conversion tracking to Meta: on</b> (dataset ${esc(st.dataset_id)}). Sent so far: ${n('LeadSubmitted')} LeadSubmitted · ${n('QualifiedLead')} QualifiedLead (moved to Interested or later) · ${n('RegistrationPaid')} RegistrationPaid (Converted). Only Meta's lead ID is sent, never names or numbers.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}${err?` <span class="prio-hot">${err} not accepted by Meta${st.last_error?': '+esc(st.last_error):''}</span>`:''}`
+  box.innerHTML=st.dataset_id&&st.enabled?`<b>Conversion tracking to Meta: on</b> (dataset ${esc(st.dataset_id)}). Sent so far: ${n('LeadSubmitted')} LeadSubmitted · ${n('Contacted')} Contacted · ${n('QualifiedLead')} QualifiedLead (Interested or later) · ${n('RegistrationPaid')} RegistrationPaid (Converted) · ${n('Lost')} Lost · ${n('WrongNumber')} WrongNumber. Only Meta's lead ID is sent, never names or numbers.${st.last_ok?' Last sent '+esc(fmtD(st.last_ok))+'.':''}${err?` <span class="prio-hot">${err} not accepted by Meta${st.last_error?': '+esc(st.last_error):''}</span>`:''}`
     :'Conversion tracking to Meta is off.';
 }
 function fbSetupModal(){
