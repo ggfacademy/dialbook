@@ -300,6 +300,30 @@ details.tx pre{white-space:pre-wrap;font-family:var(--f-body);font-size:.82rem;b
 
 /* Assignment rules */
 .rule-box{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px;background:var(--surface2)}
+/* Settings → Lead sources: coloured sections, jump bar, conversion-tracking tiles */
+.set-body>.ls-jump-host{position:sticky;top:70px;z-index:4}
+.ls-jump{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.ls-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:99px;border:1px solid color-mix(in srgb,var(--c) 35%,var(--line));background:color-mix(in srgb,var(--c) 9%,var(--surface));color:var(--fg);font:inherit;font-size:.82rem;font-weight:600;cursor:pointer}
+.ls-chip svg{width:16px;height:16px;color:var(--c)}
+.ls-chip:hover{background:color-mix(in srgb,var(--c) 16%,var(--surface))}
+.ls-note{margin:4px 2px 12px}
+.card.ls-sec{position:relative;border-left:5px solid var(--c);margin-bottom:16px;scroll-margin-top:130px}
+.ls-head{display:flex;align-items:center;gap:12px;margin:-2px 0 12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ls-head h2{margin:0;font-size:1.08rem}
+.ls-ico{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--c)}
+.ls-ico svg{width:22px;height:22px}
+.src-list{display:grid;gap:10px;margin:10px 0}
+.src-row{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface);border-left:3px solid color-mix(in srgb,var(--c) 60%,var(--line))}
+.src-row.paused{opacity:.7;border-left-color:var(--line)}
+.src-name{font-size:.95rem}
+.src-count{font-size:.85rem}
+.src-count b{font-size:1rem;color:var(--c)}
+.ct-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.ct-tile{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface2);display:grid;gap:6px;align-content:start}
+.ct-stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.ct-stats span{display:inline-flex;flex-direction:column;min-width:76px;padding:6px 9px;border-radius:8px;background:var(--surface);border:1px solid var(--line);font-size:.72rem;color:var(--muted)}
+.ct-stats span b{font-size:1rem;color:var(--fg)}
+@media (max-width:640px){.set-body>.ls-jump-host{position:static}.ls-chip{font-size:.76rem;padding:6px 10px}}
 /* WhatsApp inbox */
 .wa-wrap{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:460px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
 .wa-list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;min-height:0}
