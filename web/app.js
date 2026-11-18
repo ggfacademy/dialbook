@@ -151,7 +151,7 @@ const opt=(v,l,sel)=>`<option value="${esc(v)}"${String(v)===String(sel??'')?' s
 const stageOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.cfg.stages.map(s=>opt(s.id,s.name,sel)).join('');
 const campOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+S.campaigns.map(c=>opt(c.id,c.name,sel)).join('');
 const agentOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+agents().map(m=>opt(m.id,m.name,sel)).join('');
-const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp',...(sel?[sel]:[])].map(x=>String(x).toUpperCase()))].map(s=>opt(s,s,String(sel||'').toUpperCase())).join('');   // sources are saved in capitals (supabase/sources-caps.sql)
+const srcOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+[...new Set([...S.cfg.sources,...(S.lsNames||[]),'Interakt','WhatsApp',...(sel&&sel!=='_none'?[sel]:[])].map(x=>String(x).toUpperCase()))].map(s=>opt(s,s,String(sel||'').toUpperCase())).join('');   // sources are saved in capitals (supabase/sources-caps.sql)
 const prioOpts=(sel,blank)=>(blank?opt('',blank,sel):'')+opt('hot','Hot',sel)+opt('warm','Warm',sel)+opt('cold','Cold',sel);
 const head=(title,sub,actions='')=>`<div class="page-head"><div><h1>${esc(title)}</h1>${sub?`<p class="muted">${sub}</p>`:''}</div><div class="row">${actions}</div></div>`;
 const endToday=()=>sod(now())+DAY;
@@ -228,7 +228,7 @@ async function lrLoad(){const c=$('#lrCard');if(!c)return;const seq=S.lr.seq=(S.
   c.style.opacity='.6';try{const d=await lrFetch(agent);if(seq===S.lr.seq)lrShow(d)}catch(e){fail(e)}finally{if(seq===S.lr.seq)c.style.opacity=''}}
 function lrShow(d){const c=$('#lrCard');if(!c)return;S.lr.data=d;const L=S.lr,camp_=L.by==='camp';
   const by={},key={};for(const l of d.rows){const k=camp_?(camp(l.campaign_id)?.name||'No campaign'):((l.source||'').trim().toUpperCase()||'Source not set');by[k]=(by[k]||0)+1;
-    if(!(k in key))key[k]=camp_?(l.campaign_id&&camp(l.campaign_id)?l.campaign_id:'_none'):((l.source||'').trim()?l.source:null)}
+    if(!(k in key))key[k]=camp_?(l.campaign_id&&camp(l.campaign_id)?l.campaign_id:'_none'):((l.source||'').trim()?l.source:'_none')}
   const pal=['#3a7bd5','var(--call)','var(--warn)','var(--accent)','#8e5bd0','#c8644f','#2f9e9e'];
   const col=(k,i)=>camp_?(k==='No campaign'?'var(--muted)':pal[i%pal.length]):/facebook|instagram/i.test(k)?'#3a7bd5':/whatsapp|interakt/i.test(k)?'var(--call)':/google/i.test(k)?'var(--warn)':'var(--accent)';
   const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([label,v],i)=>({label,v,color:col(label,i),...(key[label]!=null?{act:'lrOpen',key:(camp_?'c:':'s:')+key[label]}:{})}));
@@ -296,7 +296,7 @@ function leadQuery(select='*',opts,f=S.lf){
   if(f.stage)q=q.eq('stage',f.stage);
   if(f.camp)q=f.camp==='_none'?q.is('campaign_id',null):q.eq('campaign_id',f.camp);
   if(f.agent)q=f.agent==='_none'?q.is('assigned_to',null):q.eq('assigned_to',f.agent);
-  if(f.source)q=q.ilike('source',f.source.replace(/[\\%_]/g,'\\$&'));   // same source in any letter case
+  if(f.source)q=f.source==='_none'?q.or('source.is.null,source.eq.'):q.ilike('source',f.source.replace(/[\\%_]/g,'\\$&'));   // same source in any letter case; _none = no source
   if(f.prio)q=q.eq('priority',f.prio);
   if(f.lang)q=f.lang==='_none'?q.eq('language',''):q.eq('language',f.lang);
   if(f.fu==='due')q=q.lt('next_follow_up_at',iso(endToday())).not('stage','in','(won,lost)');
@@ -353,7 +353,7 @@ V.leads={mount(){const f=S.lf;
    ${isMgr()?`<select class="input${f.agent?' on':''}" id="lf-agent" aria-label="Assigned to">${agentOpts(f.agent,'Anyone')}${opt('_none','Unassigned',f.agent)}</select>`:''}
    <div class="flt-dates${f.from||f.to?' on':''}" title="Date the lead came in: added, or enquired again"><span class="muted">${S.hasEnq?'Enquired':'Added'}</span><input class="input" type="date" id="lf-from" value="${esc(f.from||'')}" aria-label="${S.hasEnq?'Enquired':'Added'} from"><span class="muted">to</span><input class="input" type="date" id="lf-to" value="${esc(f.to||'')}" aria-label="to">${f.from||f.to?`<button class="btn sm ghost" data-act="lfDates" title="Clear dates" aria-label="Clear dates">${ic('x')}</button>`:''}</div>
    <select class="input xf${f.stage?' on':''}" id="lf-stage" aria-label="Stage">${stageOpts(f.stage,'All stages')}</select>
-   <select class="input xf${f.source?' on':''}" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}</select>
+   <select class="input xf${f.source?' on':''}" id="lf-source" aria-label="Source">${srcOpts(f.source,'All sources')}${opt('_none','Source not set',f.source)}</select>
    <select class="input xf${f.prio?' on':''}" id="lf-prio" aria-label="Priority">${prioOpts(f.prio,'Any priority')}</select>
    <select class="input xf${f.lang?' on':''}" id="lf-lang" aria-label="Language">${langOpts(f.lang,'Any language')}${opt('_none','Language not set',f.lang)}</select>
    <select class="input xf${f.fu?' on':''}" id="lf-fu" aria-label="Status">${opt('','Any status',f.fu)}${opt('fresh','Never called',f.fu)}${opt('due','Follow-up due today',f.fu)}${opt('over','Follow-up overdue',f.fu)}${S.hasContacts&&isMgr()?opt('contacts','Contact list (old data), can be messaged',f.fu)+opt('all','Everything, including the contact list',f.fu):''}${opt('dnd','Do not contact',f.fu)}</select>
