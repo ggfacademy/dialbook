@@ -248,13 +248,13 @@ revoke all on public.batch_countdown from anon, authenticated, public;
 
 insert into public.batch_countdown(campaign_id, title_match, city, kind)
 select c.id, x.m, x.city, x.kind from (values
-  ('Gold Appraisal Training - Chennai',    '\mGAC\M.*\mCHN\M',    'Chennai',    'gac'),
-  ('Gold Appraisal Training - Vijayawada', '\mGAC\M.*\mVJW\M',    'Vijayawada', 'gac'),
-  ('Gold Appraisal Training - Hyderabad',  '\mGAC\M.*\mHYD\M',    'Hyderabad',  'gac'),
-  ('Gold Audit and Appraisal – Mumbai',    '\mGAA\M.*\mMUMBAI\M', 'Mumbai',     'gaa'),
-  ('Gold Audit and Appraisal – Mysuru',    '\mGAA\M.*\mMYSURU\M', 'Mysuru',     'gaa')) x(camp, m, city, kind)
+  ('Gold Appraisal Training - Chennai',    '^(?=.*\mMSME\M)(?=.*\mGAC\M)(?=.*\mCHN\M)',    'Chennai',    'gac'),
+  ('Gold Appraisal Training - Vijayawada', '^(?=.*\mMSME\M)(?=.*\mGAC\M)(?=.*\mVJW\M)',    'Vijayawada', 'gac'),
+  ('Gold Appraisal Training - Hyderabad',  '^(?=.*\mMSME\M)(?=.*\mGAC\M)(?=.*\mHYD\M)',    'Hyderabad',  'gac'),
+  ('Gold Audit and Appraisal – Mumbai',    '^(?=.*\mMSME\M)(?=.*\mGAA\M)(?=.*\mMUMBAI\M)', 'Mumbai',     'gaa'),
+  ('Gold Audit and Appraisal – Mysuru',    '^(?=.*\mMSME\M)(?=.*\mGAA\M)(?=.*\mMYSURU\M)', 'Mysuru',     'gaa')) x(camp, m, city, kind)
 join public.campaigns c on c.name = x.camp
-on conflict (campaign_id) do nothing;
+on conflict (campaign_id) do update set title_match = excluded.title_match;   -- MSME batches only; words in any order
 
 -- one sequence per campaign (not auto-enrolled; its single step is set by the countdown each time it sends)
 do $$
@@ -580,3 +580,103 @@ exception when others then raise warning 'wa_payment_proof: %', sqlerrm; return 
 end $$;
 drop trigger if exists wa_payment_proof on public.wa_messages;
 create trigger wa_payment_proof after insert on public.wa_messages for each row execute function public.wa_payment_proof();
+
+-- 10. Paid students: the day before a Gold Appraisal (GAC) batch, Converted students of that course get the
+--     batch_reminder template ("Your training starts tomorrow at 10 am. Venue: … Please bring an ID proof …").
+--     "Paid for this batch" = marked Converted after the end of the course's previous batch (or in the last 60 days).
+--     GAA (Gold Audit) starts at 11 am, so it is left out until there is a template without the time.
+--     Needs the "whatsapp" Edge Function version that lets sequences marked include_won reach Converted leads.
+alter table public.nurture_sequences add column if not exists include_won boolean not null default false;
+alter table public.batch_countdown add column if not exists paid_sequence_id uuid references public.nurture_sequences(id) on delete set null;
+do $$
+declare r record; s uuid;
+begin
+  for r in select * from public.batch_countdown where kind = 'gac' and paid_sequence_id is null loop
+    insert into public.nurture_sequences(name, active, auto_enroll, campaign_id, account_id, stop_on_reply, end_followup, include_won, steps)
+    values ('Paid students – day-before reminder – ' || r.city, true, false, null,
+            (select account_id from public.wa_templates where id = 'd773adfb-06e9-486d-852c-cc918d770e0e'), false, false, true,
+            jsonb_build_array(jsonb_build_object('day', 0, 'params', '{first_name}|{venue}', 'template_id', 'd773adfb-06e9-486d-852c-cc918d770e0e')))
+    returning id into s;
+    update public.batch_countdown set paid_sequence_id = s where campaign_id = r.campaign_id;
+  end loop;
+end $$;
+
+create or replace function public.batch_countdown_run(p_dry boolean default false) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r record; b record; d int; tpl uuid; params text; aud text[]; n int; dt text; k text; lid uuid; prev_end date;
+        today date := (now() at time zone 'Asia/Kolkata')::date; out jsonb := '[]';
+begin
+  for r in select bc.*, s.active seq_active, ps.active paid_active
+             from public.batch_countdown bc join public.nurture_sequences s on s.id = bc.sequence_id
+             left join public.nurture_sequences ps on ps.id = bc.paid_sequence_id
+            where bc.active loop
+    select * into b from public.training_batches t where t.title ~* r.title_match and t.starts > today and t.starts <= today + 7
+     order by t.starts limit 1;
+    if not found then continue; end if;
+    d := b.starts - today; dt := to_char(b.starts, 'FMDD Mon YYYY'); tpl := null; k := b.uid || ':' || d;
+
+    -- paid students: the day before a GAC batch
+    if r.kind = 'gac' and d = 1 and coalesce(r.paid_active, false) and not (r.sent ? (k || ':paid')) then
+      select max(t.ends) into prev_end from public.training_batches t where t.title ~* r.title_match and t.starts < b.starts and t.uid <> b.uid;
+      n := 0;
+      for lid in select l.id from public.leads l
+                  where l.campaign_id = r.campaign_id and l.stage = 'won' and not coalesce(l.dnd, false)
+                    and (select max(a.created_at) from public.activities a where a.lead_id = l.id and a.kind = 'stage' and a.data->>'to' = 'won')
+                        > greatest(coalesce((prev_end + 1)::timestamp at time zone 'Asia/Kolkata', '-infinity'::timestamptz), now() - interval '60 days') loop
+        if not p_dry then
+          insert into public.nurture_enrollments(sequence_id, lead_id, next_at) values (r.paid_sequence_id, lid, now())
+          on conflict (sequence_id, lead_id) do update
+            set status = 'active', step = 0, attempts = 0, last_error = null, stop_reason = null, enrolled_at = now(), next_at = now()
+          where nurture_enrollments.last_sent_at is null or nurture_enrollments.last_sent_at < now() - interval '20 hours';
+        end if;
+        n := n + 1;
+      end loop;
+      if not p_dry then
+        update public.batch_countdown set sent = sent || jsonb_build_object(k || ':paid', jsonb_build_object('at', now(), 'leads', n)) where campaign_id = r.campaign_id;
+      end if;
+      out := out || jsonb_build_object('city', r.city, 'batch', b.title, 'starts', b.starts, 'days_before', d, 'paid_students', n);
+    end if;
+
+    -- leads who have not paid yet
+    if r.kind = 'gac' then
+      if d = 7 then tpl := '451c07a4-2ced-41ee-8b9f-0beb64784b37';       -- gac_seats: only a few seats are left for {{2}}
+        params := '{first_name}|the Gold Appraisal training in ' || r.city || ' starting ' || dt; aud := array['contacted','followup','interested','negotiation'];
+      elsif d = 3 then tpl := '1cf2fcbf-69c6-47d7-b1d9-2af50b32905a';    -- reminder_upcoming_gac: training in {{3}} on {{2}}
+        params := '{first_name}|' || dt || '|' || r.city; aud := array['interested','negotiation'];
+      elsif d = 1 then tpl := 'fa3b5e44-4dad-4ece-bc99-1a4251a1e1fa';    -- gac_last_call: registrations for {{2}} close soon
+        params := '{first_name}|the ' || r.city || ' batch starting ' || dt; aud := array['followup','interested','negotiation'];
+      end if;
+    else
+      if d = 7 then tpl := 'cd662146-7322-4924-bc09-dba6061eb614';       -- gaa_seat
+        params := '{first_name}'; aud := array['contacted','followup','interested','negotiation'];
+      elsif d = 3 then tpl := 'b7249bbf-4d53-4d93-ac76-dd40cf2cfa5a';    -- gaa_reminder (last reminder)
+        params := '{first_name}'; aud := array['followup','interested','negotiation'];
+      end if;
+    end if;
+    if tpl is null or r.sent ? k or not r.seq_active then continue; end if;
+
+    if not p_dry then
+      update public.nurture_sequences set steps = jsonb_build_array(jsonb_build_object('day', 0, 'params', params, 'template_id', tpl))
+       where id = r.sequence_id;
+    end if;
+    n := 0;
+    for lid in select l.id from public.leads l
+                where l.campaign_id = r.campaign_id and l.stage = any(aud)
+                  and not coalesce(l.dnd, false) and not coalesce(l.contact_only, false)
+                  and greatest(l.created_at, coalesce(l.last_enquiry_at, l.created_at)) > now() - interval '90 days'
+                  and not exists (select 1 from public.wa_messages w where w.lead_id = l.id and w.direction = 'out' and w.created_at > now() - interval '20 hours') loop
+      if not p_dry then perform public.auto_msg_enroll(lid, r.sequence_id, interval '20 hours'); end if;
+      n := n + 1;
+    end loop;
+    if not p_dry then
+      update public.batch_countdown set sent = sent || jsonb_build_object(k, jsonb_build_object('at', now(), 'leads', n)) where campaign_id = r.campaign_id;
+    end if;
+    out := out || jsonb_build_object('city', r.city, 'batch', b.title, 'starts', b.starts, 'days_before', d, 'leads', n);
+  end loop;
+  return out;
+end $$;
+revoke execute on function public.batch_countdown_run(boolean) from anon, authenticated, public;
+
+-- Chennai campaign dates corrected to the calendar (owner, 19 Nov 2026)
+update public.campaigns set details = jsonb_set(details, '{dates}', '"27th Nov to 30th Nov 2026"')
+ where name = 'Gold Appraisal Training - Chennai';
