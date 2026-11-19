@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dialbook.app.PreviewTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-19T18:07:01" hostname="runnervm0hi8g" time="27.48">
+  <properties/>
+  <testcase name="screens" classname="com.dialbook.app.PreviewTest" time="27.48"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
