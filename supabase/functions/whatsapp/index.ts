@@ -356,7 +356,8 @@ async function runNurture(): Promise<Obj> {
     if (!seq || !lead) { await stop("Sequence or lead removed"); continue; }
     if (!seq.active) { out.waiting++; continue; }            // paused: keep the lead waiting
     if (lead.dnd) { await stop("Marked do not call"); continue; }
-    if (lead.stage === "won" || lead.stage === "lost") { await stop(lead.stage === "won" ? "Converted" : "Lost"); continue; }
+    // Converted leads only get sequences made for paid students (e.g. "Paid students – day-before reminder")
+    if ((lead.stage === "won" && !seq.include_won) || lead.stage === "lost") { await stop(lead.stage === "won" ? "Converted" : "Lost"); continue; }
     if (seq.stop_on_reply) {
       const { count } = await admin.from("wa_messages").select("id", { count: "exact", head: true })
         .eq("lead_id", lead.id).eq("direction", "in").gt("created_at", e.enrolled_at);
