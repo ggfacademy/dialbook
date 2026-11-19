@@ -197,9 +197,9 @@ function targetsCard(rows,agent){
 function heroRings(rows,agent,ls){const b=$('#hRings');if(!b)return;
   const pick=agent?rows.filter(r=>r.agent===agent):rows;const sum=k=>pick.reduce((a,r)=>a+(+r[k]||0),0),goal=k=>pick.reduce((a,r)=>a+(+(r.target||{})[k]||0),0);
   const C=2*Math.PI*36;
-  const ring=(lbl,v,g,col)=>{const p=g?Math.min(1,v/g):(v?1:0);return `<div class="ring"><div class="ring-box"><svg viewBox="0 0 84 84" aria-hidden="true"><circle class="t" cx="42" cy="42" r="36"/><circle class="v" cx="42" cy="42" r="36" stroke="${g&&v>=g?'#3fcf80':col}" stroke-dasharray="${C.toFixed(1)}" style="--c:${C.toFixed(1)};stroke-dashoffset:${(C*(1-p)).toFixed(1)}"/></svg><div class="n"><span data-count="${v}">${v}</span>${g?`<small>of ${g}</small>`:''}</div></div><span class="lbl">${lbl}</span></div>`};
+  const ring=(lbl,v,g,col)=>{const p=g?Math.min(1,v/g):(v?1:0);return `<div class="ring"><div class="ring-box"><svg viewBox="0 0 84 84" aria-hidden="true"><circle class="t" cx="42" cy="42" r="36"/><circle class="v" cx="42" cy="42" r="36" stroke-dasharray="${C.toFixed(1)}" style="stroke:${g&&v>=g?'var(--ring-ok)':col};--c:${C.toFixed(1)};stroke-dashoffset:${(C*(1-p)).toFixed(1)}"/></svg><div class="n"><span data-count="${v}">${v}</span>${g?`<small>of ${g}</small>`:''}</div></div><span class="lbl">${lbl}</span></div>`};
   const due=(ls.overdue||0)+(ls.today||0);
-  b.innerHTML=(pick.length?ring('Calls today',sum('calls'),goal('calls'),'#f2c14e')+ring('Connected',sum('connected'),goal('connected'),'#6aa6ff')+ring('Converted',sum('converted'),goal('converted'),'#3fcf80'):'')+
+  b.innerHTML=(pick.length?ring('Calls today',sum('calls'),goal('calls'),'var(--ring-a)')+ring('Connected',sum('connected'),goal('connected'),'var(--ring-b)')+ring('Converted',sum('converted'),goal('converted'),'var(--ring-ok)'):'')+
     `<div class="hero-stats"><div><b data-count="${due}">${due}</b><span>Follow-ups due</span></div><div><b data-count="${ls.fresh||0}">${ls.fresh||0}</b><span>Never called</span></div></div>`;countUp(b)}
 /* Numbers count up from 0 when a card appears */
 function countUp(root){if(matchMedia('(prefers-reduced-motion: reduce)').matches||!$('#main.anim'))return;
