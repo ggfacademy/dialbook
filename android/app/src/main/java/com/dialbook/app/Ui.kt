@@ -38,20 +38,20 @@ open class BaseActivity : Activity() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     companion object {
-        val BG = Color.parseColor("#F6F4EF")
+        val BG = Color.parseColor("#F7FAFD")
         val SURFACE = Color.WHITE
-        val FG = Color.parseColor("#1B1E2B")
-        val MUTED = Color.parseColor("#5E6273")
-        val LINE = Color.parseColor("#E3DDD0")
-        val ACCENT = Color.parseColor("#946600")
-        val ACCENT_SOFT = Color.parseColor("#FBF1D9")
+        val FG = Color.parseColor("#1B2333")
+        val MUTED = Color.parseColor("#55627A")
+        val LINE = Color.parseColor("#DCE6F2")
+        val ACCENT = Color.parseColor("#2F6FB5")
+        val ACCENT_SOFT = Color.parseColor("#E3EEFB")
         val CALL = Color.parseColor("#12834A")
         val DANGER = Color.parseColor("#BD3434")
-        val NAVY = Color.parseColor("#0B1F4B")
-        val NAVY2 = Color.parseColor("#1C3A7A")
-        val GOLD = Color.parseColor("#E3B341")
-        val GOLD_HI = Color.parseColor("#F2C14E")
-        val ON_NAVY = Color.parseColor("#C8D2EA")
+        val NAVY = Color.parseColor("#24599A")      // sky-blue header bands, tab bar and status bar
+        val NAVY2 = Color.parseColor("#3F7FC4")
+        val GOLD = Color.parseColor("#174A86")      // avatar on the header band
+        val GOLD_HI = Color.parseColor("#FFFFFF")   // selected tab, highlights on the header band
+        val ON_NAVY = Color.parseColor("#DCE8F7")
         val CALL_SOFT = Color.parseColor("#E1F3E8")
         val WARN = Color.parseColor("#A86300")
         val AVATAR = intArrayOf(0xFF3A7BD5.toInt(), 0xFF12834A.toInt(), 0xFF946600.toInt(), 0xFF8A4FC4.toInt(),
@@ -197,7 +197,7 @@ open class BaseActivity : Activity() {
             val cell = LinearLayout(this@BaseActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 setPadding(dp(4), dp(6), dp(4), dp(6))
-                if (on) background = rounded(Color.argb(40, 227, 179, 65), 0, 14)
+                if (on) background = rounded(Color.argb(46, 255, 255, 255), 0, 14)
                 val ic = FrameLayout(this@BaseActivity)
                 ic.addView(icon(res, if (on) GOLD_HI else ON_NAVY, 24), FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
                 val n = badges[key] ?: 0
